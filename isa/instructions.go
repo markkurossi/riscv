@@ -12,8 +12,10 @@ import (
 	"fmt"
 )
 
+// Group defines instruction groups.
 type Group uint8
 
+// RV32/64G instruction groups.
 const (
 	GroupLOAD    Group = 0x03
 	GroupLOADFP  Group = 0x07
@@ -82,8 +84,10 @@ func (g Group) String() string {
 	return fmt.Sprintf("{Group %d}", g)
 }
 
+// Op defines instruction opcodes.
 type Op int
 
+// Known RISC-V opcodes.
 const (
 	// Invalid / unknown.
 	Invalid Op = iota
@@ -298,13 +302,14 @@ const (
 	FclassD
 )
 
+// OpInfo defines opcode information.
 type OpInfo struct {
 	Name  string
 	Usage string
 	Desc  string
 }
 
-var instrs = map[Op]OpInfo{
+var operands = map[Op]OpInfo{
 	Add: OpInfo{
 		Name: "add",
 	},
@@ -755,9 +760,59 @@ var instrs = map[Op]OpInfo{
 }
 
 func (op Op) String() string {
-	info, ok := instrs[op]
+	info, ok := operands[op]
 	if ok {
 		return info.Name
 	}
 	return fmt.Sprintf("{Op %d}", op)
+}
+
+// Instr defines RISC-V instructions.
+type Instr struct {
+	Op Op
+}
+
+// Register defines RISC-V registers.
+type Register uint8
+
+var registers = [32]string{
+	"zero", // x0
+	"ra",   // x1
+	"sp",   // x2
+	"gp",   // x3
+	"tp",   // x4
+	"t0",   // x5
+	"t1",   // x6
+	"t2",   // x7
+	"fp",   // x8
+	"s1",   // x9
+	"a0",   // x10
+	"a1",   // x11
+	"a2",   // x12
+	"a3",   // x13
+	"a4",   // x14
+	"a5",   // x16
+	"a6",   // x16
+	"a7",   // x17
+	"s2",   // x18
+	"s3",   // x19
+	"s4",   // x20
+	"s5",   // x21
+	"s6",   // x22
+	"s7",   // x23
+	"s8",   // x24
+	"s9",   // x25
+	"s10",  // x26
+	"s11",  // x27
+	"t3",   // x28
+	"t4",   // x29
+	"t5",   // x30
+	"t6",   // x31
+}
+
+func (r Register) String() string {
+	if int(r) < len(registers) {
+		return registers[r]
+	}
+	return fmt.Sprintf("x%d", r)
 }
