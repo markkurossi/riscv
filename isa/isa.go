@@ -81,7 +81,7 @@ func (g Group) String() string {
 	if ok {
 		return name
 	}
-	return fmt.Sprintf("{Group %d}", g)
+	return fmt.Sprintf("{Group %x}", int(g))
 }
 
 // Op defines instruction opcodes.
@@ -767,11 +767,6 @@ func (op Op) String() string {
 	return fmt.Sprintf("{Op %d}", op)
 }
 
-// Instr defines RISC-V instructions.
-type Instr struct {
-	Op Op
-}
-
 // Register defines RISC-V registers.
 type Register uint8
 
@@ -815,4 +810,34 @@ func (r Register) String() string {
 		return registers[r]
 	}
 	return fmt.Sprintf("x%d", r)
+}
+
+// Instr defines RISC-V instructions.
+type Instr struct {
+	Raw   uint32
+	Op    Op
+	Rd    Register
+	Func3 uint8 // [14:12]
+	Rs1   Register
+	Rs2   Register
+	Func7 uint8 // [31:25]
+	Imm   int32
+}
+
+func (i *Instr) String() string {
+	col := (i.Raw >> 2) & 0b111
+	switch col {
+	case 0b101:
+		return fmt.Sprintf("%v\t%v,0x%x", i.op(), i.Rd, i.Imm)
+
+	default:
+		return fmt.Sprintf("%v\t%v,%v,%v", i.op(), i.Rd, i.Rs1, i.Rs2)
+	}
+}
+
+func (i *Instr) op() string {
+	if i.Op != Invalid {
+		return i.Op.String()
+	}
+	return Group(i.Raw & 0b1111111).String()
 }
