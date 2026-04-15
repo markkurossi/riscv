@@ -23,14 +23,27 @@ func DecodeELF(file string) (*Program, error) {
 	}
 	defer f.Close()
 
+	for idx, prog := range f.Progs {
+		fmt.Printf("Prog %v\n", idx)
+		fmt.Printf(" - Type : %v\n", prog.Type)
+		fmt.Printf(" - Flags: %v\n", prog.Flags)
+		fmt.Printf(" - Vaddr: %x\n", prog.Vaddr)
+		fmt.Printf(" - Memsz: %v\n", prog.Memsz)
+		fmt.Printf(" - Align: %v\n", prog.Align)
+	}
+
 	var text *elf.Section
 	var textIdx elf.SectionIndex
 
 	for idx, section := range f.Sections {
-		if section.Type == elf.SHT_PROGBITS {
+		fmt.Printf("Section  %v\n", section.Name)
+		fmt.Printf(" - Type: %v\n", section.Type)
+		fmt.Printf(" - Addr: %v\n", section.Addr)
+		fmt.Printf(" - Size: %v\n", section.Size)
+
+		if section.Name == ".text" {
 			text = section
 			textIdx = elf.SectionIndex(idx)
-			break
 		}
 	}
 	if text == nil {
@@ -110,17 +123,94 @@ func (prog *Program) Decode(data []byte, pc uint64) error {
 			Func7: uint8((raw >> 25) & 0b1111111),
 		}
 
-		column := (opcode >> 2) & 0b111
-		switch column {
-		case 0b101:
-			instr.Imm = int32(raw) >> 12
-			switch group {
-			case GroupLUI:
-				instr.Op = Lui
+		switch group {
+		case GroupAUIPC:
+			instr.typeU()
+			instr.Op = Auipc
+
+		case GroupLUI:
+			instr.typeU()
+			instr.Op = Lui
+
+		case GroupSTORE:
+			instr.typeS()
+			switch instr.Func3 {
+			case 0:
+				instr.Op = Sb
+			case 1:
+				instr.Op = Sh
+			case 2:
+				instr.Op = Sw
+			case 3:
+				instr.Op = Sd
+			default:
+				return fmt.Errorf("invalid STORE instr %x", instr.Raw)
 			}
 
-		case 0b111:
-			return fmt.Errorf("extended-length instructions not supported")
+		case GroupLOAD:
+			instr.typeI()
+			switch instr.Func3 {
+			case 0:
+				instr.Op = Lb
+			case 1:
+				instr.Op = Lh
+			case 2:
+				instr.Op = Lw
+			case 3:
+				instr.Op = Ld
+			case 4:
+				instr.Op = Lbu
+			case 5:
+				instr.Op = Lhu
+			case 6:
+				instr.Op = Lwu
+			}
+
+		case GroupOPIMM:
+			instr.typeI()
+			switch instr.Func3 {
+			case 0:
+				instr.Op = Addi
+			case 1:
+				instr.Op = Slli
+			case 2:
+				instr.Op = Slti
+			case 3:
+				instr.Op = Sltiu
+			case 4:
+				instr.Op = Xori
+			case 5:
+				return fmt.Errorf("GroupOPIMM: Func3=%v", instr.Func3)
+			case 6:
+				instr.Op = Ori
+			case 7:
+				instr.Op = Andi
+			}
+
+		case GroupSYSTEM:
+			instr.typeI()
+			switch instr.Func3 {
+			case 0:
+				if instr.Imm == 0 {
+					instr.Op = Ecall
+				} else {
+					instr.Op = Ebreak
+				}
+			}
+
+		case GroupJAL:
+			instr.typeJ()
+			instr.Imm += int32(pc)
+			instr.Op = Jal
+
+		case GroupJALR:
+			instr.typeI()
+			instr.Op = Jalr
+
+		default:
+			if group>>2 == 0b111 {
+				return fmt.Errorf("extended-length instructions not supported")
+			}
 		}
 
 		fmt.Printf("%8x:\t%08x\t%v\n", pc, instr.Raw, instr)

@@ -824,20 +824,85 @@ type Instr struct {
 	Imm   int32
 }
 
-func (i *Instr) String() string {
-	col := (i.Raw >> 2) & 0b111
-	switch col {
-	case 0b101:
-		return fmt.Sprintf("%v\t%v,0x%x", i.op(), i.Rd, i.Imm)
+func (instr *Instr) String() string {
+	group := Group(instr.Raw & 0b1111111)
+
+	switch group {
+	case GroupAUIPC, GroupLUI, GroupOPV, GroupOPVE:
+		return fmt.Sprintf("%v\t%v,0x%x",
+			instr.op(), instr.Rd, instr.Imm)
+
+	case GroupSTORE:
+		return fmt.Sprintf("%v\t%v,%d(%v)",
+			instr.op(), instr.Rs2, instr.Imm, instr.Rs1)
+
+	case GroupLOAD:
+		return fmt.Sprintf("%v\t%v,%d(%v)",
+			instr.op(), instr.Rd, instr.Imm, instr.Rs1)
+
+	case GroupOPIMM:
+		return fmt.Sprintf("%v\t%v,%v,%d",
+			instr.op(), instr.Rd, instr.Rs1, instr.Imm)
+
+	case GroupSYSTEM:
+		switch instr.Op {
+		case Ecall:
+			return "ecall"
+		case Ebreak:
+			return fmt.Sprintf("%v\t%v",
+				instr.op(), instr.Imm)
+		default:
+			return fmt.Sprintf("%v\t%v,csr,%v",
+				instr.op(), instr.Rd, instr.Rs1)
+		}
+
+	case GroupJAL:
+		return fmt.Sprintf("%v\t%x", instr.Op, instr.Imm)
+
+	case GroupJALR:
+		return fmt.Sprintf("%v\t%v,%d(%v)",
+			instr.Op, instr.Rd, instr.Imm, instr.Rs1)
 
 	default:
-		return fmt.Sprintf("%v\t%v,%v,%v", i.op(), i.Rd, i.Rs1, i.Rs2)
+		return fmt.Sprintf("%v\t%v,%v,%v",
+			instr.op(), instr.Rd, instr.Rs1, instr.Rs2)
 	}
 }
 
-func (i *Instr) op() string {
-	if i.Op != Invalid {
-		return i.Op.String()
+func (instr *Instr) typeU() {
+	instr.Imm = int32(instr.Raw) >> 12
+}
+
+func (instr *Instr) typeI() {
+	instr.Imm = int32(instr.Raw) >> 20
+}
+
+func (instr *Instr) typeJ() {
+	raw := int32(instr.Raw)
+
+	if false {
+		fmt.Printf("raw   : %b\n", raw)
+		fmt.Printf(" 20   : %21b\n", (raw>>10)&^0b1111_11111111_11111111)
+		fmt.Printf(" 19:12: %21b\n", (raw & 0b1111_11110000_00000000))
+		fmt.Printf(" 11   : %21b\n", (raw>>8)&0b1000_00000000)
+		fmt.Printf(" 10:1 : %21b\n", (raw>>20)&0b111_11111110)
 	}
-	return Group(i.Raw & 0b1111111).String()
+
+	instr.Imm = (raw>>10)&^0b1111_11111111_11111111 |
+		(raw & 0b1111_11110000_00000000) |
+		(raw>>8)&0b1000_00000000 |
+		(raw>>20)&0b111_11111110
+}
+
+func (instr *Instr) typeS() {
+	raw := int32(instr.Raw)
+
+	instr.Imm = (raw>>25)&^0b11111 | ((raw >> 7) & 0b11111)
+}
+
+func (instr *Instr) op() string {
+	if instr.Op != Invalid {
+		return instr.Op.String()
+	}
+	return Group(instr.Raw & 0b1111111).String()
 }
