@@ -9,6 +9,7 @@ package isa
 import (
 	"debug/elf"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 )
 
@@ -38,12 +39,20 @@ func DecodeELF(file string) (*Program, error) {
 	for idx, section := range f.Sections {
 		fmt.Printf("Section  %v\n", section.Name)
 		fmt.Printf(" - Type: %v\n", section.Type)
-		fmt.Printf(" - Addr: %v\n", section.Addr)
+		fmt.Printf(" - Addr: %x\n", section.Addr)
 		fmt.Printf(" - Size: %v\n", section.Size)
 
-		if section.Name == ".text" {
+		switch section.Name {
+		case ".text":
 			text = section
 			textIdx = elf.SectionIndex(idx)
+
+		case ".rodata":
+			data, err := section.Data()
+			if err != nil {
+				return nil, err
+			}
+			fmt.Printf("%s", hex.Dump(data))
 		}
 	}
 	if text == nil {
