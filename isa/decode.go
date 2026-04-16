@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"io"
 )
 
 var (
@@ -90,7 +91,7 @@ func DecodeELF(file string) (*Program, error) {
 
 	fmt.Printf(".text at 0x%x, size %d bytes\n", text.Addr, len(data))
 
-	err = prog.Decode(data, text.Addr)
+	_, _, err = Decode(data, text.Addr)
 	if err != nil {
 		return nil, err
 	}
@@ -100,133 +101,124 @@ func DecodeELF(file string) (*Program, error) {
 
 // Decode decodes RISC-V instructions from data and returns the
 // decoded program.
-func (prog *Program) Decode(data []byte, pc uint64) error {
-	for len(data) > 0 {
-		if len(data) < 2 {
-			return fmt.Errorf("truncated data")
+func Decode(data []byte, pc uint64) (Instr, int, error) {
+	var instr Instr
+
+	if len(data) < 2 {
+		return instr, 0, fmt.Errorf("truncated data")
+	}
+	opcode := data[0]
+	if opcode&0b11 != 0b11 {
+		if opcode == 0 && data[1] == 0 {
+			return instr, 0, io.EOF
 		}
-		opcode := data[0]
-		if opcode&0b11 != 0b11 {
-			return fmt.Errorf("compressed instructions not supported yet")
-		}
-
-		// 32-bit (or longer) instructions.
-		if len(data) < 4 {
-			return fmt.Errorf("truncated >=32-bit instruction")
-		}
-		raw := bo.Uint32(data)
-
-		f, ok := prog.symbols[pc]
-		if ok {
-			f.Offset = len(prog.Code)
-		}
-
-		group := Group(opcode & 0b1111111)
-
-		instr := &Instr{
-			Raw:   raw,
-			Rd:    Register((raw >> 7) & 0b0011111),
-			Func3: uint8((raw >> 12) & 0b0000111),
-			Rs1:   Register((raw >> 15) & 0b0011111),
-			Rs2:   Register((raw >> 20) & 0b0011111),
-			Func7: uint8((raw >> 25) & 0b1111111),
-		}
-
-		switch group {
-		case GroupAUIPC:
-			instr.typeU()
-			instr.Op = Auipc
-
-		case GroupLUI:
-			instr.typeU()
-			instr.Op = Lui
-
-		case GroupSTORE:
-			instr.typeS()
-			switch instr.Func3 {
-			case 0:
-				instr.Op = Sb
-			case 1:
-				instr.Op = Sh
-			case 2:
-				instr.Op = Sw
-			case 3:
-				instr.Op = Sd
-			default:
-				return fmt.Errorf("invalid STORE instr %x", instr.Raw)
-			}
-
-		case GroupLOAD:
-			instr.typeI()
-			switch instr.Func3 {
-			case 0:
-				instr.Op = Lb
-			case 1:
-				instr.Op = Lh
-			case 2:
-				instr.Op = Lw
-			case 3:
-				instr.Op = Ld
-			case 4:
-				instr.Op = Lbu
-			case 5:
-				instr.Op = Lhu
-			case 6:
-				instr.Op = Lwu
-			}
-
-		case GroupOPIMM:
-			instr.typeI()
-			switch instr.Func3 {
-			case 0:
-				instr.Op = Addi
-			case 1:
-				instr.Op = Slli
-			case 2:
-				instr.Op = Slti
-			case 3:
-				instr.Op = Sltiu
-			case 4:
-				instr.Op = Xori
-			case 5:
-				return fmt.Errorf("GroupOPIMM: Func3=%v", instr.Func3)
-			case 6:
-				instr.Op = Ori
-			case 7:
-				instr.Op = Andi
-			}
-
-		case GroupSYSTEM:
-			instr.typeI()
-			switch instr.Func3 {
-			case 0:
-				if instr.Imm == 0 {
-					instr.Op = Ecall
-				} else {
-					instr.Op = Ebreak
-				}
-			}
-
-		case GroupJAL:
-			instr.typeJ()
-			instr.Imm += int32(pc)
-			instr.Op = Jal
-
-		case GroupJALR:
-			instr.typeI()
-			instr.Op = Jalr
-
-		default:
-			if group>>2 == 0b111 {
-				return fmt.Errorf("extended-length instructions not supported")
-			}
-		}
-
-		fmt.Printf("%8x:\t%08x\t%v\n", pc, instr.Raw, instr)
-
-		data = data[4:]
-		pc += 4
+		return instr, 0, fmt.Errorf("compressed instructions not supported yet")
 	}
 
-	return nil
+	// 32-bit (or longer) instructions.
+	if len(data) < 4 {
+		return instr, 0, fmt.Errorf("truncated >=32-bit instruction")
+	}
+	raw := bo.Uint32(data)
+
+	group := Group(opcode & 0b1111111)
+
+	instr.Raw = raw
+	instr.Rd = Register((raw >> 7) & 0b0011111)
+	instr.Func3 = uint8((raw >> 12) & 0b0000111)
+	instr.Rs1 = Register((raw >> 15) & 0b0011111)
+	instr.Rs2 = Register((raw >> 20) & 0b0011111)
+	instr.Func7 = uint8((raw >> 25) & 0b1111111)
+
+	switch group {
+	case GroupAUIPC:
+		instr.typeU()
+		instr.Op = Auipc
+
+	case GroupLUI:
+		instr.typeU()
+		instr.Op = Lui
+
+	case GroupSTORE:
+		instr.typeS()
+		switch instr.Func3 {
+		case 0:
+			instr.Op = Sb
+		case 1:
+			instr.Op = Sh
+		case 2:
+			instr.Op = Sw
+		case 3:
+			instr.Op = Sd
+		default:
+			return instr, 0, fmt.Errorf("invalid STORE instr %x", instr.Raw)
+		}
+
+	case GroupLOAD:
+		instr.typeI()
+		switch instr.Func3 {
+		case 0:
+			instr.Op = Lb
+		case 1:
+			instr.Op = Lh
+		case 2:
+			instr.Op = Lw
+		case 3:
+			instr.Op = Ld
+		case 4:
+			instr.Op = Lbu
+		case 5:
+			instr.Op = Lhu
+		case 6:
+			instr.Op = Lwu
+		}
+
+	case GroupOPIMM:
+		instr.typeI()
+		switch instr.Func3 {
+		case 0:
+			instr.Op = Addi
+		case 1:
+			instr.Op = Slli
+		case 2:
+			instr.Op = Slti
+		case 3:
+			instr.Op = Sltiu
+		case 4:
+			instr.Op = Xori
+		case 5:
+			return instr, 0, fmt.Errorf("GroupOPIMM: Func3=%v", instr.Func3)
+		case 6:
+			instr.Op = Ori
+		case 7:
+			instr.Op = Andi
+		}
+
+	case GroupSYSTEM:
+		instr.typeI()
+		switch instr.Func3 {
+		case 0:
+			if instr.Imm == 0 {
+				instr.Op = Ecall
+			} else {
+				instr.Op = Ebreak
+			}
+		}
+
+	case GroupJAL:
+		instr.typeJ()
+		instr.Op = Jal
+
+	case GroupJALR:
+		instr.typeI()
+		instr.Op = Jalr
+
+	default:
+		if group>>2 == 0b111 {
+			return instr, 0,
+				fmt.Errorf("extended-length instructions not supported")
+		}
+	}
+
+	return instr, 4, nil
 }

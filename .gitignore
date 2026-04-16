@@ -33,3 +33,4 @@ go.work.sum
 
 cmd/riscv-objdump/riscv-objdump
 cmd/riscv-objdump/elf
+cmd/emulator/emulator
