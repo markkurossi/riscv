@@ -898,18 +898,45 @@ func (instr Instr) String() string {
 		return fmt.Sprintf("%v\t%v,%d(%v)",
 			instr.Op, instr.Rd, instr.Imm, instr.Rs1)
 
+	case GroupBRANCH:
+		return fmt.Sprintf("%v\t%v,%v,%d",
+			instr.Op, instr.Rs1, instr.Rs2, instr.Imm)
+
 	default:
 		return fmt.Sprintf("%v\t%v,%v,%v",
 			instr.op(), instr.Rd, instr.Rs1, instr.Rs2)
 	}
 }
 
-func (instr *Instr) typeU() {
-	instr.Imm = int32(instr.Raw) >> 12
-}
-
 func (instr *Instr) typeI() {
 	instr.Imm = int32(instr.Raw) >> 20
+}
+
+func (instr *Instr) typeS() {
+	raw := int32(instr.Raw)
+
+	instr.Imm = (raw>>20)&^0b11111 | ((raw >> 7) & 0b11111)
+}
+
+func (instr *Instr) typeB() {
+	raw := int32(instr.Raw)
+
+	if false {
+		fmt.Printf("raw   : %b\n", raw)
+		fmt.Printf(" 12   : %13b\n", (raw>>19)&^0b01111_11111111)
+		fmt.Printf(" 11   : %13b\n", (raw&0b00000_10000000)<<4)
+		fmt.Printf(" 10:5 : %13b\n", (raw>>20)&0b00111_11100000)
+		fmt.Printf(" 4:1  : %13b\n", (raw>>7)&0b00000_00011110)
+	}
+
+	instr.Imm = (raw>>19)&^0b01111_11111111 |
+		(raw&0b00000_10000000)<<4 |
+		(raw>>20)&0b00111_11100000 |
+		(raw>>7)&0b00000_00011110
+}
+
+func (instr *Instr) typeU() {
+	instr.Imm = int32(instr.Raw) >> 12
 }
 
 func (instr *Instr) typeJ() {
@@ -927,12 +954,6 @@ func (instr *Instr) typeJ() {
 		(raw & 0b1111_11110000_00000000) |
 		(raw>>8)&0b1000_00000000 |
 		(raw>>20)&0b111_11111110
-}
-
-func (instr *Instr) typeS() {
-	raw := int32(instr.Raw)
-
-	instr.Imm = (raw>>20)&^0b11111 | ((raw >> 7) & 0b11111)
 }
 
 func (instr *Instr) op() string {

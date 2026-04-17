@@ -213,6 +213,23 @@ func Decode(data []byte, pc uint64) (Instr, int, error) {
 		instr.typeI()
 		instr.Op = Jalr
 
+	case GroupBRANCH:
+		instr.typeB()
+		switch instr.Func3 {
+		case 0:
+			instr.Op = Beq
+		case 1:
+			instr.Op = Bne
+		case 4:
+			instr.Op = Blt
+		case 5:
+			instr.Op = Bge
+		case 6:
+			instr.Op = Bltu
+		case 7:
+			instr.Op = Bgeu
+		}
+
 	default:
 		if group>>2 == 0b111 {
 			return instr, 0,

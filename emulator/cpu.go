@@ -27,12 +27,12 @@ type CPU struct {
 }
 
 func (cpu *CPU) Run() error {
-	for count := 0; count < 20; count++ {
+	for count := 0; count < 30; count++ {
 		cpu.X[isa.Zero] = 0
 
 		seg, ofs, err := cpu.Mem.Map(cpu.PC, 4)
 		if err != nil {
-			return err
+			return fmt.Errorf("invalid PC %x: %v", cpu.PC, err)
 		}
 		instr, size, err := isa.Decode(seg.Data[ofs:], cpu.PC)
 		if err != nil {
@@ -45,54 +45,21 @@ func (cpu *CPU) Run() error {
 		case isa.Addi:
 			cpu.X[instr.Rd] = uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
 
-		case isa.Ecall:
-			syscall := cpu.X[isa.A7]
-			info, ok := SyscallInfo[syscall]
-			if !ok || info.Argc == 0 {
-				fmt.Printf("ecall: %v(%v,%v,%v)\n",
-					syscall, cpu.X[isa.A0], cpu.X[isa.A1], cpu.X[isa.A2])
-			} else {
-				fmt.Printf("ecall: %s(", info.Name)
-				for i := 0; i < info.Argc; i++ {
-					if i > 0 {
-						fmt.Print(",")
-					}
-					fmt.Printf("%v", cpu.X[int(isa.A0)+i])
-				}
-				fmt.Println(")")
+		case isa.Bge:
+			if int64(cpu.X[instr.Rs1]) >= int64(cpu.X[instr.Rs2]) {
+				cpu.PC = uint64(int64(cpu.PC) + int64(instr.Imm))
+				size = 0
 			}
 
-			switch cpu.X[isa.A7] {
-			case 64: // write
-				fd := cpu.X[isa.A0]
-				addr := cpu.X[isa.A1]
-				len := cpu.X[isa.A2]
+		case isa.Bne:
+			if cpu.X[instr.Rs1] != cpu.X[instr.Rs2] {
+				cpu.PC = uint64(int64(cpu.PC) + int64(instr.Imm))
+				size = 0
+			}
 
-				_ = fd
-
-				var i uint64
-
-				for i = 0; i < len; i++ {
-					b, err := cpu.Mem.Load8(addr + i)
-					if err != nil {
-						return err
-					}
-					os.Stdout.Write([]byte{b})
-					if err != nil {
-						break
-					}
-				}
-				if i < len {
-					cpu.X[isa.A0] = ^uint64(0)
-				} else {
-					cpu.X[isa.A0] = len
-				}
-
-			case 93: // exit
-				os.Exit(int(cpu.X[isa.A0]))
-
-			default:
-				return fmt.Errorf("unsupported syscall %v", cpu.X[isa.A7])
+		case isa.Ecall:
+			if err = cpu.ecall(); err != nil {
+				return err
 			}
 
 		case isa.Jal:
@@ -130,9 +97,78 @@ func (cpu *CPU) Run() error {
 			}
 
 		default:
-			fmt.Printf("instrs %v not implemented yet\n", instr)
+			fmt.Printf("cpu: instrs %v not implemented yet\n", instr)
 		}
 		cpu.PC += uint64(size)
+	}
+
+	return nil
+}
+
+func (cpu *CPU) ecall() error {
+	syscall := cpu.X[isa.A7]
+	info, ok := SyscallInfo[syscall]
+	if !ok || info.Argc == 0 {
+		fmt.Printf("ecall: %v(%v,%v,%v)\n",
+			syscall, cpu.X[isa.A0], cpu.X[isa.A1], cpu.X[isa.A2])
+	} else if len(info.Format) > 0 {
+		fmt.Printf("ecall: %s(", info.Name)
+		for idx, ch := range info.Format {
+			if idx > 0 {
+				fmt.Print(",")
+			}
+			arg := cpu.X[int(isa.A0)+idx]
+
+			switch ch {
+			case 'p':
+				fmt.Printf("%x", arg)
+			default:
+				fmt.Printf("%v", arg)
+			}
+		}
+		fmt.Println(")")
+	} else {
+		fmt.Printf("ecall: %s(", info.Name)
+		for i := 0; i < info.Argc; i++ {
+			if i > 0 {
+				fmt.Print(",")
+			}
+			fmt.Printf("%v", cpu.X[int(isa.A0)+i])
+		}
+		fmt.Println(")")
+	}
+
+	switch cpu.X[isa.A7] {
+	case 64: // write
+		fd := cpu.X[isa.A0]
+		addr := cpu.X[isa.A1]
+		len := cpu.X[isa.A2]
+
+		_ = fd
+
+		var i uint64
+
+		for i = 0; i < len; i++ {
+			b, err := cpu.Mem.Load8(addr + i)
+			if err != nil {
+				return err
+			}
+			os.Stdout.Write([]byte{b})
+			if err != nil {
+				break
+			}
+		}
+		if i < len {
+			cpu.X[isa.A0] = ^uint64(0)
+		} else {
+			cpu.X[isa.A0] = len
+		}
+
+	case 93: // exit
+		os.Exit(int(cpu.X[isa.A0]))
+
+	default:
+		return fmt.Errorf("unsupported syscall %v", cpu.X[isa.A7])
 	}
 
 	return nil
