@@ -52,6 +52,9 @@ func (cpu *CPU) Run() error {
 			cpu.X[instr.Rd] = uint64(int64(int32(int64(cpu.X[instr.Rs1]) +
 				int64(instr.Imm))))
 
+		case isa.Auipc:
+			cpu.X[instr.Rd] = uint64(int64(cpu.PC) + int64(instr.Imm)<<12)
+
 		case isa.Beq:
 			if cpu.X[instr.Rs1] == cpu.X[instr.Rs2] {
 				cpu.PC = uint64(int64(cpu.PC) + int64(instr.Imm))
