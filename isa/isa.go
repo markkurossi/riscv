@@ -932,7 +932,7 @@ func (instr *Instr) typeJ() {
 func (instr *Instr) typeS() {
 	raw := int32(instr.Raw)
 
-	instr.Imm = (raw>>25)&^0b11111 | ((raw >> 7) & 0b11111)
+	instr.Imm = (raw>>20)&^0b11111 | ((raw >> 7) & 0b11111)
 }
 
 func (instr *Instr) op() string {
