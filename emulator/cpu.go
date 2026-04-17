@@ -26,23 +26,11 @@ type CPU struct {
 	Mem *Memory
 }
 
-func NewCPU() *CPU {
-	cpu := &CPU{
-		Mem: &Memory{},
-	}
-	stack := NewStack(0x7ffff000, 1<<20)
-	cpu.Mem.Add(stack)
-
-	cpu.X[isa.Sp] = stack.End
-
-	return cpu
-}
-
 func (cpu *CPU) Run() error {
 	for count := 0; count < 20; count++ {
 		cpu.X[isa.Zero] = 0
 
-		seg, ofs, err := cpu.Mem.Map(cpu.PC, 8)
+		seg, ofs, err := cpu.Mem.Map(cpu.PC, 4)
 		if err != nil {
 			return err
 		}
@@ -132,6 +120,12 @@ func (cpu *CPU) Run() error {
 		case isa.Sd:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
 			if err := cpu.Mem.Store64(addr, cpu.X[instr.Rs2]); err != nil {
+				return err
+			}
+
+		case isa.Sw:
+			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+			if err := cpu.Mem.Store32(addr, cpu.X[instr.Rs2]); err != nil {
 				return err
 			}
 

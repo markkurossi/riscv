@@ -59,6 +59,18 @@ func (mem *Memory) Load64(addr uint64) (uint64, error) {
 	return bo.Uint64(seg.Data[ofs:]), nil
 }
 
+func (mem *Memory) Store32(addr, val uint64) error {
+	seg, ofs, err := mem.Map(addr, 4)
+	if err != nil {
+		return err
+	}
+	if !seg.Write {
+		return fmt.Errorf("address %x not writable", addr)
+	}
+	bo.PutUint32(seg.Data[ofs:], uint32(val))
+
+	return nil
+}
 func (mem *Memory) Store64(addr, val uint64) error {
 	seg, ofs, err := mem.Map(addr, 8)
 	if err != nil {
