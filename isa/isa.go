@@ -300,6 +300,14 @@ const (
 
 	FclassS
 	FclassD
+
+	// Zba & Zbb Bit-Manipulation Extensions.
+	AddUw
+	Sh1addUw
+	Sh2addUw
+	Sh3addUw
+	Rolw
+	Rorw
 )
 
 // OpInfo defines opcode information.
@@ -757,6 +765,24 @@ var operands = map[Op]OpInfo{
 	FclassD: OpInfo{
 		Name: "fclass.d",
 	},
+	AddUw: OpInfo{
+		Name: "add.uw",
+	},
+	Sh1addUw: OpInfo{
+		Name: "sh1add.uw",
+	},
+	Sh2addUw: OpInfo{
+		Name: "sh2add.uw",
+	},
+	Sh3addUw: OpInfo{
+		Name: "sh3add.uw",
+	},
+	Rolw: OpInfo{
+		Name: "rolw",
+	},
+	Rorw: OpInfo{
+		Name: "rorw",
+	},
 }
 
 func (op Op) String() string {
@@ -849,14 +875,14 @@ func (r Register) String() string {
 
 // Instr defines RISC-V instructions.
 type Instr struct {
-	Raw   uint32
-	Op    Op
-	Rd    Register
-	Func3 uint8 // [14:12]
-	Rs1   Register
-	Rs2   Register
-	Func7 uint8 // [31:25]
-	Imm   int32
+	Raw    uint32
+	Op     Op
+	Rd     Register
+	Funct3 uint8 // [14:12]
+	Rs1    Register
+	Rs2    Register
+	Funct7 uint8 // [31:25]
+	Imm    int32
 }
 
 func (instr Instr) String() string {

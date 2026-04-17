@@ -125,10 +125,10 @@ func Decode(data []byte, pc uint64) (Instr, int, error) {
 
 	instr.Raw = raw
 	instr.Rd = Register((raw >> 7) & 0b0011111)
-	instr.Func3 = uint8((raw >> 12) & 0b0000111)
+	instr.Funct3 = uint8((raw >> 12) & 0b0000111)
 	instr.Rs1 = Register((raw >> 15) & 0b0011111)
 	instr.Rs2 = Register((raw >> 20) & 0b0011111)
-	instr.Func7 = uint8((raw >> 25) & 0b1111111)
+	instr.Funct7 = uint8((raw >> 25) & 0b1111111)
 
 	switch group {
 	case GroupAUIPC:
@@ -141,7 +141,7 @@ func Decode(data []byte, pc uint64) (Instr, int, error) {
 
 	case GroupSTORE:
 		instr.typeS()
-		switch instr.Func3 {
+		switch instr.Funct3 {
 		case 0:
 			instr.Op = Sb
 		case 1:
@@ -156,7 +156,7 @@ func Decode(data []byte, pc uint64) (Instr, int, error) {
 
 	case GroupLOAD:
 		instr.typeI()
-		switch instr.Func3 {
+		switch instr.Funct3 {
 		case 0:
 			instr.Op = Lb
 		case 1:
@@ -175,7 +175,7 @@ func Decode(data []byte, pc uint64) (Instr, int, error) {
 
 	case GroupOPIMM:
 		instr.typeI()
-		switch instr.Func3 {
+		switch instr.Funct3 {
 		case 0:
 			instr.Op = Addi
 		case 1:
@@ -187,16 +187,45 @@ func Decode(data []byte, pc uint64) (Instr, int, error) {
 		case 4:
 			instr.Op = Xori
 		case 5:
-			return instr, 0, fmt.Errorf("GroupOPIMM: Func3=%v", instr.Func3)
+			switch instr.Funct7 {
+			case 0:
+				instr.Op = Srli
+			case 32:
+				instr.Op = Srai
+				instr.Imm &= 0b11111
+			default:
+				return instr, 0, fmt.Errorf("GroupOPIMM: Funct3=%v, raw=%08x",
+					instr.Funct3, raw)
+			}
 		case 6:
 			instr.Op = Ori
 		case 7:
 			instr.Op = Andi
 		}
 
+	case GroupOPIMM32:
+		instr.typeI()
+		switch instr.Funct3 {
+		case 0:
+			instr.Op = Addiw
+		case 1:
+			instr.Op = Slliw
+		case 5:
+			switch instr.Funct7 {
+			case 0:
+				instr.Op = Srliw
+			case 32:
+				instr.Op = Sraiw
+				instr.Imm &= 0b11111
+			default:
+				return instr, 0, fmt.Errorf("GroupOPIMM32: Func7=%v",
+					instr.Funct7)
+			}
+		}
+
 	case GroupSYSTEM:
 		instr.typeI()
-		switch instr.Func3 {
+		switch instr.Funct3 {
 		case 0:
 			if instr.Imm == 0 {
 				instr.Op = Ecall
@@ -215,7 +244,7 @@ func Decode(data []byte, pc uint64) (Instr, int, error) {
 
 	case GroupBRANCH:
 		instr.typeB()
-		switch instr.Func3 {
+		switch instr.Funct3 {
 		case 0:
 			instr.Op = Beq
 		case 1:
@@ -230,11 +259,127 @@ func Decode(data []byte, pc uint64) (Instr, int, error) {
 			instr.Op = Bgeu
 		}
 
+	case GroupOP:
+		switch instr.Funct7 {
+		case 0:
+			switch instr.Funct3 {
+			case 0:
+				instr.Op = Add
+			case 1:
+				instr.Op = Sll
+			case 2:
+				instr.Op = Slt
+			case 3:
+				instr.Op = Sltu
+			case 4:
+				instr.Op = Xor
+			case 5:
+				instr.Op = Srl
+			case 6:
+				instr.Op = Or
+			case 7:
+				instr.Op = And
+			default:
+				return instr, 0, fmt.Errorf("group %v: funct7=%v, raw=%x",
+					group, instr.Funct7, raw)
+			}
+
+		case 32:
+			switch instr.Funct3 {
+			case 0:
+				instr.Op = Sub
+			case 5:
+				instr.Op = Sra
+			default:
+				return instr, 0, fmt.Errorf("group %v: funct7=%v, raw=%x",
+					group, instr.Funct7, raw)
+			}
+
+		default:
+			return instr, 0, fmt.Errorf("group %v: funct7=%v, raw=%x",
+				group, instr.Funct7, raw)
+		}
+
+	case GroupOP32:
+		switch instr.Funct7 {
+		case 0:
+			switch instr.Funct3 {
+			case 0:
+				instr.Op = Addw
+			case 1:
+				instr.Op = Sllw
+			case 5:
+				instr.Op = Srlw
+			default:
+				return instr, 0, fmt.Errorf("group %v: funct7=%v, raw=%x",
+					group, instr.Funct7, raw)
+			}
+
+		case 1:
+			switch instr.Funct3 {
+			case 0:
+				instr.Op = Mulw
+			case 4:
+				instr.Op = Divw
+			case 5:
+				instr.Op = Divuw
+			case 6:
+				instr.Op = Remw
+			case 7:
+				instr.Op = Remuw
+			default:
+				return instr, 0, fmt.Errorf("group %v: funct7=%v, raw=%x",
+					group, instr.Funct7, raw)
+			}
+
+		case 4:
+			switch instr.Funct3 {
+			case 0:
+				instr.Op = AddUw
+			case 2:
+				instr.Op = Sh1addUw
+			case 4:
+				instr.Op = Sh2addUw
+			case 6:
+				instr.Op = Sh3addUw
+			default:
+				return instr, 0, fmt.Errorf("group %v: funct7=%v, raw=%x",
+					group, instr.Funct7, raw)
+			}
+
+		case 32:
+			switch instr.Funct3 {
+			case 0:
+				instr.Op = Subw
+			case 5:
+				instr.Op = Sraw
+			default:
+				return instr, 0, fmt.Errorf("group %v: funct7=%v, raw=%x",
+					group, instr.Funct7, raw)
+			}
+
+		case 48:
+			switch instr.Funct3 {
+			case 1:
+				instr.Op = Rolw
+			case 5:
+				instr.Op = Rorw
+			default:
+				return instr, 0, fmt.Errorf("group %v: funct7=%v, raw=%x",
+					group, instr.Funct7, raw)
+			}
+
+		default:
+			return instr, 0, fmt.Errorf("group %v: funct7=%v, raw=%x",
+				group, instr.Funct7, raw)
+		}
+
 	default:
 		if group>>2 == 0b111 {
 			return instr, 0,
 				fmt.Errorf("extended-length instructions not supported")
 		}
+		fmt.Printf("decode: group %v not implemented yet\n", group)
 	}
 
 	return instr, 4, nil

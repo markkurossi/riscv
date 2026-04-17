@@ -30,7 +30,7 @@ func (mem *Memory) Add(seg *Segment) {
 
 func (mem *Memory) Map(addr uint64, size int) (*Segment, uint64, error) {
 	for _, seg := range mem.Segments {
-		if addr >= seg.Start && addr+uint64(size) <= seg.End {
+		if addr >= seg.Start && seg.End-uint64(size) >= addr {
 			return seg, addr - seg.Start, nil
 		}
 	}
@@ -59,6 +59,19 @@ func (mem *Memory) Load64(addr uint64) (uint64, error) {
 	return bo.Uint64(seg.Data[ofs:]), nil
 }
 
+func (mem *Memory) Store8(addr, val uint64) error {
+	seg, ofs, err := mem.Map(addr, 1)
+	if err != nil {
+		return err
+	}
+	if !seg.Write {
+		return fmt.Errorf("address %x not writable", addr)
+	}
+	seg.Data[ofs] = uint8(val)
+
+	return nil
+}
+
 func (mem *Memory) Store32(addr, val uint64) error {
 	seg, ofs, err := mem.Map(addr, 4)
 	if err != nil {
@@ -71,6 +84,7 @@ func (mem *Memory) Store32(addr, val uint64) error {
 
 	return nil
 }
+
 func (mem *Memory) Store64(addr, val uint64) error {
 	seg, ofs, err := mem.Map(addr, 8)
 	if err != nil {

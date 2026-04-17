@@ -27,7 +27,7 @@ type CPU struct {
 }
 
 func (cpu *CPU) Run() error {
-	for count := 0; count < 30; count++ {
+	for {
 		cpu.X[isa.Zero] = 0
 
 		seg, ofs, err := cpu.Mem.Map(cpu.PC, 4)
@@ -42,11 +42,30 @@ func (cpu *CPU) Run() error {
 		fmt.Printf("%8x:\t%08x\t%v\n", cpu.PC, instr.Raw, instr)
 
 		switch instr.Op {
+		case isa.Add:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] + cpu.X[instr.Rs2]
+
 		case isa.Addi:
 			cpu.X[instr.Rd] = uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
 
+		case isa.Addiw:
+			cpu.X[instr.Rd] = uint64(int64(int32(int64(cpu.X[instr.Rs1]) +
+				int64(instr.Imm))))
+
+		case isa.Beq:
+			if cpu.X[instr.Rs1] == cpu.X[instr.Rs2] {
+				cpu.PC = uint64(int64(cpu.PC) + int64(instr.Imm))
+				size = 0
+			}
+
 		case isa.Bge:
 			if int64(cpu.X[instr.Rs1]) >= int64(cpu.X[instr.Rs2]) {
+				cpu.PC = uint64(int64(cpu.PC) + int64(instr.Imm))
+				size = 0
+			}
+
+		case isa.Bgeu:
+			if cpu.X[instr.Rs1] >= cpu.X[instr.Rs2] {
 				cpu.PC = uint64(int64(cpu.PC) + int64(instr.Imm))
 				size = 0
 			}
@@ -56,6 +75,10 @@ func (cpu *CPU) Run() error {
 				cpu.PC = uint64(int64(cpu.PC) + int64(instr.Imm))
 				size = 0
 			}
+
+		case isa.Divw:
+			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) /
+				int32(cpu.X[instr.Rs2])))
 
 		case isa.Ecall:
 			if err = cpu.ecall(); err != nil {
@@ -73,6 +96,14 @@ func (cpu *CPU) Run() error {
 			cpu.X[instr.Rd] = t
 			size = 0
 
+		case isa.Lbu:
+			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+			v, err := cpu.Mem.Load8(addr)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = uint64(v)
+
 		case isa.Ld:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
 			v, err := cpu.Mem.Load64(addr)
@@ -84,11 +115,24 @@ func (cpu *CPU) Run() error {
 		case isa.Lui:
 			cpu.X[instr.Rd] = uint64(instr.Imm << 12)
 
+		case isa.Remw:
+			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) %
+				int32(cpu.X[instr.Rs2])))
+
+		case isa.Sb:
+			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+			if err := cpu.Mem.Store8(addr, cpu.X[instr.Rs2]); err != nil {
+				return err
+			}
+
 		case isa.Sd:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
 			if err := cpu.Mem.Store64(addr, cpu.X[instr.Rs2]); err != nil {
 				return err
 			}
+
+		case isa.Srli:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> instr.Imm
 
 		case isa.Sw:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
@@ -101,8 +145,6 @@ func (cpu *CPU) Run() error {
 		}
 		cpu.PC += uint64(size)
 	}
-
-	return nil
 }
 
 func (cpu *CPU) ecall() error {
