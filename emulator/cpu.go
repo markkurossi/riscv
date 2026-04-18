@@ -34,7 +34,7 @@ func (cpu *CPU) Run() error {
 		if err != nil {
 			return fmt.Errorf("invalid PC %x: %v", cpu.PC, err)
 		}
-		instr, size, err := isa.Decode(seg.Data[ofs:], cpu.PC)
+		instr, size, err := isa.Decode(seg.Data[ofs:])
 		if err != nil {
 			return err
 		}

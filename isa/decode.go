@@ -91,7 +91,7 @@ func DecodeELF(file string) (*Program, error) {
 
 	fmt.Printf(".text at 0x%x, size %d bytes\n", text.Addr, len(data))
 
-	_, _, err = Decode(data, text.Addr)
+	_, _, err = Decode(data)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func DecodeELF(file string) (*Program, error) {
 
 // Decode decodes RISC-V instructions from data and returns the
 // decoded program.
-func Decode(data []byte, pc uint64) (Instr, int, error) {
+func Decode(data []byte) (Instr, int, error) {
 	var instr Instr
 
 	if len(data) < 2 {

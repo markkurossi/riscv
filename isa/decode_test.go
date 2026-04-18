@@ -137,7 +137,7 @@ func TestDecode(t *testing.T) {
 		var buf [4]byte
 
 		bo.PutUint32(buf[:], test.Instr)
-		instr, size, err := Decode(buf[:], 0)
+		instr, size, err := Decode(buf[:])
 		if err != nil {
 			t.Fatal(err)
 		}
