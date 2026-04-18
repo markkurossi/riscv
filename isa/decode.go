@@ -171,6 +171,8 @@ func Decode(data []byte, pc uint64) (Instr, int, error) {
 			instr.Op = Lhu
 		case 6:
 			instr.Op = Lwu
+		default:
+			return instr, 0, fmt.Errorf("invalid LOAD instr %x", instr.Raw)
 		}
 
 	case GroupOPIMM:
@@ -192,7 +194,7 @@ func Decode(data []byte, pc uint64) (Instr, int, error) {
 				instr.Op = Srli
 			case 32:
 				instr.Op = Srai
-				instr.Imm &= 0b11111
+				instr.Imm &= 0b111111
 			default:
 				return instr, 0, fmt.Errorf("GroupOPIMM: Funct3=%v, raw=%08x",
 					instr.Funct3, raw)
@@ -216,7 +218,7 @@ func Decode(data []byte, pc uint64) (Instr, int, error) {
 				instr.Op = Srliw
 			case 32:
 				instr.Op = Sraiw
-				instr.Imm &= 0b11111
+				instr.Imm &= 0b111111
 			default:
 				return instr, 0, fmt.Errorf("GroupOPIMM32: Func7=%v",
 					instr.Funct7)
@@ -227,11 +229,39 @@ func Decode(data []byte, pc uint64) (Instr, int, error) {
 		instr.typeI()
 		switch instr.Funct3 {
 		case 0:
-			if instr.Imm == 0 {
+			// Trap/return.
+			switch instr.Imm {
+			case 0x0:
 				instr.Op = Ecall
-			} else {
+			case 0x1:
 				instr.Op = Ebreak
+			case 0x102:
+				instr.Op = Sret
+			case 0x105:
+				instr.Op = Wfi
+			case 0x302:
+				instr.Op = Mret
+			default:
+				return instr, 0,
+					fmt.Errorf("invalid SYSTEM trap/return: raw=%08x", raw)
 			}
+
+			// CSR mappings.
+		case 1:
+			instr.Op = Csrrw
+		case 2:
+			instr.Op = Csrrs
+		case 3:
+			instr.Op = Csrrc
+		case 5:
+			instr.Op = Csrrwi
+		case 6:
+			instr.Op = Csrrsi
+		case 7:
+			instr.Op = Csrrci
+
+		default:
+			return instr, 0, fmt.Errorf("invalid SYSTEM: raw=%08x", raw)
 		}
 
 	case GroupJAL:
@@ -280,8 +310,34 @@ func Decode(data []byte, pc uint64) (Instr, int, error) {
 			case 7:
 				instr.Op = And
 			default:
-				return instr, 0, fmt.Errorf("group %v: funct7=%v, raw=%x",
-					group, instr.Funct7, raw)
+				return instr, 0,
+					fmt.Errorf("invalid group OP funct3: %v, raw=%08x",
+						instr.Funct3, raw)
+			}
+
+			// The 'M' Extension (Multiply/Divide)
+		case 1:
+			switch instr.Funct3 {
+			case 0:
+				instr.Op = Mul
+			case 1:
+				instr.Op = Mulh
+			case 2:
+				instr.Op = Mulhsu
+			case 3:
+				instr.Op = Mulhu
+			case 4:
+				instr.Op = Div
+			case 5:
+				instr.Op = Divu
+			case 6:
+				instr.Op = Rem
+			case 7:
+				instr.Op = Remu
+			default:
+				return instr, 0,
+					fmt.Errorf("invalid group OP M-ext funct3: %v, raw=%08x",
+						instr.Funct3, raw)
 			}
 
 		case 32:
@@ -291,13 +347,14 @@ func Decode(data []byte, pc uint64) (Instr, int, error) {
 			case 5:
 				instr.Op = Sra
 			default:
-				return instr, 0, fmt.Errorf("group %v: funct7=%v, raw=%x",
-					group, instr.Funct7, raw)
+				return instr, 0,
+					fmt.Errorf("invalid group OP funct3: %v, raw=%08x",
+						instr.Funct3, raw)
 			}
 
 		default:
-			return instr, 0, fmt.Errorf("group %v: funct7=%v, raw=%x",
-				group, instr.Funct7, raw)
+			return instr, 0, fmt.Errorf("group OP funct7: %v, raw=%08x",
+				instr.Funct7, raw)
 		}
 
 	case GroupOP32:

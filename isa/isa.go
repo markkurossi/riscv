@@ -891,7 +891,7 @@ func (instr Instr) String() string {
 	switch group {
 	case GroupAUIPC, GroupLUI, GroupOPV, GroupOPVE:
 		return fmt.Sprintf("%v\t%v,0x%x",
-			instr.op(), instr.Rd, instr.Imm)
+			instr.op(), instr.Rd, uint32(instr.Imm)>>12)
 
 	case GroupSTORE:
 		return fmt.Sprintf("%v\t%v,%d(%v)",
@@ -962,7 +962,7 @@ func (instr *Instr) typeB() {
 }
 
 func (instr *Instr) typeU() {
-	instr.Imm = int32(instr.Raw) >> 12
+	instr.Imm = int32(instr.Raw &^ 0b1111_11111111)
 }
 
 func (instr *Instr) typeJ() {
@@ -970,15 +970,15 @@ func (instr *Instr) typeJ() {
 
 	if false {
 		fmt.Printf("raw   : %b\n", raw)
-		fmt.Printf(" 20   : %21b\n", (raw>>10)&^0b1111_11111111_11111111)
+		fmt.Printf(" 20   : %21b\n", (raw>>11)&^0b1111_11111111_11111111)
 		fmt.Printf(" 19:12: %21b\n", (raw & 0b1111_11110000_00000000))
-		fmt.Printf(" 11   : %21b\n", (raw>>8)&0b1000_00000000)
+		fmt.Printf(" 11   : %21b\n", (raw>>9)&0b1000_00000000)
 		fmt.Printf(" 10:1 : %21b\n", (raw>>20)&0b111_11111110)
 	}
 
-	instr.Imm = (raw>>10)&^0b1111_11111111_11111111 |
+	instr.Imm = (raw>>11)&^0b1111_11111111_11111111 |
 		(raw & 0b1111_11110000_00000000) |
-		(raw>>8)&0b1000_00000000 |
+		(raw>>9)&0b1000_00000000 |
 		(raw>>20)&0b111_11111110
 }
 
