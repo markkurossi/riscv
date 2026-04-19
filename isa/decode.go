@@ -25,6 +25,17 @@ func DecodeELF(file string) (*Program, error) {
 	}
 	defer f.Close()
 
+	fmt.Printf("File:\n")
+	fmt.Printf(" - Class     : %v\n", f.Class)
+	fmt.Printf(" - Data      : %v\n", f.Data)
+	fmt.Printf(" - Version   : %v\n", f.Version)
+	fmt.Printf(" - OSABI     : %v\n", f.OSABI)
+	fmt.Printf(" - ABIVersion: %v\n", f.ABIVersion)
+	fmt.Printf(" - ByteOrder : %v\n", f.ByteOrder)
+	fmt.Printf(" - Type      : %v\n", f.Type)
+	fmt.Printf(" - Machine   : %v\n", f.Machine)
+	fmt.Printf(" - Entry     : %v\n", f.Entry)
+
 	for idx, prog := range f.Progs {
 		fmt.Printf("Prog %v\n", idx)
 		fmt.Printf(" - Type : %v\n", prog.Type)
@@ -32,6 +43,19 @@ func DecodeELF(file string) (*Program, error) {
 		fmt.Printf(" - Vaddr: %x\n", prog.Vaddr)
 		fmt.Printf(" - Memsz: %v\n", prog.Memsz)
 		fmt.Printf(" - Align: %v\n", prog.Align)
+
+		data := make([]byte, prog.Memsz)
+		n, err := prog.ReadAt(data, 0)
+		if err != nil {
+			return nil, err
+		}
+		limit := 256
+		suffix := ""
+		if n > limit {
+			suffix = fmt.Sprintf("...%d bytes omitted...\n", n-limit)
+			n = limit
+		}
+		fmt.Printf("%s%s", hex.Dump(data[:n]), suffix)
 	}
 
 	var text *elf.Section
@@ -53,7 +77,11 @@ func DecodeELF(file string) (*Program, error) {
 			if err != nil {
 				return nil, err
 			}
-			fmt.Printf("%s", hex.Dump(data))
+			l := len(data)
+			if l > 32 {
+				l = 32
+			}
+			fmt.Printf("%s", hex.Dump(data[:l]))
 		}
 	}
 	if text == nil {
