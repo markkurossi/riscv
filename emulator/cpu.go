@@ -52,34 +52,40 @@ func (cpu *CPU) Run() error {
 			cpu.X[instr.Rd] = uint64(int64(int32(int64(cpu.X[instr.Rs1]) +
 				int64(instr.Imm))))
 
+		case isa.Andi:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] & uint64(instr.Imm)
+
 		case isa.Auipc:
 			cpu.X[instr.Rd] = uint64(int64(cpu.PC) + int64(instr.Imm))
 
 		case isa.Beq:
 			if cpu.X[instr.Rs1] == cpu.X[instr.Rs2] {
 				cpu.PC = uint64(int64(cpu.PC) + int64(instr.Imm))
-				size = 0
+				continue
 			}
 
 		case isa.Bge:
 			if int64(cpu.X[instr.Rs1]) >= int64(cpu.X[instr.Rs2]) {
 				cpu.PC = uint64(int64(cpu.PC) + int64(instr.Imm))
-				size = 0
+				continue
 			}
 
 		case isa.Bgeu:
 			if cpu.X[instr.Rs1] >= cpu.X[instr.Rs2] {
 				cpu.PC = uint64(int64(cpu.PC) + int64(instr.Imm))
-				size = 0
+				continue
 			}
 
 		case isa.Bne:
 			if cpu.X[instr.Rs1] != cpu.X[instr.Rs2] {
 				cpu.PC = uint64(int64(cpu.PC) + int64(instr.Imm))
-				size = 0
+				continue
 			}
 
 		case isa.Divw:
+			// But RISC-V requires:
+			// - div by zero → result = -1
+			// - rem by zero → result = dividend
 			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) /
 				int32(cpu.X[instr.Rs2])))
 
@@ -89,15 +95,15 @@ func (cpu *CPU) Run() error {
 			}
 
 		case isa.Jal:
-			cpu.X[instr.Rd] = cpu.PC + 4
+			cpu.X[instr.Rd] = cpu.PC + uint64(size)
 			cpu.PC = uint64(int64(cpu.PC) + int64(instr.Imm))
-			size = 0
+			continue
 
 		case isa.Jalr:
-			t := cpu.PC + 4
+			t := cpu.PC + uint64(size)
 			cpu.PC = uint64(int64(cpu.X[instr.Rs1])+int64(instr.Imm)) &^ 1
 			cpu.X[instr.Rd] = t
-			size = 0
+			continue
 
 		case isa.Lbu:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
@@ -115,8 +121,19 @@ func (cpu *CPU) Run() error {
 			}
 			cpu.X[instr.Rd] = v
 
+		case isa.Lhu:
+			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+			v, err := cpu.Mem.Load16(addr)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = uint64(v)
+
 		case isa.Lui:
 			cpu.X[instr.Rd] = uint64(instr.Imm)
+
+		case isa.Mul:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] * cpu.X[instr.Rs2]
 
 		case isa.Remw:
 			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) %
@@ -134,6 +151,9 @@ func (cpu *CPU) Run() error {
 				return err
 			}
 
+		case isa.Slli:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] << instr.Imm
+
 		case isa.Srli:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> instr.Imm
 
@@ -144,7 +164,7 @@ func (cpu *CPU) Run() error {
 			}
 
 		default:
-			fmt.Printf("cpu: instrs %v not implemented yet\n", instr)
+			return fmt.Errorf("cpu: instrs %v not implemented yet", instr)
 		}
 		cpu.PC += uint64(size)
 	}

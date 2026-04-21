@@ -11,7 +11,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"io"
 )
 
 var (
@@ -127,6 +126,10 @@ func DecodeELF(file string) (*Program, error) {
 	return prog, nil
 }
 
+var compressedRegisters = [8]Register{
+	S0, S1, A0, A1, A2, A3, A4, A5,
+}
+
 // Decode decodes RISC-V instructions from data and returns the
 // decoded program.
 func Decode(data []byte) (Instr, int, error) {
@@ -138,9 +141,223 @@ func Decode(data []byte) (Instr, int, error) {
 	opcode := data[0]
 	if opcode&0b11 != 0b11 {
 		if opcode == 0 && data[1] == 0 {
-			return instr, 0, io.EOF
+			return instr, 0, fmt.Errorf("illegal instruction: raw=000")
 		}
-		return instr, 0, fmt.Errorf("compressed instructions not supported yet")
+		raw := bo.Uint16(data)
+		rds1 := Register(raw >> 7 & 0b11111)
+		rs2 := Register(raw >> 2 & 0b11111)
+		funct3 := raw >> 13 & 0b111
+
+		instr.Raw = uint32(raw)
+
+		// Switch by quadrants.
+		switch raw & 0b11 {
+		case 0:
+			switch funct3 {
+			case 0b000:
+				instr.Imm = int32(raw&0b1000000)>>4 |
+					int32(raw&0b100000)>>2 |
+					int32(raw&0b11000_00000000)>>7 |
+					int32(raw&0b111_10000000)>>1
+				instr.Rd = compressedRegisters[raw>>2&0b111]
+				instr.Rs1 = Sp
+				instr.Op = Addi
+
+			case 0b011:
+				instr.Rd = compressedRegisters[raw>>2&0b111]
+				instr.Rs1 = compressedRegisters[raw>>7&0b111]
+				instr.Imm = int32(raw&0b11100_00000000)>>7 |
+					int32(raw&0b1100000)<<1
+				instr.Op = Ld
+
+			case 0b111:
+				instr.Rs2 = compressedRegisters[raw>>2&0b111]
+				instr.Rs1 = compressedRegisters[raw>>7&0b111]
+				instr.Imm = int32(raw&0b11100_00000000)>>7 |
+					int32(raw&0b1100000)<<1
+				instr.Op = Sd
+
+			default:
+				return instr, 0,
+					fmt.Errorf("compressed: raw=%04x, Q=0, funct3=%03b",
+						raw, funct3)
+			}
+
+		case 1:
+			switch funct3 {
+			case 0b000:
+				if rds1 == 0 {
+					// Nop: addi zero,zero,0
+				} else {
+					instr.Rd = rds1
+					instr.Rs1 = rds1
+					instr.Imm = int32(raw&0b1111100)>>2 |
+						int32(raw&0b10000_00000000)>>7
+					if instr.Imm&0b100000 != 0 {
+						// XXX change all sign extends to use this pattern
+						instr.Imm |= ^int32(0b111111)
+					}
+				}
+				instr.Op = Addi
+
+			case 0b010:
+				instr.Rd = rds1
+				instr.Imm = int32(raw&0b1111100)>>2 |
+					int32(raw&0b10000_00000000)>>7
+				if instr.Imm&0b100000 != 0 {
+					instr.Imm |= ^int32(0b111111)
+
+				}
+				instr.Op = Addi
+
+			case 0b011:
+				instr.Rd = rds1
+				if rds1 == 2 {
+					instr.Imm = int32(raw&0b1000000)>>2 |
+						int32(raw&0b100)<<3 |
+						int32(raw&0b100000)<<1 |
+						int32(raw&0b11000)<<4 |
+						int32(raw&0b10000_00000000)>>3
+					if instr.Imm&0b1000000000 != 0 {
+						instr.Imm |= int32(-1) << 10
+					}
+					instr.Rs1 = Sp
+					instr.Op = Addi
+				} else {
+					instr.Rd = rds1
+					instr.Imm = int32(raw&0b1111100)<<10 |
+						int32(raw&0b10000_00000000)<<5
+					if instr.Imm&0b10_00000000_00000000 != 0 {
+						instr.Imm |= int32(-1) << 18
+					}
+					instr.Op = Lui
+				}
+
+			case 0b100:
+				funct2 := raw >> 10 & 0b11
+				switch funct2 {
+				case 0b10:
+					instr.Rd = compressedRegisters[raw>>7&0b111]
+					instr.Rs1 = instr.Rd
+					instr.Imm = int32(raw&0b1111100)>>2 |
+						int32(raw&0b10000_00000000)>>7
+					if instr.Imm&0b100000 != 0 {
+						instr.Imm |= int32(-1) << 6
+					}
+					instr.Op = Andi
+				default:
+					return instr, 0,
+						fmt.Errorf("compressed: raw=%04x, Q1, funct3=%03b",
+							raw, funct3)
+				}
+
+			case 0b101:
+				instr.Imm = int32(raw&0b111000)>>2 |
+					int32(raw&0b1000_00000000)>>7 |
+					int32(raw&0b100)<<3 |
+					int32(raw&0b10000000)>>1 |
+					int32(raw&0b1000000)<<1 |
+					int32(raw&0b110_00000000)>>1 |
+					int32(raw&0b1_00000000)<<2 |
+					int32(raw&0b10000_00000000)>>1
+				if instr.Imm&0b1000_00000000 != 0 {
+					instr.Imm |= ^int32(0b1111_11111111)
+				}
+				instr.Op = Jal
+
+			case 0b110, 0b111:
+				instr.Rs1 = compressedRegisters[raw>>7&0b111]
+				instr.Imm = int32(raw&0b11000)>>2 |
+					int32(raw&0b1100_00000000)>>7 |
+					int32(raw&0b100)<<3 |
+					int32(raw&0b1100000)<<1 |
+					int32(raw&0b10000_00000000)>>4
+				if instr.Imm&0b1_00000000 != 0 {
+					instr.Imm |= int32(-1) << 9
+				}
+				if funct3 == 0b110 {
+					instr.Op = Beq
+				} else {
+					instr.Op = Bne
+				}
+
+			default:
+				return instr, 0,
+					fmt.Errorf("compressed: raw=%04x, Q=1, funct3=%03b",
+						raw, funct3)
+			}
+
+		case 2:
+			switch funct3 {
+			case 0b000:
+				instr.Rd = rds1
+				instr.Rs1 = rds1
+				instr.Imm = int32(raw&0b1111100)>>2 |
+					int32(raw&0b10000_00000000)>>7
+				instr.Op = Slli
+
+			case 0b011:
+				instr.Imm = int32(raw&0b11100)<<4 |
+					int32(raw&0b1100000)>>2 |
+					int32(raw&0b10000_00000000)>>7
+				instr.Rd = rds1
+				instr.Rs1 = Sp
+				instr.Op = Ld
+
+			case 0b100:
+				if raw&0b10000_00000000 == 0 {
+					if rds1 != 0 {
+						if rs2 == 0 {
+							instr.Rs1 = rds1
+							instr.Op = Jalr
+						} else {
+							instr.Rd = rds1
+							instr.Rs2 = rs2
+							instr.Op = Add
+						}
+					} else {
+						return instr, 0, fmt.Errorf("compressed: raw=%04x", raw)
+					}
+				} else {
+					if rds1 == 0 {
+						if rs2 == 0 {
+							instr.Op = Ebreak
+						} else {
+							return instr, 0, fmt.Errorf("compressed: raw=%04x",
+								raw)
+						}
+					} else {
+						if rs2 == 0 {
+							instr.Rd = Ra
+							instr.Rs1 = rds1
+							instr.Op = Jalr
+						} else {
+							instr.Rd = rds1
+							instr.Rs1 = rds1
+							instr.Rs2 = rs2
+							instr.Op = Add
+						}
+					}
+				}
+
+			case 0b111:
+				instr.Rs1 = Sp
+				instr.Rs2 = rs2
+				instr.Imm = int32(raw&0b11100_00000000)>>7 |
+					int32(raw&0b11_10000000)>>1
+				instr.Op = Sd
+
+			default:
+				return instr, 0,
+					fmt.Errorf("compressed: raw=%04x, Q=2, funct3=%03b",
+						raw, funct3)
+			}
+
+		default:
+			return instr, 0,
+				fmt.Errorf("compressed: raw=%04x, Q=%v", raw, raw&0b11)
+		}
+		return instr, 2, nil
 	}
 
 	// 32-bit (or longer) instructions.
@@ -152,11 +369,12 @@ func Decode(data []byte) (Instr, int, error) {
 	group := Group(opcode & 0b1111111)
 
 	instr.Raw = raw
-	instr.Rd = Register((raw >> 7) & 0b0011111)
-	instr.Funct3 = uint8((raw >> 12) & 0b0000111)
-	instr.Rs1 = Register((raw >> 15) & 0b0011111)
-	instr.Rs2 = Register((raw >> 20) & 0b0011111)
-	instr.Funct7 = uint8((raw >> 25) & 0b1111111)
+	instr.Rd = Register(raw >> 7 & 0b0011111)
+	instr.Rs1 = Register(raw >> 15 & 0b0011111)
+	instr.Rs2 = Register(raw >> 20 & 0b0011111)
+
+	funct3 := uint8(raw >> 12 & 0b0000111)
+	funct7 := uint8(raw >> 25 & 0b1111111)
 
 	switch group {
 	case GroupAUIPC:
@@ -169,7 +387,7 @@ func Decode(data []byte) (Instr, int, error) {
 
 	case GroupSTORE:
 		instr.typeS()
-		switch instr.Funct3 {
+		switch funct3 {
 		case 0:
 			instr.Op = Sb
 		case 1:
@@ -184,7 +402,7 @@ func Decode(data []byte) (Instr, int, error) {
 
 	case GroupLOAD:
 		instr.typeI()
-		switch instr.Funct3 {
+		switch funct3 {
 		case 0:
 			instr.Op = Lb
 		case 1:
@@ -205,7 +423,7 @@ func Decode(data []byte) (Instr, int, error) {
 
 	case GroupOPIMM:
 		instr.typeI()
-		switch instr.Funct3 {
+		switch funct3 {
 		case 0:
 			instr.Op = Addi
 		case 1:
@@ -217,7 +435,7 @@ func Decode(data []byte) (Instr, int, error) {
 		case 4:
 			instr.Op = Xori
 		case 5:
-			switch instr.Funct7 {
+			switch funct7 {
 			case 0:
 				instr.Op = Srli
 			case 32:
@@ -225,7 +443,7 @@ func Decode(data []byte) (Instr, int, error) {
 				instr.Imm &= 0b111111
 			default:
 				return instr, 0, fmt.Errorf("GroupOPIMM: Funct3=%v, raw=%08x",
-					instr.Funct3, raw)
+					funct3, raw)
 			}
 		case 6:
 			instr.Op = Ori
@@ -235,13 +453,13 @@ func Decode(data []byte) (Instr, int, error) {
 
 	case GroupOPIMM32:
 		instr.typeI()
-		switch instr.Funct3 {
+		switch funct3 {
 		case 0:
 			instr.Op = Addiw
 		case 1:
 			instr.Op = Slliw
 		case 5:
-			switch instr.Funct7 {
+			switch funct7 {
 			case 0:
 				instr.Op = Srliw
 			case 32:
@@ -249,13 +467,13 @@ func Decode(data []byte) (Instr, int, error) {
 				instr.Imm &= 0b111111
 			default:
 				return instr, 0, fmt.Errorf("GroupOPIMM32: Func7=%v",
-					instr.Funct7)
+					funct7)
 			}
 		}
 
 	case GroupSYSTEM:
 		instr.typeI()
-		switch instr.Funct3 {
+		switch funct3 {
 		case 0:
 			// Trap/return.
 			switch instr.Imm {
@@ -302,7 +520,7 @@ func Decode(data []byte) (Instr, int, error) {
 
 	case GroupBRANCH:
 		instr.typeB()
-		switch instr.Funct3 {
+		switch funct3 {
 		case 0:
 			instr.Op = Beq
 		case 1:
@@ -318,9 +536,9 @@ func Decode(data []byte) (Instr, int, error) {
 		}
 
 	case GroupOP:
-		switch instr.Funct7 {
+		switch funct7 {
 		case 0:
-			switch instr.Funct3 {
+			switch funct3 {
 			case 0:
 				instr.Op = Add
 			case 1:
@@ -340,12 +558,12 @@ func Decode(data []byte) (Instr, int, error) {
 			default:
 				return instr, 0,
 					fmt.Errorf("invalid group OP funct3: %v, raw=%08x",
-						instr.Funct3, raw)
+						funct3, raw)
 			}
 
 			// The 'M' Extension (Multiply/Divide)
 		case 1:
-			switch instr.Funct3 {
+			switch funct3 {
 			case 0:
 				instr.Op = Mul
 			case 1:
@@ -365,11 +583,11 @@ func Decode(data []byte) (Instr, int, error) {
 			default:
 				return instr, 0,
 					fmt.Errorf("invalid group OP M-ext funct3: %v, raw=%08x",
-						instr.Funct3, raw)
+						funct3, raw)
 			}
 
 		case 32:
-			switch instr.Funct3 {
+			switch funct3 {
 			case 0:
 				instr.Op = Sub
 			case 5:
@@ -377,18 +595,18 @@ func Decode(data []byte) (Instr, int, error) {
 			default:
 				return instr, 0,
 					fmt.Errorf("invalid group OP funct3: %v, raw=%08x",
-						instr.Funct3, raw)
+						funct3, raw)
 			}
 
 		default:
 			return instr, 0, fmt.Errorf("group OP funct7: %v, raw=%08x",
-				instr.Funct7, raw)
+				funct7, raw)
 		}
 
 	case GroupOP32:
-		switch instr.Funct7 {
+		switch funct7 {
 		case 0:
-			switch instr.Funct3 {
+			switch funct3 {
 			case 0:
 				instr.Op = Addw
 			case 1:
@@ -397,11 +615,11 @@ func Decode(data []byte) (Instr, int, error) {
 				instr.Op = Srlw
 			default:
 				return instr, 0, fmt.Errorf("group %v: funct7=%v, raw=%x",
-					group, instr.Funct7, raw)
+					group, funct7, raw)
 			}
 
 		case 1:
-			switch instr.Funct3 {
+			switch funct3 {
 			case 0:
 				instr.Op = Mulw
 			case 4:
@@ -414,11 +632,11 @@ func Decode(data []byte) (Instr, int, error) {
 				instr.Op = Remuw
 			default:
 				return instr, 0, fmt.Errorf("group %v: funct7=%v, raw=%x",
-					group, instr.Funct7, raw)
+					group, funct7, raw)
 			}
 
 		case 4:
-			switch instr.Funct3 {
+			switch funct3 {
 			case 0:
 				instr.Op = AddUw
 			case 2:
@@ -429,34 +647,34 @@ func Decode(data []byte) (Instr, int, error) {
 				instr.Op = Sh3addUw
 			default:
 				return instr, 0, fmt.Errorf("group %v: funct7=%v, raw=%x",
-					group, instr.Funct7, raw)
+					group, funct7, raw)
 			}
 
 		case 32:
-			switch instr.Funct3 {
+			switch funct3 {
 			case 0:
 				instr.Op = Subw
 			case 5:
 				instr.Op = Sraw
 			default:
 				return instr, 0, fmt.Errorf("group %v: funct7=%v, raw=%x",
-					group, instr.Funct7, raw)
+					group, funct7, raw)
 			}
 
 		case 48:
-			switch instr.Funct3 {
+			switch funct3 {
 			case 1:
 				instr.Op = Rolw
 			case 5:
 				instr.Op = Rorw
 			default:
 				return instr, 0, fmt.Errorf("group %v: funct7=%v, raw=%x",
-					group, instr.Funct7, raw)
+					group, funct7, raw)
 			}
 
 		default:
 			return instr, 0, fmt.Errorf("group %v: funct7=%v, raw=%x",
-				group, instr.Funct7, raw)
+				group, funct7, raw)
 		}
 
 	default:

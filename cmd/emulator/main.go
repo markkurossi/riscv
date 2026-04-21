@@ -8,7 +8,9 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
+	"os"
 
 	"github.com/markkurossi/riscv/emulator"
 )
@@ -16,13 +18,15 @@ import (
 func main() {
 	flag.Parse()
 
+	fmt.Printf("args: %v\n", flag.Args())
+
 	for _, arg := range flag.Args() {
 		emu := emulator.New()
 		err := emu.LoadELF(arg)
 		if err != nil {
 			log.Fatalf("failed to load %v: %v", arg, err)
 		}
-		err = emu.CPU.Run()
+		err = emu.Run(flag.Args(), os.Environ())
 		if err != nil {
 			log.Fatal(err)
 		}

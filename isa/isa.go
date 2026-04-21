@@ -805,7 +805,7 @@ const (
 	T0
 	T1
 	T2
-	Fp
+	S0
 	S1
 	A0
 	A1
@@ -840,7 +840,7 @@ var registers = [32]string{
 	"t0",   // x5
 	"t1",   // x6
 	"t2",   // x7
-	"fp",   // x8
+	"s0",   // x8
 	"s1",   // x9
 	"a0",   // x10
 	"a1",   // x11
@@ -875,18 +875,61 @@ func (r Register) String() string {
 
 // Instr defines RISC-V instructions.
 type Instr struct {
-	Raw    uint32
-	Op     Op
-	Rd     Register
-	Funct3 uint8 // [14:12]
-	Rs1    Register
-	Rs2    Register
-	Funct7 uint8 // [31:25]
-	Imm    int32
+	Raw uint32
+	Op  Op
+	Rd  Register
+	Rs1 Register
+	Rs2 Register
+	Imm int32
 }
 
 func (instr Instr) String() string {
 	group := Group(instr.Raw & 0b1111111)
+
+	if instr.Op != Invalid {
+		switch instr.Op {
+		case Add, Divw, Mul, Remw: // GroupOP, GroupOP32
+			return fmt.Sprintf("%v\t%v,%v,%v",
+				instr.op(), instr.Rd, instr.Rs1, instr.Rs2)
+
+		case Addi, Addiw, Andi, Slli, Srli: // GroupOPIMM, GroupOPIMM32
+			return fmt.Sprintf("%v\t%v,%v,%d",
+				instr.op(), instr.Rd, instr.Rs1, instr.Imm)
+
+		case Auipc: // GroupAUIPC
+			return fmt.Sprintf("%v\t%v,0x%x",
+				instr.op(), instr.Rd, uint32(instr.Imm)>>12)
+
+		case Beq, Bge, Bgeu, Bne: // GroupBRANCH
+			return fmt.Sprintf("%v\t%v,%v,%d",
+				instr.Op, instr.Rs1, instr.Rs2, instr.Imm)
+
+		case Ecall: // GroupSYSTEM
+			return "ecall"
+
+		case Jal: // GroupJAL
+			return fmt.Sprintf("%v\t%d", instr.Op, instr.Imm)
+
+		case Jalr: // GroupJALR
+			return fmt.Sprintf("%v\t%v,%d(%v)",
+				instr.Op, instr.Rd, instr.Imm, instr.Rs1)
+
+		case Ld, Lbu: // GroupLOAD
+			return fmt.Sprintf("%v\t%v,%d(%v)",
+				instr.op(), instr.Rd, instr.Imm, instr.Rs1)
+
+		case Lui: // GroupLUI
+			return fmt.Sprintf("%v\t%v,0x%x",
+				instr.op(), instr.Rd, uint32(instr.Imm)>>12)
+
+		case Sd, Sb: // GroupSTORE
+			return fmt.Sprintf("%v\t%v,%d(%v)",
+				instr.op(), instr.Rs2, instr.Imm, instr.Rs1)
+		}
+		fmt.Printf("Instr: Op=%v, Group=%v\n", instr.Op, group)
+	}
+
+	// XXX Short instructions need special handling.
 
 	switch group {
 	case GroupAUIPC, GroupLUI, GroupOPV, GroupOPVE:
@@ -901,7 +944,7 @@ func (instr Instr) String() string {
 		return fmt.Sprintf("%v\t%v,%d(%v)",
 			instr.op(), instr.Rd, instr.Imm, instr.Rs1)
 
-	case GroupOPIMM:
+	case GroupOPIMM, GroupOPIMM32:
 		return fmt.Sprintf("%v\t%v,%v,%d",
 			instr.op(), instr.Rd, instr.Rs1, instr.Imm)
 
