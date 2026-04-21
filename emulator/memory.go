@@ -59,6 +59,17 @@ func (mem *Memory) Load16(addr uint64) (uint16, error) {
 	return bo.Uint16(seg.Data[ofs:]), nil
 }
 
+func (mem *Memory) Load32(addr uint64) (uint32, error) {
+	seg, ofs, err := mem.Map(addr, 4)
+	if err != nil {
+		return 0, err
+	}
+	if !seg.Read {
+		return 0, fmt.Errorf("address %x not readable", addr)
+	}
+	return bo.Uint32(seg.Data[ofs:]), nil
+}
+
 func (mem *Memory) Load64(addr uint64) (uint64, error) {
 	seg, ofs, err := mem.Map(addr, 8)
 	if err != nil {

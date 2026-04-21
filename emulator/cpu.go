@@ -45,6 +45,10 @@ func (cpu *CPU) Run() error {
 		case isa.Add:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] + cpu.X[instr.Rs2]
 
+		case isa.Addw:
+			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) +
+				int32(cpu.X[instr.Rs2])))
+
 		case isa.Addi:
 			cpu.X[instr.Rd] = uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
 
@@ -76,11 +80,23 @@ func (cpu *CPU) Run() error {
 				continue
 			}
 
+		case isa.Bltu:
+			if cpu.X[instr.Rs1] < cpu.X[instr.Rs2] {
+				cpu.PC = uint64(int64(cpu.PC) + int64(instr.Imm))
+				continue
+			}
+
 		case isa.Bne:
 			if cpu.X[instr.Rs1] != cpu.X[instr.Rs2] {
 				cpu.PC = uint64(int64(cpu.PC) + int64(instr.Imm))
 				continue
 			}
+
+		case isa.Divu:
+			// But RISC-V requires:
+			// - div by zero → result = -1
+			// - rem by zero → result = dividend
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] / cpu.X[instr.Rs2]
 
 		case isa.Divw:
 			// But RISC-V requires:
@@ -132,6 +148,14 @@ func (cpu *CPU) Run() error {
 		case isa.Lui:
 			cpu.X[instr.Rd] = uint64(instr.Imm)
 
+		case isa.Lw:
+			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+			v, err := cpu.Mem.Load32(addr)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = uint64(int64(int32(v)))
+
 		case isa.Mul:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] * cpu.X[instr.Rs2]
 
@@ -154,14 +178,24 @@ func (cpu *CPU) Run() error {
 		case isa.Slli:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] << instr.Imm
 
+		case isa.Slliw:
+			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) <<
+				instr.Imm))
+
 		case isa.Srli:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> instr.Imm
+
+		case isa.Sub:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] - cpu.X[instr.Rs2]
 
 		case isa.Sw:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
 			if err := cpu.Mem.Store32(addr, cpu.X[instr.Rs2]); err != nil {
 				return err
 			}
+
+		case isa.Xori:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] ^ uint64(instr.Imm)
 
 		default:
 			return fmt.Errorf("cpu: instrs %v not implemented yet", instr)

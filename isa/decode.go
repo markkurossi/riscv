@@ -163,6 +163,14 @@ func Decode(data []byte) (Instr, int, error) {
 				instr.Rs1 = Sp
 				instr.Op = Addi
 
+			case 0b010:
+				instr.Rd = compressedRegisters[raw>>2&0b111]
+				instr.Rs1 = compressedRegisters[raw>>7&0b111]
+				instr.Imm = int32(raw&0b1000000)>>4 |
+					int32(raw&0b11100_00000000)>>7 |
+					int32(raw&0b100000)<<1
+				instr.Op = Lw
+
 			case 0b011:
 				instr.Rd = compressedRegisters[raw>>2&0b111]
 				instr.Rs1 = compressedRegisters[raw>>7&0b111]
@@ -236,6 +244,13 @@ func Decode(data []byte) (Instr, int, error) {
 			case 0b100:
 				funct2 := raw >> 10 & 0b11
 				switch funct2 {
+				case 0b00:
+					instr.Rd = compressedRegisters[raw>>7&0b111]
+					instr.Rs1 = instr.Rd
+					instr.Imm = int32(raw&0b1111100)>>2 |
+						int32(raw&0b10000_00000000)>>7
+					instr.Op = Srli
+
 				case 0b10:
 					instr.Rd = compressedRegisters[raw>>7&0b111]
 					instr.Rs1 = instr.Rd
@@ -245,10 +260,31 @@ func Decode(data []byte) (Instr, int, error) {
 						instr.Imm |= int32(-1) << 6
 					}
 					instr.Op = Andi
+
+				case 0b11:
+					f3 := (raw >> 5 & 0b11) | (raw >> 10 & 0b100)
+					switch f3 {
+					case 0b000:
+						instr.Rd = compressedRegisters[raw>>7&0b111]
+						instr.Rs1 = instr.Rd
+						instr.Rs2 = compressedRegisters[raw>>2&0b111]
+						instr.Op = Sub
+
+					case 0b101:
+						instr.Rd = compressedRegisters[raw>>7&0b111]
+						instr.Rs1 = instr.Rd
+						instr.Rs2 = compressedRegisters[raw>>2&0b111]
+						instr.Op = Addw
+
+					default:
+						return instr, 0, fmt.Errorf("raw=%04x, Q1/100/%03b",
+							raw, f3)
+					}
+
 				default:
 					return instr, 0,
-						fmt.Errorf("compressed: raw=%04x, Q1, funct3=%03b",
-							raw, funct3)
+						fmt.Errorf("compressed: raw=%04x, Q1, funct3=%03b, funct2=%02b",
+							raw, funct3, funct2)
 				}
 
 			case 0b101:
