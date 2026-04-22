@@ -318,6 +318,9 @@ type OpInfo struct {
 }
 
 var operands = map[Op]OpInfo{
+	Invalid: OpInfo{
+		Name: "invalid",
+	},
 	Add: OpInfo{
 		Name: "add",
 	},
@@ -847,7 +850,7 @@ var registers = [32]string{
 	"a2",   // x12
 	"a3",   // x13
 	"a4",   // x14
-	"a5",   // x16
+	"a5",   // x15
 	"a6",   // x16
 	"a7",   // x17
 	"s2",   // x18
