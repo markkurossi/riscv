@@ -8,6 +8,7 @@
 package emulator
 
 import (
+	"crypto/rand"
 	"debug/elf"
 	"encoding/hex"
 	"fmt"
@@ -101,22 +102,45 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 		envpPtrs = append(envpPtrs, emu.CPU.X[isa.Sp])
 	}
 
-	// 2. Calculate the exact number of 8-byte words we are about to push:
-	// argc (1) + argv ptrs (len) + NULL (1) + envp ptrs (len) + NULL (1) + Auxv NULL (2)
-	wordsToPush := 1 + len(argvPtrs) + 1 + len(envpPtrs) + 1 + 2
+	var random [16]byte
+	_, err := rand.Read(random[:])
+	if err != nil {
+		return err
+	}
+	err = emu.PushData(random[:])
+	if err != nil {
+		return err
+	}
+	atRandom := emu.CPU.X[isa.Sp]
 
-	// Align sp to 16-bytes. XXX must check if elements below are not
-	// multiple of 16 bytes.
+	// Calculate the exact number of 8-byte words we are about to
+	// push. We ignore auxiliary vector as it is always multiple of 16
+	// bytes.
+	//
+	//	argc (1) + argv ptrs (len) + NULL (1) + envp ptrs (len) + NULL (1)
+	wordsToPush := 1 + len(argvPtrs) + 1 + len(envpPtrs) + 1
+
+	// Align sp to 16-bytes.
 	emu.CPU.X[isa.Sp] &^= 0b1111
 
-	// 4. If pushing the words throws us off 16-byte alignment, push a pad word
+	// If pushing the words throws us off 16-byte alignment, push a
+	// pad word.
 	if (wordsToPush*8)%16 != 0 {
-		emu.Push(0) // Padding to maintain 16-byte final alignment
+		emu.Push(0)
 	}
 
-	// 5. Push Auxiliary Vector terminator (AT_NULL = 0, val = 0)
+	// Push Auxiliary Vector terminator (AT_NULL = 0, val = 0)
+
+	emu.Push(AtNull)
 	emu.Push(0)
-	emu.Push(0)
+
+	emu.Push(atRandom)
+	emu.Push(AtRandom)
+
+	emu.Push(4096)
+	emu.Push(AtPagesz)
+
+	// Push environment pointers.
 
 	if err := emu.Push(0); err != nil {
 		return err
@@ -126,6 +150,8 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 			return err
 		}
 	}
+
+	// Push argv and argc.
 
 	if err := emu.Push(0); err != nil {
 		return err
@@ -144,6 +170,9 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 		return err
 	}
 	fmt.Printf("Stack:\n%s", hex.Dump(seg.Data[ofs:]))
+	if false {
+		return fmt.Errorf("debug")
+	}
 
 	return emu.CPU.Run()
 }
@@ -164,4 +193,9 @@ func (emu *Emulator) PushCString(val string) error {
 
 	emu.CPU.X[isa.Sp] -= uint64(len(bytes))
 	return emu.Mem.StoreData(emu.CPU.X[isa.Sp], bytes)
+}
+
+func (emu *Emulator) PushData(data []byte) error {
+	emu.CPU.X[isa.Sp] -= uint64(len(data))
+	return emu.Mem.StoreData(emu.CPU.X[isa.Sp], data)
 }

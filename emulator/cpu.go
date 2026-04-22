@@ -83,6 +83,12 @@ func (cpu *CPU) Run() error {
 				continue
 			}
 
+		case isa.Blt:
+			if int64(cpu.X[instr.Rs1]) < int64(cpu.X[instr.Rs2]) {
+				cpu.PC = uint64(int64(cpu.PC) + int64(instr.Imm))
+				continue
+			}
+
 		case isa.Bltu:
 			if cpu.X[instr.Rs1] < cpu.X[instr.Rs2] {
 				cpu.PC = uint64(int64(cpu.PC) + int64(instr.Imm))
@@ -96,17 +102,21 @@ func (cpu *CPU) Run() error {
 			}
 
 		case isa.Divu:
-			// But RISC-V requires:
-			// - div by zero → result = -1
-			// - rem by zero → result = dividend
-			cpu.X[instr.Rd] = cpu.X[instr.Rs1] / cpu.X[instr.Rs2]
+			if cpu.X[instr.Rs2] == 0 {
+				// Division by zero → result = -1
+				cpu.X[instr.Rd] = ^uint64(0)
+			} else {
+				cpu.X[instr.Rd] = cpu.X[instr.Rs1] / cpu.X[instr.Rs2]
+			}
 
 		case isa.Divw:
-			// But RISC-V requires:
-			// - div by zero → result = -1
-			// - rem by zero → result = dividend
-			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) /
-				int32(cpu.X[instr.Rs2])))
+			if cpu.X[instr.Rs2] == 0 {
+				// Division by zero → result = -1
+				cpu.X[instr.Rd] = ^uint64(0)
+			} else {
+				cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) /
+					int32(cpu.X[instr.Rs2])))
+			}
 
 		case isa.Ecall:
 			if err = cpu.ecall(); err != nil {
@@ -164,12 +174,23 @@ func (cpu *CPU) Run() error {
 		case isa.Mul:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] * cpu.X[instr.Rs2]
 
+		case isa.Or:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] | cpu.X[instr.Rs2]
+
 		case isa.Remw:
-			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) %
-				int32(cpu.X[instr.Rs2])))
+			if cpu.X[instr.Rs2] == 0 {
+				cpu.X[instr.Rd] = cpu.X[instr.Rs1]
+			} else {
+				cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) %
+					int32(cpu.X[instr.Rs2])))
+			}
 
 		case isa.Remu:
-			cpu.X[instr.Rd] = cpu.X[instr.Rs1] % cpu.X[instr.Rs2]
+			if cpu.X[instr.Rs2] == 0 {
+				cpu.X[instr.Rd] = cpu.X[instr.Rs1]
+			} else {
+				cpu.X[instr.Rd] = cpu.X[instr.Rs1] % cpu.X[instr.Rs2]
+			}
 
 		case isa.Sb:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
@@ -183,6 +204,9 @@ func (cpu *CPU) Run() error {
 				return err
 			}
 
+		case isa.Sll:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] << cpu.X[instr.Rs2]
+
 		case isa.Slli:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] << instr.Imm
 
@@ -190,17 +214,47 @@ func (cpu *CPU) Run() error {
 			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) <<
 				instr.Imm))
 
+		case isa.Sltiu:
+			if cpu.X[instr.Rs1] < uint64(instr.Imm) {
+				cpu.X[instr.Rd] = 1
+			} else {
+				cpu.X[instr.Rd] = 0
+			}
+
+		case isa.Sltu:
+			if cpu.X[instr.Rs1] < cpu.X[instr.Rs2] {
+				cpu.X[instr.Rd] = 1
+			} else {
+				cpu.X[instr.Rd] = 0
+			}
+
+		case isa.Srl:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> cpu.X[instr.Rs2]
+
 		case isa.Srli:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> instr.Imm
 
 		case isa.Sub:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] - cpu.X[instr.Rs2]
 
+		case isa.Subw:
+			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1] -
+				cpu.X[instr.Rs2])))
+
+		case isa.Sh:
+			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+			if err := cpu.Mem.Store16(addr, cpu.X[instr.Rs2]); err != nil {
+				return err
+			}
+
 		case isa.Sw:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
 			if err := cpu.Mem.Store32(addr, cpu.X[instr.Rs2]); err != nil {
 				return err
 			}
+
+		case isa.Xor:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] ^ cpu.X[instr.Rs2]
 
 		case isa.Xori:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] ^ uint64(instr.Imm)
@@ -271,6 +325,14 @@ func (cpu *CPU) ecall() error {
 			cpu.X[isa.A0] = len
 		}
 
+	case 78: // readlinkat
+		const AtFdcwd int64 = -100
+		arg0 := int64(cpu.X[isa.A0])
+		if arg0 == AtFdcwd {
+			fmt.Printf("AT_FDCWD\n")
+		}
+		cpu.X[isa.A0] = ^uint64(0)
+
 	case 93: // exit
 		os.Exit(int(cpu.X[isa.A0]))
 
@@ -312,6 +374,12 @@ func (cpu *CPU) ecall() error {
 			cpu.Mem.HeapEnd = brk
 			cpu.X[isa.A0] = brk
 		}
+
+	case 261: // prlimit64
+		cpu.X[isa.A0] = 0
+
+	case 278: // getrandom
+		cpu.X[isa.A0] = cpu.X[isa.A1]
 
 	default:
 		return fmt.Errorf("unsupported syscall %v", cpu.X[isa.A7])

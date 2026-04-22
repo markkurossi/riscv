@@ -96,6 +96,19 @@ func (mem *Memory) Store8(addr, val uint64) error {
 	return nil
 }
 
+func (mem *Memory) Store16(addr, val uint64) error {
+	seg, ofs, err := mem.Map(addr, 2)
+	if err != nil {
+		return err
+	}
+	if !seg.Write {
+		return fmt.Errorf("address %x not writable", addr)
+	}
+	bo.PutUint16(seg.Data[ofs:], uint16(val))
+
+	return nil
+}
+
 func (mem *Memory) Store32(addr, val uint64) error {
 	seg, ofs, err := mem.Map(addr, 4)
 	if err != nil {
