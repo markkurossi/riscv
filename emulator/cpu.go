@@ -56,6 +56,9 @@ func (cpu *CPU) Run() error {
 			cpu.X[instr.Rd] = uint64(int64(int32(int64(cpu.X[instr.Rs1]) +
 				int64(instr.Imm))))
 
+		case isa.And:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] & cpu.X[instr.Rs2]
+
 		case isa.Andi:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] & uint64(instr.Imm)
 
@@ -110,6 +113,8 @@ func (cpu *CPU) Run() error {
 				return err
 			}
 
+		case isa.Fence:
+
 		case isa.Jal:
 			cpu.X[instr.Rd] = cpu.PC + uint64(size)
 			cpu.PC = uint64(int64(cpu.PC) + int64(instr.Imm))
@@ -162,6 +167,9 @@ func (cpu *CPU) Run() error {
 		case isa.Remw:
 			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) %
 				int32(cpu.X[instr.Rs2])))
+
+		case isa.Remu:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] % cpu.X[instr.Rs2]
 
 		case isa.Sb:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
@@ -265,6 +273,45 @@ func (cpu *CPU) ecall() error {
 
 	case 93: // exit
 		os.Exit(int(cpu.X[isa.A0]))
+
+	case 96: // set_tid_address
+		cpu.X[isa.A0] = 0 // caller's tread ID
+
+	case 99: // set_robust_list
+		cpu.X[isa.A0] = 0
+
+	case 214: // brk
+		if cpu.X[isa.A0] == 0 {
+			cpu.X[isa.A0] = cpu.Mem.HeapEnd
+			fmt.Printf("       brk(0) => %x\n", cpu.Mem.HeapEnd)
+		} else if cpu.X[isa.A0] > cpu.Mem.HeapEnd {
+			// Compute brk.
+			brk := (cpu.X[isa.A0] + 4095) & ^uint64(0xfff)
+
+			// Get current segment.
+			seg, _, err := cpu.Mem.Map(cpu.Mem.HeapStart, 8)
+			if err != nil {
+				// Create memory.
+				seg = &Segment{
+					Start: cpu.Mem.HeapStart,
+					End:   brk,
+					Data:  make([]byte, brk-cpu.Mem.HeapStart),
+					Read:  true,
+					Write: true,
+				}
+				cpu.Mem.Add(seg)
+			} else {
+				// Extend current segment.
+				n := make([]byte, brk-cpu.Mem.HeapStart)
+				copy(n, seg.Data)
+				seg.Data = n
+				seg.End = brk
+			}
+			fmt.Printf("       brk(%x) => %x\n", cpu.X[isa.A0], brk)
+
+			cpu.Mem.HeapEnd = brk
+			cpu.X[isa.A0] = brk
+		}
 
 	default:
 		return fmt.Errorf("unsupported syscall %v", cpu.X[isa.A7])

@@ -11,7 +11,9 @@ import (
 )
 
 type Memory struct {
-	Segments []*Segment
+	Segments  []*Segment
+	HeapStart uint64
+	HeapEnd   uint64
 }
 
 type Segment struct {

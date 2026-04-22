@@ -62,6 +62,13 @@ func (emu *Emulator) LoadELF(file string) error {
 			}
 
 			emu.Mem.Add(seg)
+
+			if seg.Write && seg.End > emu.Mem.HeapEnd {
+				fmt.Printf("seg.End    : 0x%x\n", seg.End)
+				emu.Mem.HeapEnd = (seg.End + 4095) & ^uint64(0xfff)
+				emu.Mem.HeapStart = emu.Mem.HeapEnd
+				fmt.Printf(" => HeapEnd: 0x%x\n", emu.Mem.HeapEnd)
+			}
 		}
 	}
 
