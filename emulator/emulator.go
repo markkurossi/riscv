@@ -24,6 +24,9 @@ type Emulator struct {
 func New() *Emulator {
 	mem := new(Memory)
 
+	mem.MmapStart = 0x4000000000
+	mem.MmapEnd = mem.MmapStart
+
 	stack := NewStack(0x7ffff000, 1<<20)
 	mem.Add(stack)
 

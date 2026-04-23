@@ -14,6 +14,8 @@ type Memory struct {
 	Segments  []*Segment
 	HeapStart uint64
 	HeapEnd   uint64
+	MmapStart uint64
+	MmapEnd   uint64
 }
 
 type Segment struct {

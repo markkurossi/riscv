@@ -184,6 +184,14 @@ func (cpu *CPU) Run() error {
 			}
 			cpu.X[instr.Rd] = uint64(int64(int32(v)))
 
+		case isa.Lwu:
+			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+			v, err := cpu.Mem.Load32(addr)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = uint64(v)
+
 		case isa.Mul:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] * cpu.X[instr.Rs2]
 
@@ -290,6 +298,18 @@ func (cpu *CPU) Run() error {
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] ^ uint64(instr.Imm)
 
 			// Atomic (A extension).
+
+		case isa.AmoswapD:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.Mem.Load64(addr)
+			if err != nil {
+				return err
+			}
+			err = cpu.Mem.Store64(addr, cpu.X[instr.Rs2])
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = v
 
 		case isa.AmoswapW:
 			addr := cpu.X[instr.Rs1]
@@ -488,7 +508,7 @@ func (cpu *CPU) ecall() error {
 		const AtFdcwd int64 = -100
 		arg0 := int64(cpu.X[isa.A0])
 		if arg0 == AtFdcwd {
-			fmt.Printf("AT_FDCWD\n")
+			fmt.Printf("     - AT_FDCWD\n")
 		}
 		cpu.X[isa.A0] = ^uint64(0)
 
@@ -498,11 +518,70 @@ func (cpu *CPU) ecall() error {
 	case 93: // exit
 		os.Exit(int(cpu.X[isa.A0]))
 
+	case 94: // exit_group
+		os.Exit(int(cpu.X[isa.A0]))
+
 	case 96: // set_tid_address
-		cpu.X[isa.A0] = 0 // caller's tread ID
+		cpu.X[isa.A0] = 1000 // caller's tread ID
 
 	case 98: // futex
-		cpu.X[isa.A0] = ^uint64(0)
+		addr := cpu.X[isa.A0]
+		op := cpu.X[isa.A1]
+		val := cpu.X[isa.A2]
+
+		var opName string
+
+		switch op & 127 {
+		case 0:
+			opName = "FUTEX_WAIT"
+		case 1:
+			opName = "FUTEX_WAKE"
+		case 2:
+			opName = "FUTEX_FD"
+		case 3:
+			opName = "FUTEX_REQUEUE"
+		case 4:
+			opName = "FUTEX_CMP_REQUEUE"
+		case 5:
+			opName = "FUTEX_WAKE_OP"
+		case 6:
+			opName = "FUTEX_LOCK_PI"
+		case 7:
+			opName = "FUTEX_UNLOCK_PI"
+		case 8:
+			opName = "FUTEX_TRYLOCK_PI"
+		case 9:
+			opName = "FUTEX_WAIT_BITSET"
+		case 10:
+			opName = "FUTEX_WAKE_BITSET"
+		case 11:
+			opName = "FUTEX_WAIT_REQUEUE_PI"
+		case 12:
+			opName = "FUTEX_CMP_REQUEUE_PI"
+		case 13:
+			opName = "FUTEX_LOCK_PI2"
+		}
+
+		fmt.Printf("    => futex(%x,%v[%v],%v)\n", addr, op, opName, val)
+		if op&127 == 0 {
+			v, err := cpu.Mem.Load32(addr)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("    => val=%v, wait=%v\n", v, val)
+
+			if true {
+				return fmt.Errorf("futex debug")
+			}
+
+			if uint64(v) >= val {
+				cpu.X[isa.A0] = 0
+			} else {
+				cpu.EcallError(ErrnoEAGAIN)
+			}
+		} else {
+			cpu.X[isa.A0] = ^uint64(0)
+		}
 
 	case 99: // set_robust_list
 		cpu.X[isa.A0] = 0
@@ -510,7 +589,6 @@ func (cpu *CPU) ecall() error {
 	case 214: // brk
 		if cpu.X[isa.A0] == 0 {
 			cpu.X[isa.A0] = cpu.Mem.HeapEnd
-			fmt.Printf("       brk(0) => %x\n", cpu.Mem.HeapEnd)
 		} else if cpu.X[isa.A0] > cpu.Mem.HeapEnd {
 			// Compute brk.
 			brk := (cpu.X[isa.A0] + 4095) & ^uint64(0xfff)
@@ -534,10 +612,51 @@ func (cpu *CPU) ecall() error {
 				seg.Data = n
 				seg.End = brk
 			}
-			fmt.Printf("       brk(%x) => %x\n", cpu.X[isa.A0], brk)
 
 			cpu.Mem.HeapEnd = brk
 			cpu.X[isa.A0] = brk
+		}
+
+	case 215: // munmap
+		// XXX check if the region was mmap'ed
+		cpu.X[isa.A0] = 0
+
+	case 222: // mmap
+		length := cpu.X[isa.A1]
+		prot := cpu.X[isa.A2]
+		flags := cpu.X[isa.A3]
+
+		_ = flags
+
+		if cpu.X[isa.A0] == 0 {
+			// Choose address from the mmap region
+			addr := cpu.Mem.MmapEnd
+
+			// Align size to page size.
+			length = (length + 4095) &^ 4095
+
+			// Create the segment
+			seg := &Segment{
+				Start: addr,
+				End:   addr + length,
+				Data:  make([]byte, length),
+				Read:  (prot & 1) != 0, // PROT_READ
+				Write: (prot & 2) != 0, // PROT_WRITE
+			}
+			cpu.Mem.Add(seg)
+
+			// Update pointer for next call.
+			cpu.Mem.MmapEnd += length
+
+			fmt.Printf("    => %x:%x\n", addr, addr+length)
+
+			// Return the allocated address in A0
+			cpu.X[isa.A0] = addr
+		} else {
+			if true {
+				return fmt.Errorf("mmap: unsupported flow")
+			}
+			return cpu.EcallError(ErrnoEINVAL)
 		}
 
 	case 226: // mprotec
@@ -550,7 +669,12 @@ func (cpu *CPU) ecall() error {
 		cpu.X[isa.A0] = cpu.X[isa.A1]
 
 	default:
-		return fmt.Errorf("unsupported syscall %v", cpu.X[isa.A7])
+		if false {
+			return fmt.Errorf("unsupported syscall %v", cpu.X[isa.A7])
+		} else {
+			fmt.Printf("    => skipping syscall %v\n", cpu.X[isa.A7])
+		}
+		cpu.X[isa.A0] = 0
 	}
 
 	return nil
