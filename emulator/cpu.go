@@ -9,6 +9,7 @@ package emulator
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 
 	"github.com/markkurossi/riscv/isa"
 )
@@ -23,6 +24,7 @@ type Syscall func(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (
 type CPU struct {
 	// Registers x0-x31.
 	X  [32]uint64
+	F  [32]float64
 	PC uint64
 
 	// Instruction count
@@ -137,7 +139,11 @@ func (cpu *CPU) Run() error {
 			cpu.X[isa.A0] = v
 
 		case isa.Fsd:
-			// XXX floating point
+			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+			v := math.Float64bits(cpu.F[instr.Rs2])
+			if err := cpu.Mem.Store64(addr, v); err != nil {
+				return err
+			}
 
 		case isa.Fence:
 
