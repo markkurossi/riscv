@@ -9,7 +9,6 @@ package emulator
 import (
 	"encoding/binary"
 	"fmt"
-	"os"
 
 	"github.com/markkurossi/riscv/isa"
 )
@@ -18,12 +17,19 @@ var (
 	bo = binary.LittleEndian
 )
 
+type Syscall func(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (
+	uint64, error)
+
 type CPU struct {
 	// Registers x0-x31.
 	X  [32]uint64
 	PC uint64
 
-	Mem *Memory
+	// Instruction count
+	IC uint64
+
+	Mem     *Memory
+	Syscall Syscall
 }
 
 func (cpu *CPU) Run() error {
@@ -38,6 +44,7 @@ func (cpu *CPU) Run() error {
 		if err != nil {
 			return err
 		}
+		cpu.IC++
 
 		if false {
 			fmt.Printf("%8x:\t%08x\t%v\n", cpu.PC, instr.Raw, instr)
@@ -121,9 +128,13 @@ func (cpu *CPU) Run() error {
 			}
 
 		case isa.Ecall:
-			if err = cpu.ecall(); err != nil {
+			v, err := cpu.Syscall(cpu, cpu.X[isa.A7],
+				cpu.X[isa.A0], cpu.X[isa.A1], cpu.X[isa.A2],
+				cpu.X[isa.A3], cpu.X[isa.A4], cpu.X[isa.A5])
+			if err != nil {
 				return err
 			}
+			cpu.X[isa.A0] = v
 
 		case isa.Fsd:
 			// XXX floating point
@@ -388,294 +399,6 @@ func (cpu *CPU) Run() error {
 	}
 }
 
-func (cpu *CPU) EcallError(errno Errno) error {
-	cpu.X[isa.A0] = uint64(int64(-errno))
-	return nil
-}
-
-func (cpu *CPU) ecall() error {
-	syscall := cpu.X[isa.A7]
-	info, ok := SyscallInfo[syscall]
-	if !ok {
-		fmt.Printf("ecall: %v(%v,%v,%v,%v,%v,%v)\n",
-			syscall,
-			cpu.X[isa.A0], cpu.X[isa.A1], cpu.X[isa.A2],
-			cpu.X[isa.A3], cpu.X[isa.A4], cpu.X[isa.A5])
-	} else if info.Argc == 0 {
-		fmt.Printf("ecall: %v(%v,%v,%v,%v,%v,%v)\n",
-			info.Name,
-			cpu.X[isa.A0], cpu.X[isa.A1], cpu.X[isa.A2],
-			cpu.X[isa.A3], cpu.X[isa.A4], cpu.X[isa.A5])
-	} else if len(info.Format) > 0 {
-		fmt.Printf("ecall: %s(", info.Name)
-		for idx, ch := range info.Format {
-			if idx > 0 {
-				fmt.Print(",")
-			}
-			arg := cpu.X[int(isa.A0)+idx]
-
-			switch ch {
-			case 'i':
-				fmt.Printf("%v", int64(arg))
-			case 'p':
-				fmt.Printf("%x", arg)
-			default:
-				fmt.Printf("%v", arg)
-			}
-		}
-		fmt.Println(")")
-	} else {
-		fmt.Printf("ecall: %s(", info.Name)
-		for i := 0; i < info.Argc; i++ {
-			if i > 0 {
-				fmt.Print(",")
-			}
-			fmt.Printf("%v", cpu.X[int(isa.A0)+i])
-		}
-		fmt.Println(")")
-	}
-
-	switch cpu.X[isa.A7] {
-	case 64: // write
-		fd := cpu.X[isa.A0]
-		addr := cpu.X[isa.A1]
-		len := cpu.X[isa.A2]
-
-		_ = fd
-
-		var i uint64
-
-		for i = 0; i < len; i++ {
-			b, err := cpu.Mem.Load8(addr + i)
-			if err != nil {
-				return err
-			}
-			os.Stdout.Write([]byte{b})
-			if err != nil {
-				break
-			}
-		}
-		if i < len {
-			cpu.X[isa.A0] = ^uint64(0)
-		} else {
-			cpu.X[isa.A0] = len
-		}
-
-	case 66: // writev
-		fd := int(cpu.X[isa.A0])
-		iov := cpu.X[isa.A1]
-		iovcnt := int(cpu.X[isa.A2])
-
-		var f *os.File
-		switch fd {
-		case 0:
-			f = os.Stdin
-		case 1:
-			f = os.Stdout
-		case 2:
-			f = os.Stderr
-		default:
-			return cpu.EcallError(ErrnoEBADF)
-		}
-
-		var wrote uint64
-
-		for i := 0; i < iovcnt; i++ {
-			base, err := cpu.Mem.Load64(iov)
-			if err != nil {
-				return err
-			}
-			l, err := cpu.Mem.Load64(iov + 8)
-			if err != nil {
-				return err
-			}
-			iov += 16
-
-			seg, ofs, err := cpu.Mem.Map(base, int(l))
-			if err != nil {
-				return err
-			}
-
-			n, err := f.Write(seg.Data[ofs : ofs+l])
-			if err != nil {
-				return err
-			}
-			wrote += uint64(n)
-		}
-		cpu.X[isa.A0] = wrote
-
-	case 78: // readlinkat
-		const AtFdcwd int64 = -100
-		arg0 := int64(cpu.X[isa.A0])
-		if arg0 == AtFdcwd {
-			fmt.Printf("     - AT_FDCWD\n")
-		}
-		cpu.X[isa.A0] = ^uint64(0)
-
-	case 80: // fstat
-		cpu.X[isa.A0] = ^uint64(0)
-
-	case 93: // exit
-		os.Exit(int(cpu.X[isa.A0]))
-
-	case 94: // exit_group
-		os.Exit(int(cpu.X[isa.A0]))
-
-	case 96: // set_tid_address
-		cpu.X[isa.A0] = 1000 // caller's tread ID
-
-	case 98: // futex
-		addr := cpu.X[isa.A0]
-		op := cpu.X[isa.A1]
-		val := cpu.X[isa.A2]
-
-		var opName string
-
-		switch op & 127 {
-		case 0:
-			opName = "FUTEX_WAIT"
-		case 1:
-			opName = "FUTEX_WAKE"
-		case 2:
-			opName = "FUTEX_FD"
-		case 3:
-			opName = "FUTEX_REQUEUE"
-		case 4:
-			opName = "FUTEX_CMP_REQUEUE"
-		case 5:
-			opName = "FUTEX_WAKE_OP"
-		case 6:
-			opName = "FUTEX_LOCK_PI"
-		case 7:
-			opName = "FUTEX_UNLOCK_PI"
-		case 8:
-			opName = "FUTEX_TRYLOCK_PI"
-		case 9:
-			opName = "FUTEX_WAIT_BITSET"
-		case 10:
-			opName = "FUTEX_WAKE_BITSET"
-		case 11:
-			opName = "FUTEX_WAIT_REQUEUE_PI"
-		case 12:
-			opName = "FUTEX_CMP_REQUEUE_PI"
-		case 13:
-			opName = "FUTEX_LOCK_PI2"
-		}
-
-		fmt.Printf("    => futex(%x,%v[%v],%v)\n", addr, op, opName, val)
-		if op&127 == 0 {
-			v, err := cpu.Mem.Load32(addr)
-			if err != nil {
-				return err
-			}
-			fmt.Printf("    => val=%v, wait=%v\n", v, val)
-
-			if true {
-				return fmt.Errorf("futex debug")
-			}
-
-			if uint64(v) >= val {
-				cpu.X[isa.A0] = 0
-			} else {
-				cpu.EcallError(ErrnoEAGAIN)
-			}
-		} else {
-			cpu.X[isa.A0] = ^uint64(0)
-		}
-
-	case 99: // set_robust_list
-		cpu.X[isa.A0] = 0
-
-	case 214: // brk
-		if cpu.X[isa.A0] == 0 {
-			cpu.X[isa.A0] = cpu.Mem.HeapEnd
-		} else if cpu.X[isa.A0] > cpu.Mem.HeapEnd {
-			// Compute brk.
-			brk := (cpu.X[isa.A0] + 4095) & ^uint64(0xfff)
-
-			// Get current segment.
-			seg, _, err := cpu.Mem.Map(cpu.Mem.HeapStart, 8)
-			if err != nil {
-				// Create memory.
-				seg = &Segment{
-					Start: cpu.Mem.HeapStart,
-					End:   brk,
-					Data:  make([]byte, brk-cpu.Mem.HeapStart),
-					Read:  true,
-					Write: true,
-				}
-				cpu.Mem.Add(seg)
-			} else {
-				// Extend current segment.
-				n := make([]byte, brk-cpu.Mem.HeapStart)
-				copy(n, seg.Data)
-				seg.Data = n
-				seg.End = brk
-			}
-
-			cpu.Mem.HeapEnd = brk
-			cpu.X[isa.A0] = brk
-		}
-
-	case 215: // munmap
-		// XXX check if the region was mmap'ed
-		cpu.X[isa.A0] = 0
-
-	case 222: // mmap
-		length := cpu.X[isa.A1]
-		prot := cpu.X[isa.A2]
-		flags := cpu.X[isa.A3]
-
-		_ = flags
-
-		if cpu.X[isa.A0] == 0 {
-			// Choose address from the mmap region
-			addr := cpu.Mem.MmapEnd
-
-			// Align size to page size.
-			length = (length + 4095) &^ 4095
-
-			// Create the segment
-			seg := &Segment{
-				Start: addr,
-				End:   addr + length,
-				Data:  make([]byte, length),
-				Read:  (prot & 1) != 0, // PROT_READ
-				Write: (prot & 2) != 0, // PROT_WRITE
-			}
-			cpu.Mem.Add(seg)
-
-			// Update pointer for next call.
-			cpu.Mem.MmapEnd += length
-
-			fmt.Printf("    => %x:%x\n", addr, addr+length)
-
-			// Return the allocated address in A0
-			cpu.X[isa.A0] = addr
-		} else {
-			if true {
-				return fmt.Errorf("mmap: unsupported flow")
-			}
-			return cpu.EcallError(ErrnoEINVAL)
-		}
-
-	case 226: // mprotec
-		cpu.X[isa.A0] = 0
-
-	case 261: // prlimit64
-		cpu.X[isa.A0] = 0
-
-	case 278: // getrandom
-		cpu.X[isa.A0] = cpu.X[isa.A1]
-
-	default:
-		if false {
-			return fmt.Errorf("unsupported syscall %v", cpu.X[isa.A7])
-		} else {
-			fmt.Printf("    => skipping syscall %v\n", cpu.X[isa.A7])
-		}
-		cpu.X[isa.A0] = 0
-	}
-
-	return nil
+func Error(errno Errno) uint64 {
+	return uint64(int64(-errno))
 }

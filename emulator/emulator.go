@@ -31,7 +31,8 @@ func New() *Emulator {
 	mem.Add(stack)
 
 	cpu := &CPU{
-		Mem: mem,
+		Mem:     mem,
+		Syscall: LinuxSyscall,
 	}
 	cpu.X[isa.Sp] = stack.End
 
