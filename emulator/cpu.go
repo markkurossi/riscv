@@ -172,7 +172,7 @@ func (cpu *CPU) Run() error {
 			if err != nil {
 				return err
 			}
-			cpu.X[instr.Rd] = uint64(v)
+			cpu.X[instr.Rd] = uint64(int64(int8(v)))
 
 		case isa.Ld:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
@@ -246,7 +246,7 @@ func (cpu *CPU) Run() error {
 			}
 
 		case isa.Sll:
-			cpu.X[instr.Rd] = cpu.X[instr.Rs1] << cpu.X[instr.Rs2]
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] << (cpu.X[instr.Rs2] & 0b111111)
 
 		case isa.Sllw:
 			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) <<
@@ -281,7 +281,7 @@ func (cpu *CPU) Run() error {
 				instr.Imm))
 
 		case isa.Srl:
-			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> cpu.X[instr.Rs2]
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> (cpu.X[instr.Rs2] & 0b111111)
 
 		case isa.Srli:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> instr.Imm
@@ -347,7 +347,7 @@ func (cpu *CPU) Run() error {
 				return err
 			}
 			t := v + uint64(cpu.X[instr.Rs2])
-			err = cpu.Mem.Store32(addr, t)
+			err = cpu.Mem.Store64(addr, t)
 			if err != nil {
 				return err
 			}
