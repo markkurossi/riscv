@@ -546,16 +546,12 @@ func Decode(data []byte) (Instr, int, error) {
 		case 4:
 			instr.Op = Xori
 		case 5:
-			switch funct7 {
-			case 0:
+			if funct7&0b100000 == 0 {
 				instr.Op = Srli
-			case 32:
+			} else {
 				instr.Op = Srai
-				instr.Imm &= 0b111111
-			default:
-				return instr, 0, fmt.Errorf("GroupOPIMM: Funct3=%v, raw=%08x",
-					funct3, raw)
 			}
+			instr.Imm &= 0b111111
 		case 6:
 			instr.Op = Ori
 		case 7:
@@ -791,6 +787,72 @@ func Decode(data []byte) (Instr, int, error) {
 	case GroupMISCMEM:
 		// XXX
 		instr.Op = Fence
+
+	case GroupAMO:
+		funct5 := raw >> 27 & 0b11111
+		// aq := raw >> 26 & 0b1
+		// rl := raw >> 25 & 0b1
+		// funct3 is width: .W/.D
+		switch funct5 {
+		case 0b00000:
+			switch funct3 {
+			case 2:
+				instr.Op = AmoswapW
+			case 3:
+				instr.Op = AmoswapD
+			default:
+				return instr, 0, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
+					funct7, funct3, raw)
+			}
+
+		case 0b00001:
+			switch funct3 {
+			case 2:
+				instr.Op = AmoaddW
+			case 3:
+				instr.Op = AmoaddD
+			default:
+				return instr, 0, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
+					funct7, funct3, raw)
+			}
+
+		case 0b00010:
+			switch funct3 {
+			case 2:
+				instr.Op = LrW
+			case 3:
+				instr.Op = LrD
+			default:
+				return instr, 0, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
+					funct7, funct3, raw)
+			}
+
+		case 0b00011:
+			switch funct3 {
+			case 2:
+				instr.Op = ScW
+			case 3:
+				instr.Op = ScD
+			default:
+				return instr, 0, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
+					funct7, funct3, raw)
+			}
+
+		default:
+			return instr, 0, fmt.Errorf("AMO/%05b: raw=%08x", funct5, raw)
+		}
+
+	case GroupSTOREFP:
+		instr.Imm = int32(raw&0b1111_10000000)>>7 |
+			int32(raw&0b11111110_00000000_00000000_00000000)>>20
+		switch funct3 {
+		case 0b010:
+			instr.Op = Fsw
+		case 0b011:
+			instr.Op = Fsd
+		default:
+			return instr, 0, fmt.Errorf("STORE-FP: funct3=%03b", funct3)
+		}
 
 	default:
 		if group>>2 == 0b111 {

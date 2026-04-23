@@ -18,9 +18,9 @@ const (
 	AtFlags
 	AtEntry
 	AtNotelf
-	AtUid
+	AtUID
 	AtEuid
-	AtGid
+	AtGID
 	AtEgid
 	AtPlatform
 	AtHwcap

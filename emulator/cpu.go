@@ -39,7 +39,9 @@ func (cpu *CPU) Run() error {
 			return err
 		}
 
-		fmt.Printf("%8x:\t%08x\t%v\n", cpu.PC, instr.Raw, instr)
+		if false {
+			fmt.Printf("%8x:\t%08x\t%v\n", cpu.PC, instr.Raw, instr)
+		}
 
 		switch instr.Op {
 		case isa.Add:
@@ -123,6 +125,9 @@ func (cpu *CPU) Run() error {
 				return err
 			}
 
+		case isa.Fsd:
+			// XXX floating point
+
 		case isa.Fence:
 
 		case isa.Jal:
@@ -137,6 +142,14 @@ func (cpu *CPU) Run() error {
 			continue
 
 		case isa.Lbu:
+			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+			v, err := cpu.Mem.Load8(addr)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = uint64(v)
+
+		case isa.Lb:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
 			v, err := cpu.Mem.Load8(addr)
 			if err != nil {
@@ -177,6 +190,9 @@ func (cpu *CPU) Run() error {
 		case isa.Or:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] | cpu.X[instr.Rs2]
 
+		case isa.Ori:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] | uint64(int64(instr.Imm))
+
 		case isa.Remw:
 			if cpu.X[instr.Rs2] == 0 {
 				cpu.X[instr.Rd] = cpu.X[instr.Rs1]
@@ -207,6 +223,10 @@ func (cpu *CPU) Run() error {
 		case isa.Sll:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] << cpu.X[instr.Rs2]
 
+		case isa.Sllw:
+			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) <<
+				(cpu.X[instr.Rs2] & 0b11111)))
+
 		case isa.Slli:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] << instr.Imm
 
@@ -228,11 +248,21 @@ func (cpu *CPU) Run() error {
 				cpu.X[instr.Rd] = 0
 			}
 
+		case isa.Srai:
+			cpu.X[instr.Rd] = uint64(int64(cpu.X[instr.Rs1]) >> instr.Imm)
+
+		case isa.Sraiw:
+			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) >>
+				instr.Imm))
+
 		case isa.Srl:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> cpu.X[instr.Rs2]
 
 		case isa.Srli:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> instr.Imm
+
+		case isa.Srliw:
+			cpu.X[instr.Rd] = uint64(uint32(cpu.X[instr.Rs1]) >> instr.Imm)
 
 		case isa.Sub:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] - cpu.X[instr.Rs2]
@@ -259,6 +289,78 @@ func (cpu *CPU) Run() error {
 		case isa.Xori:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] ^ uint64(instr.Imm)
 
+			// Atomic (A extension).
+
+		case isa.AmoswapW:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.Mem.Load32(addr)
+			if err != nil {
+				return err
+			}
+			err = cpu.Mem.Store32(addr, cpu.X[instr.Rs2])
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = uint64(int64(int32(v)))
+
+		case isa.AmoaddD:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.Mem.Load64(addr)
+			if err != nil {
+				return err
+			}
+			t := v + uint64(cpu.X[instr.Rs2])
+			err = cpu.Mem.Store32(addr, t)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = t
+
+		case isa.AmoaddW:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.Mem.Load32(addr)
+			if err != nil {
+				return err
+			}
+			t := uint64(int64(int32(v) + int32(cpu.X[instr.Rs2])))
+			err = cpu.Mem.Store32(addr, t)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = t
+
+		case isa.LrD:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.Mem.Load64(addr)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = v
+
+		case isa.LrW:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.Mem.Load32(addr)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = uint64(int64(int32(v)))
+
+		case isa.ScD:
+			addr := cpu.X[instr.Rs1]
+			err := cpu.Mem.Store64(addr, cpu.X[instr.Rs2])
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = 0
+
+		case isa.ScW:
+			addr := cpu.X[instr.Rs1]
+			err := cpu.Mem.Store32(addr, cpu.X[instr.Rs2])
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = 0
+
 		default:
 			return fmt.Errorf("cpu: instrs %v not implemented yet", instr)
 		}
@@ -266,12 +368,24 @@ func (cpu *CPU) Run() error {
 	}
 }
 
+func (cpu *CPU) EcallError(errno Errno) error {
+	cpu.X[isa.A0] = uint64(int64(-errno))
+	return nil
+}
+
 func (cpu *CPU) ecall() error {
 	syscall := cpu.X[isa.A7]
 	info, ok := SyscallInfo[syscall]
-	if !ok || info.Argc == 0 {
-		fmt.Printf("ecall: %v(%v,%v,%v)\n",
-			syscall, cpu.X[isa.A0], cpu.X[isa.A1], cpu.X[isa.A2])
+	if !ok {
+		fmt.Printf("ecall: %v(%v,%v,%v,%v,%v,%v)\n",
+			syscall,
+			cpu.X[isa.A0], cpu.X[isa.A1], cpu.X[isa.A2],
+			cpu.X[isa.A3], cpu.X[isa.A4], cpu.X[isa.A5])
+	} else if info.Argc == 0 {
+		fmt.Printf("ecall: %v(%v,%v,%v,%v,%v,%v)\n",
+			info.Name,
+			cpu.X[isa.A0], cpu.X[isa.A1], cpu.X[isa.A2],
+			cpu.X[isa.A3], cpu.X[isa.A4], cpu.X[isa.A5])
 	} else if len(info.Format) > 0 {
 		fmt.Printf("ecall: %s(", info.Name)
 		for idx, ch := range info.Format {
@@ -281,6 +395,8 @@ func (cpu *CPU) ecall() error {
 			arg := cpu.X[int(isa.A0)+idx]
 
 			switch ch {
+			case 'i':
+				fmt.Printf("%v", int64(arg))
 			case 'p':
 				fmt.Printf("%x", arg)
 			default:
@@ -325,6 +441,49 @@ func (cpu *CPU) ecall() error {
 			cpu.X[isa.A0] = len
 		}
 
+	case 66: // writev
+		fd := int(cpu.X[isa.A0])
+		iov := cpu.X[isa.A1]
+		iovcnt := int(cpu.X[isa.A2])
+
+		var f *os.File
+		switch fd {
+		case 0:
+			f = os.Stdin
+		case 1:
+			f = os.Stdout
+		case 2:
+			f = os.Stderr
+		default:
+			return cpu.EcallError(ErrnoEBADF)
+		}
+
+		var wrote uint64
+
+		for i := 0; i < iovcnt; i++ {
+			base, err := cpu.Mem.Load64(iov)
+			if err != nil {
+				return err
+			}
+			l, err := cpu.Mem.Load64(iov + 8)
+			if err != nil {
+				return err
+			}
+			iov += 16
+
+			seg, ofs, err := cpu.Mem.Map(base, int(l))
+			if err != nil {
+				return err
+			}
+
+			n, err := f.Write(seg.Data[ofs : ofs+l])
+			if err != nil {
+				return err
+			}
+			wrote += uint64(n)
+		}
+		cpu.X[isa.A0] = wrote
+
 	case 78: // readlinkat
 		const AtFdcwd int64 = -100
 		arg0 := int64(cpu.X[isa.A0])
@@ -333,11 +492,17 @@ func (cpu *CPU) ecall() error {
 		}
 		cpu.X[isa.A0] = ^uint64(0)
 
+	case 80: // fstat
+		cpu.X[isa.A0] = ^uint64(0)
+
 	case 93: // exit
 		os.Exit(int(cpu.X[isa.A0]))
 
 	case 96: // set_tid_address
 		cpu.X[isa.A0] = 0 // caller's tread ID
+
+	case 98: // futex
+		cpu.X[isa.A0] = ^uint64(0)
 
 	case 99: // set_robust_list
 		cpu.X[isa.A0] = 0
@@ -374,6 +539,9 @@ func (cpu *CPU) ecall() error {
 			cpu.Mem.HeapEnd = brk
 			cpu.X[isa.A0] = brk
 		}
+
+	case 226: // mprotec
+		cpu.X[isa.A0] = 0
 
 	case 261: // prlimit64
 		cpu.X[isa.A0] = 0
