@@ -797,9 +797,9 @@ func Decode(data []byte) (Instr, int, error) {
 		case 0b00000:
 			switch funct3 {
 			case 2:
-				instr.Op = AmoswapW
+				instr.Op = AmoaddW
 			case 3:
-				instr.Op = AmoswapD
+				instr.Op = AmoaddD
 			default:
 				return instr, 0, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
 					funct7, funct3, raw)
@@ -808,9 +808,9 @@ func Decode(data []byte) (Instr, int, error) {
 		case 0b00001:
 			switch funct3 {
 			case 2:
-				instr.Op = AmoaddW
+				instr.Op = AmoswapW
 			case 3:
-				instr.Op = AmoaddD
+				instr.Op = AmoswapD
 			default:
 				return instr, 0, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
 					funct7, funct3, raw)
