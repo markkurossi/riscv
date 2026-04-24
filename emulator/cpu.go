@@ -356,7 +356,7 @@ func (cpu *CPU) Run() error {
 			if err != nil {
 				return err
 			}
-			cpu.X[instr.Rd] = t
+			cpu.X[instr.Rd] = v
 
 		case isa.AmoaddW:
 			addr := cpu.X[instr.Rs1]
@@ -369,7 +369,7 @@ func (cpu *CPU) Run() error {
 			if err != nil {
 				return err
 			}
-			cpu.X[instr.Rd] = t
+			cpu.X[instr.Rd] = uint64(int64(int32(v)))
 
 		case isa.LrD:
 			addr := cpu.X[instr.Rs1]
