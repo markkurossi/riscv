@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"math/bits"
 
 	"github.com/markkurossi/riscv/isa"
 )
@@ -211,6 +212,10 @@ func (cpu *CPU) Run() error {
 
 		case isa.Mul:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] * cpu.X[instr.Rs2]
+
+		case isa.Mulhu:
+			hi, _ := bits.Mul64(cpu.X[instr.Rs1], cpu.X[instr.Rs2])
+			cpu.X[instr.Rd] = hi
 
 		case isa.Or:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] | cpu.X[instr.Rs2]
