@@ -35,13 +35,44 @@ type CPU struct {
 	Syscall Syscall
 }
 
+func (cpu *CPU) Errorf(msg string, args ...interface{}) error {
+	err := fmt.Errorf(msg, args...)
+	fmt.Println(err.Error())
+
+	fmt.Printf("epc : %016x ra : %016x sp : %016x\n",
+		cpu.PC, cpu.X[isa.Ra], cpu.X[isa.Sp])
+	fmt.Printf(" gp : %016x tp : %016x t0 : %016x\n",
+		cpu.X[isa.Gp], cpu.X[isa.Tp], cpu.X[isa.T0])
+	fmt.Printf(" t1 : %016x t2 : %016x s0 : %016x\n",
+		cpu.X[isa.T1], cpu.X[isa.T2], cpu.X[isa.S0])
+	fmt.Printf(" s1 : %016x a0 : %016x a1 : %016x\n",
+		cpu.X[isa.S1], cpu.X[isa.A0], cpu.X[isa.A1])
+	fmt.Printf(" a2 : %016x a3 : %016x a4 : %016x\n",
+		cpu.X[isa.A2], cpu.X[isa.A3], cpu.X[isa.A4])
+	fmt.Printf(" a5 : %016x a6 : %016x a7 : %016x\n",
+		cpu.X[isa.A5], cpu.X[isa.A6], cpu.X[isa.A7])
+	fmt.Printf(" s2 : %016x s3 : %016x s4 : %016x\n",
+		cpu.X[isa.S2], cpu.X[isa.S3], cpu.X[isa.S4])
+	fmt.Printf(" s5 : %016x s6 : %016x s7 : %016x\n",
+		cpu.X[isa.S5], cpu.X[isa.S6], cpu.X[isa.S7])
+	fmt.Printf(" s8 : %016x s9 : %016x s10: %016x\n",
+		cpu.X[isa.S8], cpu.X[isa.S9], cpu.X[isa.S10])
+	fmt.Printf(" s11: %016x t3 : %016x t4: %016x\n",
+		cpu.X[isa.S11], cpu.X[isa.T3], cpu.X[isa.T4])
+	fmt.Printf(" t5 : %016x t6 : %016x\n",
+		cpu.X[isa.T5], cpu.X[isa.T6])
+
+	return err
+}
+
 func (cpu *CPU) Run() error {
 	for {
 		cpu.X[isa.Zero] = 0
 
 		seg, ofs, err := cpu.Mem.Map(cpu.PC, 4)
 		if err != nil {
-			return fmt.Errorf("invalid PC %x: %v", cpu.PC, err)
+			return cpu.Errorf("Unable to handle page fault for address: 0x%08x",
+				cpu.PC)
 		}
 		instr, size, err := isa.Decode(seg.Data[ofs:])
 		if err != nil {
@@ -412,7 +443,7 @@ func (cpu *CPU) Run() error {
 			cpu.X[instr.Rd] = 0
 
 		default:
-			return fmt.Errorf("cpu: instrs %v not implemented yet, raw=%x",
+			return cpu.Errorf("Instruction %v[0x%x] not implemented yet",
 				instr, instr.Raw)
 		}
 		cpu.PC += uint64(size)
