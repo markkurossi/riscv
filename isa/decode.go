@@ -842,6 +842,16 @@ func Decode(data []byte) (Instr, int, error) {
 			return instr, 0, fmt.Errorf("AMO/%05b: raw=%08x", funct5, raw)
 		}
 
+	case GroupLOADFP:
+		switch funct3 {
+		case 0b011:
+			instr.Imm = int32(raw>>20) & 0b1111_11111111
+			instr.Op = Fld
+
+		default:
+			return instr, 0, fmt.Errorf("%v/%03b: raw=%08x", group, funct3, raw)
+		}
+
 	case GroupSTOREFP:
 		instr.Imm = int32(raw&0b1111_10000000)>>7 |
 			int32(raw&0b11111110_00000000_00000000_00000000)>>20
