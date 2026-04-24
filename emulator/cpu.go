@@ -139,6 +139,14 @@ func (cpu *CPU) Run() error {
 			}
 			cpu.X[isa.A0] = v
 
+		case isa.Fld:
+			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+			v, err := cpu.Mem.Load64(addr)
+			if err != nil {
+				return err
+			}
+			cpu.F[instr.Rd] = math.Float64frombits(v)
+
 		case isa.Fsd:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
 			v := math.Float64bits(cpu.F[instr.Rs2])
@@ -404,7 +412,8 @@ func (cpu *CPU) Run() error {
 			cpu.X[instr.Rd] = 0
 
 		default:
-			return fmt.Errorf("cpu: instrs %v not implemented yet", instr)
+			return fmt.Errorf("cpu: instrs %v not implemented yet, raw=%x",
+				instr, instr.Raw)
 		}
 		cpu.PC += uint64(size)
 	}
