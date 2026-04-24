@@ -8,7 +8,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"os"
 
@@ -17,8 +16,6 @@ import (
 
 func main() {
 	flag.Parse()
-
-	fmt.Printf("args: %v\n", flag.Args())
 
 	for _, arg := range flag.Args() {
 		emu := emulator.New()

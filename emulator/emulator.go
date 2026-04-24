@@ -17,8 +17,16 @@ import (
 )
 
 type Emulator struct {
+	Verbose bool
+
 	CPU *CPU
 	Mem *Memory
+
+	ProgBase    uint64
+	ProgBaseEnd uint64
+
+	Prog   *fileInfo
+	Interp *fileInfo
 }
 
 func New() *Emulator {
@@ -37,33 +45,128 @@ func New() *Emulator {
 	cpu.X[isa.Sp] = stack.End
 
 	return &Emulator{
-		CPU: cpu,
-		Mem: mem,
+		CPU:         cpu,
+		Mem:         mem,
+		ProgBase:    0x400000,
+		ProgBaseEnd: 0x400000,
 	}
 }
 
+func (emu *Emulator) Debugf(msg string, args ...interface{}) {
+	if !emu.Verbose {
+		return
+	}
+	fmt.Printf(msg, args...)
+}
+
 func (emu *Emulator) LoadELF(file string) error {
-	f, err := elf.Open(file)
+
+	info, err := emu.load(file)
 	if err != nil {
 		return err
 	}
+
+	emu.Prog = info
+	if len(emu.Prog.Interp) > 0 {
+		// Dynamically linked executable.
+		fmt.Printf("PT_INTERP: %v\n", emu.Prog.Interp)
+
+		info, err = emu.load("image" + emu.Prog.Interp)
+		if err != nil {
+			return err
+		}
+		emu.Interp = info
+	}
+
+	return nil
+}
+
+type fileInfo struct {
+	Dynamic bool
+	Phdr    uint64
+	Phnum   uint64
+	Base    uint64
+	Entry   uint64
+	Interp  string
+}
+
+func (emu *Emulator) load(file string) (*fileInfo, error) {
+	f, err := elf.Open(file)
+	if err != nil {
+		return nil, err
+	}
 	defer f.Close()
 
-	for _, prog := range f.Progs {
-		if prog.Type == elf.PT_LOAD {
+	fmt.Printf("File:\n")
+	fmt.Printf(" - Class     : %v\n", f.Class)
+	fmt.Printf(" - Data      : %v\n", f.Data)
+	fmt.Printf(" - Version   : %v\n", f.Version)
+	fmt.Printf(" - OSABI     : %v\n", f.OSABI)
+	fmt.Printf(" - ABIVersion: %v\n", f.ABIVersion)
+	fmt.Printf(" - ByteOrder : %v\n", f.ByteOrder)
+	fmt.Printf(" - Type      : %v\n", f.Type)
+	fmt.Printf(" - Machine   : %v\n", f.Machine)
+	fmt.Printf(" - Entry     : %x\n", f.Entry)
+
+	info := &fileInfo{
+		Dynamic: f.Type == elf.ET_DYN,
+		Phnum:   uint64(len(f.Progs)),
+		Entry:   f.Entry,
+	}
+	if info.Dynamic {
+		info.Entry += emu.ProgBase
+	}
+
+	for idx, prog := range f.Progs {
+		fmt.Printf("Prog %v\n", idx)
+		fmt.Printf(" - Type : %v\n", prog.Type)
+		fmt.Printf(" - Flags: %v\n", prog.Flags)
+		fmt.Printf(" - Vaddr: %x\n", prog.Vaddr)
+		fmt.Printf(" - Memsz: %x\n", prog.Memsz)
+		fmt.Printf(" - Align: %x\n", prog.Align)
+
+		switch prog.Type {
+		case elf.PT_PHDR:
+			info.Phdr = prog.Vaddr
+			if info.Dynamic {
+				info.Phdr += emu.ProgBase
+			}
+
+		case elf.PT_LOAD:
 			data := make([]byte, prog.Memsz)
 			_, err = prog.ReadAt(data[:prog.Filesz], 0)
 			if err != nil {
-				return err
+				return nil, err
+			}
+			vaddr := prog.Vaddr
+			if info.Dynamic {
+				vaddr += emu.ProgBase
+
+				end := vaddr + prog.Memsz + 4095
+				end &= ^uint64(0xfff)
+
+				if end > emu.ProgBaseEnd {
+					emu.ProgBaseEnd = end
+				}
+			}
+			if info.Base == 0 {
+				info.Base = vaddr
 			}
 
+			fmt.Printf(" @ Vaddr: %x\n", vaddr)
+
 			seg := &Segment{
-				Start: prog.Vaddr,
-				End:   prog.Vaddr + prog.Memsz,
+				Start: vaddr,
+				End:   vaddr + prog.Memsz,
 				Data:  data,
 				Read:  prog.Flags&elf.PF_R != 0,
 				Write: prog.Flags&elf.PF_W != 0,
 				Exec:  prog.Flags&elf.PF_X != 0,
+			}
+			if seg.Exec && info.Dynamic && false {
+				fmt.Printf(" ! Entry: %x + %x =>", info.Entry, seg.Start)
+				info.Entry += seg.Start
+				fmt.Printf(" %x\n", info.Entry)
 			}
 
 			emu.Mem.Add(seg)
@@ -74,21 +177,34 @@ func (emu *Emulator) LoadELF(file string) error {
 				emu.Mem.HeapStart = emu.Mem.HeapEnd
 				fmt.Printf(" => HeapEnd: 0x%x\n", emu.Mem.HeapEnd)
 			}
+
+		case elf.PT_INTERP:
+			data := make([]byte, prog.Memsz)
+			_, err = prog.ReadAt(data, 0)
+			if err != nil {
+				return nil, err
+			}
+			var end int
+			for end = len(data) - 1; end > 0 && data[end] == 0; end-- {
+			}
+			end++
+			info.Interp = string(data[:end])
 		}
 	}
 
-	emu.CPU.PC = f.Entry
+	// Update base address for the next ELF file.
+	emu.ProgBase = emu.ProgBaseEnd
 
-	return nil
+	return info, nil
 }
 
 func (emu *Emulator) Run(argv []string, envp []string) error {
 	var argvPtrs []uint64
 	var envpPtrs []uint64
 
-	fmt.Println("argv:")
+	emu.Debugf("argv:\n")
 	for i, v := range argv {
-		fmt.Printf(" - argv[%d]:%v\n", i, v)
+		emu.Debugf(" - argv[%d]:%v\n", i, v)
 		err := emu.PushCString(v)
 		if err != nil {
 			return err
@@ -96,9 +212,9 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 		argvPtrs = append(argvPtrs, emu.CPU.X[isa.Sp])
 	}
 
-	fmt.Println("envp:")
+	emu.Debugf("envp:\n")
 	for i, v := range envp {
-		fmt.Printf(" - envp[%d]:%v\n", i, v)
+		emu.Debugf(" - envp[%d]:%v\n", i, v)
 		err := emu.PushCString(v)
 		if err != nil {
 			return err
@@ -129,7 +245,7 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 
 	// If pushing the words throws us off 16-byte alignment, push a
 	// pad word.
-	if (wordsToPush*8)%16 != 0 {
+	if wordsToPush%2 != 0 {
 		emu.Push(0)
 	}
 
@@ -143,6 +259,32 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 
 	emu.Push(4096)
 	emu.Push(AtPagesz)
+
+	emu.Push(0x112d)
+	emu.Push(AtHwcap)
+
+	emu.Push(100)
+	emu.Push(AtClktck)
+
+	emu.Push(emu.Prog.Phdr)
+	emu.Push(AtPhdr)
+
+	emu.Push(56)
+	emu.Push(AtPhent)
+
+	emu.Push(emu.Prog.Phnum)
+	emu.Push(AtPhnum)
+
+	if emu.Interp != nil {
+		emu.Push(emu.Interp.Base)
+		emu.Push(AtBase)
+	} else {
+		emu.Push(0)
+		emu.Push(AtBase)
+	}
+
+	emu.Push(emu.Prog.Entry)
+	emu.Push(AtEntry)
 
 	// Push environment pointers.
 
@@ -173,9 +315,12 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Stack:\n%s", hex.Dump(seg.Data[ofs:]))
-	if false {
-		return fmt.Errorf("debug")
+	emu.Debugf("Stack:\n%s", hex.Dump(seg.Data[ofs:]))
+
+	if emu.Interp != nil {
+		emu.CPU.PC = emu.Interp.Entry
+	} else {
+		emu.CPU.PC = emu.Prog.Entry
 	}
 
 	return emu.CPU.Run()
