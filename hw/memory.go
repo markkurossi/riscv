@@ -85,6 +85,23 @@ func (mem *Memory) Load64(addr uint64) (uint64, error) {
 	return bo.Uint64(seg.Data[ofs:]), nil
 }
 
+func (mem *Memory) LoadString(addr uint64) (string, error) {
+	seg, ofs, err := mem.Map(addr, 1)
+	if err != nil {
+		return "", err
+	}
+	// XXX move checks to Map
+	if !seg.Read {
+		return "", fmt.Errorf("address %x not readable", addr)
+	}
+	// XXX paged data.
+	var end int
+	for end = int(ofs); end < len(seg.Data) && seg.Data[end] != 0; end++ {
+	}
+	// XXX error if no '\0' found.
+	return string(seg.Data[ofs:end]), nil
+}
+
 func (mem *Memory) Store8(addr, val uint64) error {
 	seg, ofs, err := mem.Map(addr, 1)
 	if err != nil {
