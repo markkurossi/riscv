@@ -33,12 +33,14 @@ type CPU struct {
 
 	Mem     *Memory
 	Syscall Syscall
+	Ktrace  bool
 }
 
 func (cpu *CPU) Errorf(msg string, args ...interface{}) error {
 	err := fmt.Errorf(msg, args...)
 	fmt.Println(err.Error())
 
+	fmt.Printf("CPU: 0 IC: %v\n", cpu.IC)
 	fmt.Printf("epc : %016x ra : %016x sp : %016x\n",
 		cpu.PC, cpu.X[isa.Ra], cpu.X[isa.Sp])
 	fmt.Printf(" gp : %016x tp : %016x t0 : %016x\n",
@@ -57,7 +59,7 @@ func (cpu *CPU) Errorf(msg string, args ...interface{}) error {
 		cpu.X[isa.S5], cpu.X[isa.S6], cpu.X[isa.S7])
 	fmt.Printf(" s8 : %016x s9 : %016x s10: %016x\n",
 		cpu.X[isa.S8], cpu.X[isa.S9], cpu.X[isa.S10])
-	fmt.Printf(" s11: %016x t3 : %016x t4: %016x\n",
+	fmt.Printf(" s11: %016x t3 : %016x t4 : %016x\n",
 		cpu.X[isa.S11], cpu.X[isa.T3], cpu.X[isa.T4])
 	fmt.Printf(" t5 : %016x t6 : %016x\n",
 		cpu.X[isa.T5], cpu.X[isa.T6])

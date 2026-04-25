@@ -15,10 +15,11 @@ import (
 )
 
 func main() {
+	ktrace := flag.Bool("ktrace", false, "kernel trace")
 	flag.Parse()
 
 	for _, arg := range flag.Args() {
-		emu := emulator.New()
+		emu := emulator.New(*ktrace)
 		err := emu.LoadELF(arg)
 		if err != nil {
 			log.Fatalf("failed to load %v: %v", arg, err)

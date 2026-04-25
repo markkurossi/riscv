@@ -12,6 +12,7 @@ import (
 	"debug/elf"
 	"encoding/hex"
 	"fmt"
+	"os"
 
 	"github.com/markkurossi/riscv/isa"
 )
@@ -29,7 +30,7 @@ type Emulator struct {
 	Interp *fileInfo
 }
 
-func New() *Emulator {
+func New(ktrace bool) *Emulator {
 	mem := new(Memory)
 
 	mem.MmapStart = 0x4000000000
@@ -41,6 +42,7 @@ func New() *Emulator {
 	cpu := &CPU{
 		Mem:     mem,
 		Syscall: LinuxSyscall,
+		Ktrace:  ktrace,
 	}
 	cpu.X[isa.Sp] = stack.End
 
@@ -85,6 +87,7 @@ type fileInfo struct {
 	Dynamic bool
 	Phdr    uint64
 	Phnum   uint64
+	Phoff   uint64 // ELF header e_phoff, used to compute Phdr when PT_PHDR absent
 	Base    uint64
 	Entry   uint64
 	Interp  string
@@ -113,6 +116,18 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 		Phnum:   uint64(len(f.Progs)),
 		Entry:   f.Entry,
 	}
+	// Compute phoff by reading e_phoff from the raw ELF file header.
+	// ELF64: e_phoff is at bytes 32-39, little-endian for RISC-V.
+	{
+		raw, err2 := os.Open(file)
+		if err2 == nil {
+			var buf [8]byte
+			if _, err2 = raw.ReadAt(buf[:], 32); err2 == nil {
+				info.Phoff = f.ByteOrder.Uint64(buf[:])
+			}
+			raw.Close()
+		}
+	}
 	if info.Dynamic {
 		info.Entry += emu.ProgBase
 	}
@@ -133,40 +148,35 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 			}
 
 		case elf.PT_LOAD:
-			data := make([]byte, prog.Memsz)
-			_, err = prog.ReadAt(data[:prog.Filesz], 0)
-			if err != nil {
-				return nil, err
-			}
 			vaddr := prog.Vaddr
 			if info.Dynamic {
 				vaddr += emu.ProgBase
+			}
+			end := vaddr + prog.Memsz + 4095
+			end &= ^uint64(0xfff)
 
-				end := vaddr + prog.Memsz + 4095
-				end &= ^uint64(0xfff)
+			fmt.Printf(" @ Vaddr: %x-%x\n", vaddr, end)
 
-				if end > emu.ProgBaseEnd {
-					emu.ProgBaseEnd = end
-				}
+			if end > emu.ProgBaseEnd {
+				emu.ProgBaseEnd = end
 			}
 			if info.Base == 0 {
 				info.Base = vaddr
 			}
 
-			fmt.Printf(" @ Vaddr: %x\n", vaddr)
+			data := make([]byte, end-vaddr)
+			_, err = prog.ReadAt(data[:prog.Filesz], 0)
+			if err != nil {
+				return nil, err
+			}
 
 			seg := &Segment{
 				Start: vaddr,
-				End:   vaddr + prog.Memsz,
+				End:   end,
 				Data:  data,
 				Read:  prog.Flags&elf.PF_R != 0,
 				Write: prog.Flags&elf.PF_W != 0,
 				Exec:  prog.Flags&elf.PF_X != 0,
-			}
-			if seg.Exec && info.Dynamic && false {
-				fmt.Printf(" ! Entry: %x + %x =>", info.Entry, seg.Start)
-				info.Entry += seg.Start
-				fmt.Printf(" %x\n", info.Entry)
 			}
 
 			emu.Mem.Add(seg)
@@ -190,6 +200,15 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 			end++
 			info.Interp = string(data[:end])
 		}
+	}
+
+	// If no PT_PHDR segment was present, compute the program header
+	// address from the first load address plus the ELF header's
+	// phoff. glibc requires a valid AT_PHDR to locate the program's
+	// PT_DYNAMIC and .fini_array; AT_PHDR=0 causes it to register a
+	// null atexit handler and crash on exit.
+	if info.Phdr == 0 && info.Base != 0 {
+		info.Phdr = info.Base + info.Phoff
 	}
 
 	// Update base address for the next ELF file.
@@ -251,11 +270,14 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 
 	// Push Auxiliary Vector terminator (AT_NULL = 0, val = 0)
 
-	emu.Push(AtNull)
 	emu.Push(0)
+	emu.Push(AtNull)
 
 	emu.Push(atRandom)
 	emu.Push(AtRandom)
+
+	emu.Push(argvPtrs[0])
+	emu.Push(AtExecfn)
 
 	emu.Push(4096)
 	emu.Push(AtPagesz)
@@ -266,7 +288,11 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 	emu.Push(100)
 	emu.Push(AtClktck)
 
-	emu.Push(emu.Prog.Phdr)
+	phdr := emu.Prog.Phdr
+	if phdr == 0 {
+		phdr = emu.Prog.Base + emu.Prog.Phoff
+	}
+	emu.Push(phdr)
 	emu.Push(AtPhdr)
 
 	emu.Push(56)
@@ -285,6 +311,22 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 
 	emu.Push(emu.Prog.Entry)
 	emu.Push(AtEntry)
+
+	emu.Push(1000)
+	emu.Push(AtUID)
+
+	emu.Push(1000)
+	emu.Push(AtEuid)
+
+	emu.Push(1000)
+	emu.Push(AtGID)
+
+	emu.Push(1000)
+	emu.Push(AtEgid)
+
+	// AT_SECURE = 0 (not setuid)
+	emu.Push(0)
+	emu.Push(AtSecure)
 
 	// Push environment pointers.
 
@@ -321,6 +363,11 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 		emu.CPU.PC = emu.Interp.Entry
 	} else {
 		emu.CPU.PC = emu.Prog.Entry
+	}
+
+	// Clear argument registers a0-a7.
+	for i := 0; i < 8; i++ {
+		emu.CPU.X[isa.A0+isa.Register(i)] = 0
 	}
 
 	return emu.CPU.Run()

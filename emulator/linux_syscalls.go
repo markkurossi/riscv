@@ -7,6 +7,7 @@
 package emulator
 
 import (
+	"crypto/rand"
 	"fmt"
 	"os"
 
@@ -68,7 +69,7 @@ var SyscallInfo = map[uint64]SyscallI{
 	45:  {0, "", "truncate"},
 	46:  {0, "", "ftruncate"},
 	47:  {0, "", "fallocate"},
-	48:  {0, "", "faccessat"},
+	48:  {4, "ipii", "faccessat"},
 	49:  {0, "", "chdir"},
 	50:  {0, "", "fchdir"},
 	51:  {0, "", "chroot"},
@@ -76,14 +77,14 @@ var SyscallInfo = map[uint64]SyscallI{
 	53:  {0, "", "fchmodat"},
 	54:  {0, "", "fchownat"},
 	55:  {0, "", "fchown"},
-	56:  {4, "", "openat"},
+	56:  {4, "ipii", "openat"},
 	57:  {1, "", "close"},
 	58:  {0, "", "vhangup"},
 	59:  {0, "", "pipe2"},
 	60:  {0, "", "quotactl"},
 	61:  {0, "", "getdents64"},
 	62:  {3, "", "lseek"},
-	63:  {3, "", "read"},
+	63:  {3, "ipu", "read"},
 	64:  {3, "ipu", "write"},
 	65:  {3, "", "readv"},
 	66:  {3, "ipi", "writev"},
@@ -328,44 +329,18 @@ var SyscallInfo = map[uint64]SyscallI{
 	305: {0, "", "set_mempolicy_home_node"},
 }
 
-func LinuxSyscall(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (
-	uint64, error) {
+func LinuxSyscall(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
 
-	info, ok := SyscallInfo[id]
-	if !ok {
-		fmt.Printf("ecall: %v(%v,%v,%v,%v,%v,%v)\n", id, a0, a1, a2, a3, a4, a5)
-	} else if info.Argc == 0 {
-		fmt.Printf("ecall: %v(%v,%v,%v,%v,%v,%v)\n",
-			info.Name, a0, a1, a2, a3, a4, a5)
-	} else if len(info.Format) > 0 {
-		fmt.Printf("ecall: %s(", info.Name)
-		for idx, ch := range info.Format {
-			if idx > 0 {
-				fmt.Print(",")
-			}
-			arg := cpu.X[int(isa.A0)+idx]
+	ktrace(cpu, id, a0, a1, a2, a3, a4, a5)
 
-			switch ch {
-			case 'i':
-				fmt.Printf("%v", int64(arg))
-			case 'p':
-				fmt.Printf("%x", arg)
-			default:
-				fmt.Printf("%v", arg)
-			}
-		}
-		fmt.Println(")")
-	} else {
-		fmt.Printf("ecall: %s(", info.Name)
-		for i := 0; i < info.Argc; i++ {
-			if i > 0 {
-				fmt.Print(",")
-			}
-			fmt.Printf("%v", cpu.X[int(isa.A0)+i])
-		}
-		fmt.Println(")")
-	}
+	ret, err := linuxSyscall(cpu, id, a0, a1, a2, a3, a4, a5)
 
+	ktraceResult(cpu, id, ret, err)
+
+	return ret, err
+}
+
+func linuxSyscall(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
 	switch id {
 	case 64: // write
 		fd := a0
@@ -443,13 +418,55 @@ func LinuxSyscall(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (
 		return Error(ErrnoENOENT), nil
 
 	case 80: // fstat
-		return Error(ErrnoENOENT), nil
+		fd := int(a0)
+		statAddr := a1
+
+		// Only handle the standard streams; everything else is unknown.
+		if fd != 0 && fd != 1 && fd != 2 {
+			return Error(ErrnoEBADF), nil
+		}
+
+		// Write a minimal stat struct (riscv64 Linux layout, 128
+		// bytes).  glibc reads st_mode to determine if stdout is a
+		// tty (line-buffered) or a regular file (fully-buffered), and
+		// st_blksize for buffer size.
+		stat := make([]byte, 128)
+
+		// st_mode @ offset 16: S_IFCHR | 0620 (character device, rw)
+		mode := uint32(0020620)
+		stat[16] = byte(mode)
+		stat[17] = byte(mode >> 8)
+		stat[18] = byte(mode >> 16)
+		stat[19] = byte(mode >> 24)
+
+		// st_nlink @ offset 20
+		stat[20] = 1
+
+		// st_uid @ offset 24: 1000
+		stat[24] = 0xe8
+		stat[25] = 0x03
+
+		// st_gid @ offset 28: 1000
+		stat[28] = 0xe8
+		stat[29] = 0x03
+
+		// st_rdev @ offset 40: tty device
+		stat[40] = 0x88
+		stat[41] = 0x08
+
+		// st_blksize @ offset 56: 1024
+		stat[56] = 0x00
+		stat[57] = 0x04
+
+		if err := cpu.Mem.StoreData(statAddr, stat); err != nil {
+			return Error(ErrnoEFAULT), nil
+		}
+		return 0, nil
 
 	case 93: // exit
 		os.Exit(int(a0))
 
 	case 94: // exit_group
-		fmt.Printf("IC: %v\n", cpu.IC)
 		// XXX return CPUError containing the exit status.
 		os.Exit(int(a0))
 
@@ -495,22 +512,45 @@ func LinuxSyscall(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (
 		}
 
 		fmt.Printf("    => futex(%x,%v[%v],%v)\n", addr, op, opName, val)
-		if op&127 == 0 {
+		switch op & 127 {
+		case 0: // FUTEX_WAIT
 			v, err := cpu.Mem.Load32(addr)
 			if err != nil {
 				return Error(ErrnoEFAULT), nil
 			}
 			fmt.Printf("    => val=%v, wait=%v\n", v, val)
-
-			if uint64(v) >= val {
-				return 0, nil
+			if uint64(v) != val {
+				return Error(ErrnoEAGAIN), nil
 			}
+			// Single-threaded emulator: no other thread will wake us,
+			// so a wait on the correct value is a deadlock. Return
+			// EAGAIN so the caller retries rather than hanging.
 			return Error(ErrnoEAGAIN), nil
-		} else {
-			return Error(ErrnoEINVAL), nil
+
+		case 1: // FUTEX_WAKE
+			// No threads are waiting in a single-threaded emulator.
+			// Return 0 (number of threads woken).
+			return 0, nil
+
+		default:
+			// Return 0 for all other ops rather than EINVAL, which
+			// glibc treats as fatal during lock initialization.
+			fmt.Printf("    => unimplemented futex op %v, returning 0\n",
+				op&127)
+			return 0, nil
 		}
 
 	case 99: // set_robust_list
+
+	case 134: // rt_sigaction
+		// Accept signal handler registrations but don't store them;
+		// the emulator doesn't deliver signals. Return success so
+		// glibc doesn't abort during initialization.
+		return 0, nil
+
+	case 135: // rt_sigprocmask
+		// No signal mask to manage in a single-threaded emulator.
+		return 0, nil
 
 	case 214: // brk
 		if a0 > cpu.Mem.HeapEnd {
@@ -538,6 +578,10 @@ func LinuxSyscall(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (
 			}
 
 			cpu.Mem.HeapEnd = brk
+		}
+		if false {
+			fmt.Printf("     brk: => %x - %x\n",
+				cpu.Mem.HeapStart, cpu.Mem.HeapEnd)
 		}
 		return cpu.Mem.HeapEnd, nil
 
@@ -587,16 +631,86 @@ func LinuxSyscall(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (
 	case 261: // prlimit64
 
 	case 278: // getrandom
-		// XXX get random, now we just return the requested length
-		return a1, nil
+		addr := a0
+		len := a1
+		random := make([]byte, len)
+		if _, err := rand.Read(random); err != nil {
+			return Error(ErrnoEFAULT), nil
+		}
+		if err := cpu.Mem.StoreData(addr, random); err != nil {
+			return Error(ErrnoEFAULT), nil
+		}
+		return len, nil
 
 	default:
-		if false {
-			return 0, fmt.Errorf("unsupported syscall %v", id)
-		} else {
-			fmt.Printf("    => skipping syscall %v\n", id)
+		if cpu.Ktrace {
+			fmt.Printf("RET  skipping syscall %v\n", id)
 		}
 	}
 
 	return 0, nil
+}
+
+func ktrace(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) {
+	if !cpu.Ktrace {
+		return
+	}
+
+	info, ok := SyscallInfo[id]
+	if !ok {
+		fmt.Printf("CALL %v(%v,%v,%v,%v,%v,%v)\n", id, a0, a1, a2, a3, a4, a5)
+	} else if info.Argc == 0 {
+		fmt.Printf("CALL %v(%v,%v,%v,%v,%v,%v)\n",
+			info.Name, a0, a1, a2, a3, a4, a5)
+	} else if len(info.Format) > 0 {
+		fmt.Printf("CALL %s(", info.Name)
+		for idx, ch := range info.Format {
+			if idx > 0 {
+				fmt.Print(",")
+			}
+			arg := cpu.X[int(isa.A0)+idx]
+
+			switch ch {
+			case 'i':
+				fmt.Printf("%v", int64(arg))
+			case 'p':
+				fmt.Printf("%x", arg)
+			default:
+				fmt.Printf("%v", arg)
+			}
+		}
+		fmt.Println(")")
+	} else {
+		fmt.Printf("CALL %s(", info.Name)
+		for i := 0; i < info.Argc; i++ {
+			if i > 0 {
+				fmt.Print(",")
+			}
+			fmt.Printf("%v", cpu.X[int(isa.A0)+i])
+		}
+		fmt.Println(")")
+	}
+}
+
+func ktraceResult(cpu *CPU, id, ret uint64, err error) {
+	if !cpu.Ktrace {
+		return
+	}
+
+	var name string
+	info, ok := SyscallInfo[id]
+	if !ok {
+		name = fmt.Sprintf("%v", id)
+	} else {
+		name = info.Name
+	}
+
+	if err != nil {
+		fmt.Printf("ERR  %v %v\n", name, err)
+	} else if int64(ret) < 0 {
+		errno := Errno(int64(ret))
+		fmt.Printf("ERR  %v %v[%v]", name, errno, int64(ret))
+	} else {
+		fmt.Printf("RET  %v %v\n", name, ret)
+	}
 }
