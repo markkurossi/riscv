@@ -4,6 +4,7 @@
 // All rights reserved.
 //
 
+// Package hw implements the virtual RISC-V hardware.
 package hw
 
 import (
