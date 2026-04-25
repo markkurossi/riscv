@@ -330,6 +330,10 @@ func (cpu *CPU) Run() error {
 		case isa.Srl:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> (cpu.X[instr.Rs2] & 0b111111)
 
+		case isa.Srlw:
+			cpu.X[instr.Rd] = uint64(uint32(cpu.X[instr.Rs1]) >>
+				(cpu.X[instr.Rs2] & 0b111111))
+
 		case isa.Srli:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> instr.Imm
 
