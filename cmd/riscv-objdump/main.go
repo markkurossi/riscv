@@ -25,7 +25,7 @@ func main() {
 }
 
 func disassembleFile(name string) error {
-	_, err := isa.DecodeELF(name)
+	err := isa.DecodeELF(name)
 	if err != nil {
 		return err
 	}

@@ -17,10 +17,10 @@ var (
 	bo = binary.LittleEndian
 )
 
-func DecodeELF(file string) (*Program, error) {
+func DecodeELF(file string) error {
 	f, err := elf.Open(file)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer f.Close()
 
@@ -46,7 +46,7 @@ func DecodeELF(file string) (*Program, error) {
 		data := make([]byte, prog.Memsz)
 		n, err := prog.ReadAt(data, 0)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		limit := 256
 		suffix := ""
@@ -74,7 +74,7 @@ func DecodeELF(file string) (*Program, error) {
 		case ".rodata":
 			data, err := section.Data()
 			if err != nil {
-				return nil, err
+				return err
 			}
 			l := len(data)
 			if l > 32 {
@@ -84,17 +84,15 @@ func DecodeELF(file string) (*Program, error) {
 		}
 	}
 	if text == nil {
-		return nil, fmt.Errorf(".text section not found")
+		return fmt.Errorf(".text section not found")
 	}
 	fmt.Printf(".text.Type=%v[%d]\n", text.Type, text.Type)
-
-	prog := NewProgram()
 
 	symbols, err := f.Symbols()
 	if err != nil {
 		symbols, err = f.DynamicSymbols()
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 	for _, sym := range symbols {
@@ -105,25 +103,23 @@ func DecodeELF(file string) (*Program, error) {
 			continue
 		}
 		fmt.Printf("%016x <%v>:\n", sym.Value, sym.Name)
-		prog.AddFunction(sym.Name, sym.Value)
 	}
 
 	fmt.Printf("%016x <_start>:\n", f.Entry)
-	prog.AddFunction("_start", f.Entry)
 
 	data, err := text.Data()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	fmt.Printf(".text at 0x%x, size %d bytes\n", text.Addr, len(data))
 
 	_, _, err = Decode(data)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return prog, nil
+	return nil
 }
 
 var compressedRegisters = [8]Register{
