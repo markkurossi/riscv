@@ -4,7 +4,7 @@
 // All rights reserved.
 //
 
-package emulator
+package hw
 
 import (
 	"encoding/binary"
@@ -450,8 +450,4 @@ func (cpu *CPU) Run() error {
 		}
 		cpu.PC += uint64(size)
 	}
-}
-
-func Error(errno Errno) uint64 {
-	return uint64(int64(-errno))
 }

@@ -14,14 +14,15 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/markkurossi/riscv/hw"
 	"github.com/markkurossi/riscv/isa"
 )
 
 type Emulator struct {
 	Verbose bool
 
-	CPU *CPU
-	Mem *Memory
+	CPU *hw.CPU
+	Mem *hw.Memory
 
 	ProgBase    uint64
 	ProgBaseEnd uint64
@@ -30,16 +31,20 @@ type Emulator struct {
 	Interp *fileInfo
 }
 
+func Error(errno Errno) uint64 {
+	return uint64(int64(-errno))
+}
+
 func New(ktrace bool) *Emulator {
-	mem := new(Memory)
+	mem := new(hw.Memory)
 
 	mem.MmapStart = 0x4000000000
 	mem.MmapEnd = mem.MmapStart
 
-	stack := NewStack(0x7ffff000, 1<<20)
+	stack := hw.NewStack(0x7ffff000, 1<<20)
 	mem.Add(stack)
 
-	cpu := &CPU{
+	cpu := &hw.CPU{
 		Mem:     mem,
 		Syscall: LinuxSyscall,
 		Ktrace:  ktrace,
@@ -170,7 +175,7 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 				return nil, err
 			}
 
-			seg := &Segment{
+			seg := &hw.Segment{
 				Start: vaddr,
 				End:   end,
 				Data:  data,

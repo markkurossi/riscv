@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/markkurossi/riscv/hw"
 	"github.com/markkurossi/riscv/isa"
 )
 
@@ -329,7 +330,7 @@ var SyscallInfo = map[uint64]SyscallI{
 	305: {0, "", "set_mempolicy_home_node"},
 }
 
-func LinuxSyscall(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
+func LinuxSyscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
 
 	ktrace(cpu, id, a0, a1, a2, a3, a4, a5)
 
@@ -340,7 +341,7 @@ func LinuxSyscall(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
 	return ret, err
 }
 
-func linuxSyscall(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
+func linuxSyscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
 	switch id {
 	case 64: // write
 		fd := a0
@@ -561,7 +562,7 @@ func linuxSyscall(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
 			seg, _, err := cpu.Mem.Map(cpu.Mem.HeapStart, 8)
 			if err != nil {
 				// Create memory.
-				seg = &Segment{
+				seg = &hw.Segment{
 					Start: cpu.Mem.HeapStart,
 					End:   brk,
 					Data:  make([]byte, brk-cpu.Mem.HeapStart),
@@ -603,7 +604,7 @@ func linuxSyscall(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
 			length = (length + 4095) &^ 4095
 
 			// Create the segment
-			seg := &Segment{
+			seg := &hw.Segment{
 				Start: addr,
 				End:   addr + length,
 				Data:  make([]byte, length),
@@ -651,7 +652,7 @@ func linuxSyscall(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
 	return 0, nil
 }
 
-func ktrace(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) {
+func ktrace(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) {
 	if !cpu.Ktrace {
 		return
 	}
@@ -692,7 +693,7 @@ func ktrace(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) {
 	}
 }
 
-func ktraceResult(cpu *CPU, id, ret uint64, err error) {
+func ktraceResult(cpu *hw.CPU, id, ret uint64, err error) {
 	if !cpu.Ktrace {
 		return
 	}
