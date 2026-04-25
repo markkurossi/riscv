@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/markkurossi/riscv/emulator/linux"
 	"github.com/markkurossi/riscv/hw"
 	"github.com/markkurossi/riscv/isa"
 )
@@ -31,10 +32,6 @@ type Emulator struct {
 	Interp *fileInfo
 }
 
-func Error(errno Errno) uint64 {
-	return uint64(int64(-errno))
-}
-
 func New(ktrace bool) *Emulator {
 	mem := new(hw.Memory)
 
@@ -46,7 +43,7 @@ func New(ktrace bool) *Emulator {
 
 	cpu := &hw.CPU{
 		Mem:     mem,
-		Syscall: LinuxSyscall,
+		Syscall: linux.Syscall,
 		Ktrace:  ktrace,
 	}
 	cpu.X[isa.Sp] = stack.End
@@ -276,62 +273,62 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 	// Push Auxiliary Vector terminator (AT_NULL = 0, val = 0)
 
 	emu.Push(0)
-	emu.Push(AtNull)
+	emu.Push(linux.AtNull)
 
 	emu.Push(atRandom)
-	emu.Push(AtRandom)
+	emu.Push(linux.AtRandom)
 
 	emu.Push(argvPtrs[0])
-	emu.Push(AtExecfn)
+	emu.Push(linux.AtExecfn)
 
 	emu.Push(4096)
-	emu.Push(AtPagesz)
+	emu.Push(linux.AtPagesz)
 
 	emu.Push(0x112d)
-	emu.Push(AtHwcap)
+	emu.Push(linux.AtHwcap)
 
 	emu.Push(100)
-	emu.Push(AtClktck)
+	emu.Push(linux.AtClktck)
 
 	phdr := emu.Prog.Phdr
 	if phdr == 0 {
 		phdr = emu.Prog.Base + emu.Prog.Phoff
 	}
 	emu.Push(phdr)
-	emu.Push(AtPhdr)
+	emu.Push(linux.AtPhdr)
 
 	emu.Push(56)
-	emu.Push(AtPhent)
+	emu.Push(linux.AtPhent)
 
 	emu.Push(emu.Prog.Phnum)
-	emu.Push(AtPhnum)
+	emu.Push(linux.AtPhnum)
 
 	if emu.Interp != nil {
 		emu.Push(emu.Interp.Base)
-		emu.Push(AtBase)
+		emu.Push(linux.AtBase)
 	} else {
 		emu.Push(0)
-		emu.Push(AtBase)
+		emu.Push(linux.AtBase)
 	}
 
 	emu.Push(emu.Prog.Entry)
-	emu.Push(AtEntry)
+	emu.Push(linux.AtEntry)
 
 	emu.Push(1000)
-	emu.Push(AtUID)
+	emu.Push(linux.AtUID)
 
 	emu.Push(1000)
-	emu.Push(AtEuid)
+	emu.Push(linux.AtEuid)
 
 	emu.Push(1000)
-	emu.Push(AtGID)
+	emu.Push(linux.AtGID)
 
 	emu.Push(1000)
-	emu.Push(AtEgid)
+	emu.Push(linux.AtEgid)
 
 	// AT_SECURE = 0 (not setuid)
 	emu.Push(0)
-	emu.Push(AtSecure)
+	emu.Push(linux.AtSecure)
 
 	// Push environment pointers.
 

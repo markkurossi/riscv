@@ -4,7 +4,7 @@
 // All rights reserved.
 //
 
-package emulator
+package linux
 
 import (
 	"crypto/rand"
@@ -330,18 +330,22 @@ var SyscallInfo = map[uint64]SyscallI{
 	305: {0, "", "set_mempolicy_home_node"},
 }
 
-func LinuxSyscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
+func Error(errno Errno) uint64 {
+	return uint64(int64(-errno))
+}
+
+func Syscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
 
 	ktrace(cpu, id, a0, a1, a2, a3, a4, a5)
 
-	ret, err := linuxSyscall(cpu, id, a0, a1, a2, a3, a4, a5)
+	ret, err := syscall(cpu, id, a0, a1, a2, a3, a4, a5)
 
 	ktraceResult(cpu, id, ret, err)
 
 	return ret, err
 }
 
-func linuxSyscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
+func syscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
 	switch id {
 	case 64: // write
 		fd := a0

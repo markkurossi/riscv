@@ -4,7 +4,7 @@
 // All rights reserved.
 //
 
-package emulator
+package linux
 
 const (
 	AtNull uint64 = iota
