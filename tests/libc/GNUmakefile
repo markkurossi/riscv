@@ -10,7 +10,10 @@ $(wildcard src/intconv/*.c)
 
 OBJ = $(patsubst %.c,%.o,$(LIBCSRC))
 
-all: libc.a crt0.o
+EXAMPLE_SRCS := $(wildcard examples/*.c)
+EXAMPLES := $(patsubst %.c,%,$(EXAMPLE_SRCS))
+
+all: libc.a crt0.o $(EXAMPLES)
 
 libc.a: $(OBJ)
 	$(AR) rcs $@ $^
