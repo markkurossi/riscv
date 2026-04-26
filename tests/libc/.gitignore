@@ -1,0 +1,4 @@
+*.o
+examples/hello
+examples/print
+libc.a
