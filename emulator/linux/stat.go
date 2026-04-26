@@ -6,6 +6,11 @@
 
 package linux
 
+// Constants for the *at(2) family of syscalls.
+const (
+	AtFdcwd = -100
+)
+
 type Stat struct {
 	StDev       uint64
 	StIno       uint64

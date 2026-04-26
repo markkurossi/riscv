@@ -93,3 +93,7 @@ func (errno Errno) String() string {
 	}
 	return fmt.Sprintf("{Errno %d}", errno)
 }
+
+func (errno Errno) Error() string {
+	return errno.String()
+}

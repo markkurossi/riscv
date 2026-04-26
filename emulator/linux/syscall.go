@@ -8,11 +8,20 @@ package linux
 
 import (
 	"crypto/rand"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 
 	"github.com/markkurossi/riscv/hw"
 	"github.com/markkurossi/riscv/isa"
+	"github.com/markkurossi/riscv/posix"
+)
+
+var (
+	bo = binary.LittleEndian
 )
 
 type SyscallI struct {
@@ -315,7 +324,7 @@ var SyscallInfo = map[uint64]SyscallI{
 	290: {0, "", "clone3"},
 	291: {0, "", "close_range"},
 	292: {0, "", "openat2"},
-	293: {0, "", "pidfd_getfd"},
+	293: {3, "iiu", "pidfd_getfd"},
 	294: {0, "", "faccessat2"},
 	295: {0, "", "process_madvise"},
 	296: {0, "", "epoll_pwait2"},
@@ -334,29 +343,108 @@ func Error(errno Errno) uint64 {
 	return uint64(int64(-errno))
 }
 
-func Syscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
+func Syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
+	uint64, error) {
 
-	ktrace(cpu, id, a0, a1, a2, a3, a4, a5)
+	ktrace(proc, id, a0, a1, a2, a3, a4, a5)
 
-	ret, err := syscall(cpu, id, a0, a1, a2, a3, a4, a5)
+	ret, err := syscall(proc, id, a0, a1, a2, a3, a4, a5)
 
-	ktraceResult(cpu, id, ret, err)
+	ktraceResult(proc, id, ret, err)
 
 	return ret, err
 }
 
-func syscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
+var root string = "image"
+
+func mkpath(pathname string) string {
+	return filepath.Join(root, pathname)
+}
+
+func syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
+	uint64, error) {
+
+	cpu := proc.CPU
+
 	switch id {
+	case 48: // faccessat
+		dirfd := int64(a0)
+		addr := a1
+		mode := int64(a2)
+		flags := int64(a3)
+
+		_ = dirfd
+		_ = mode
+		_ = flags
+
+		pathname, err := cpu.Mem.LoadString(addr)
+		if err != nil {
+			return Error(ErrnoEFAULT), nil
+		}
+		fmt.Printf("     - pathname=%v => %v\n", pathname, mkpath(pathname))
+		_, err = os.Stat(mkpath(pathname))
+		if err != nil {
+			return Error(ErrnoENOENT), nil
+		}
+
+		return 0, nil
+
+	case 56: // openat
+		dirfd := int64(a0)
+		addr := a1
+		flags := int64(a2)
+		mode := int64(a3)
+
+		_ = dirfd
+		_ = mode
+		_ = flags
+
+		pathname, err := cpu.Mem.LoadString(addr)
+		if err != nil {
+			return Error(ErrnoEFAULT), nil
+		}
+		fmt.Printf("     - pathname=%v\n", pathname)
+		f, err := os.Open(mkpath(pathname))
+		if err != nil {
+			return Error(ErrnoENOENT), nil
+		}
+
+		return uint64(proc.AllocFD(f)), nil
+
+	case 57: // close
+		if !proc.CloseFD(int(a0)) {
+			return Error(ErrnoEBADF), nil
+		}
+		return 0, nil
+
+	case 63: // read
+		addr := a1
+		length := a2
+
+		f := proc.GetFD(int(a0))
+		if f == nil {
+			return Error(ErrnoEBADF), nil
+		}
+		buf := make([]byte, length)
+		n, err := f.Read(buf)
+		if err != nil {
+			return Error(ErrnoEIO), nil
+		}
+		if err := cpu.Mem.StoreData(addr, buf[:n]); err != nil {
+			return Error(ErrnoEFAULT), nil
+		}
+		return uint64(n), nil
+
 	case 64: // write
 		fd := a0
 		addr := a1
-		len := a2
+		length := a2
 
 		_ = fd
 
 		var i uint64
 
-		for i = 0; i < len; i++ {
+		for i = 0; i < length; i++ {
 			b, err := cpu.Mem.Load8(addr + i)
 			if err != nil {
 				return Error(ErrnoEFAULT), nil
@@ -366,10 +454,10 @@ func syscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
 				break
 			}
 		}
-		if i < len {
+		if i < length {
 			return Error(ErrnoEIO), nil
 		}
-		return len, nil
+		return length, nil
 
 	case 66: // writev
 		fd := int(a0)
@@ -406,6 +494,11 @@ func syscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
 				return Error(ErrnoEFAULT), nil
 			}
 
+			if false {
+				fmt.Printf("writev: iov=%d:\n%s",
+					i, hex.Dump(seg.Data[ofs:ofs+l]))
+			}
+
 			n, err := f.Write(seg.Data[ofs : ofs+l])
 			if err != nil {
 				return 0, err
@@ -415,7 +508,6 @@ func syscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
 		return wrote, nil
 
 	case 78: // readlinkat
-		const AtFdcwd int64 = -100
 		arg0 := int64(a0)
 		if arg0 == AtFdcwd {
 			fmt.Printf("     - AT_FDCWD\n")
@@ -423,12 +515,16 @@ func syscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
 		return Error(ErrnoENOENT), nil
 
 	case 80: // fstat
-		fd := int(a0)
 		statAddr := a1
 
-		// Only handle the standard streams; everything else is unknown.
-		if fd != 0 && fd != 1 && fd != 2 {
+		f := proc.GetFD(int(a0))
+		if f == nil {
 			return Error(ErrnoEBADF), nil
+		}
+
+		fi, err := f.Stat()
+		if err != nil {
+			return Error(ErrnoEIO), nil
 		}
 
 		// Write a minimal stat struct (riscv64 Linux layout, 128
@@ -437,12 +533,9 @@ func syscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
 		// st_blksize for buffer size.
 		stat := make([]byte, 128)
 
-		// st_mode @ offset 16: S_IFCHR | 0620 (character device, rw)
-		mode := uint32(0020620)
-		stat[16] = byte(mode)
-		stat[17] = byte(mode >> 8)
-		stat[18] = byte(mode >> 16)
-		stat[19] = byte(mode >> 24)
+		// st_mode @ offset 16
+		mode := fi.Mode()
+		bo.PutUint32(stat[16:], uint32(mode))
 
 		// st_nlink @ offset 20
 		stat[20] = 1
@@ -455,9 +548,14 @@ func syscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
 		stat[28] = 0xe8
 		stat[29] = 0x03
 
-		// st_rdev @ offset 40: tty device
-		stat[40] = 0x88
-		stat[41] = 0x08
+		if mode&fs.ModeDevice != 0 {
+			// st_rdev @ offset 40: tty device
+			stat[40] = 0x88
+			stat[41] = 0x08
+		}
+
+		// st_size @ offset 48
+		bo.PutUint64(stat[48:], uint64(fi.Size()))
 
 		// st_blksize @ offset 56: 1024
 		stat[56] = 0x00
@@ -648,7 +746,7 @@ func syscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
 		return len, nil
 
 	default:
-		if cpu.Ktrace {
+		if proc.Ktrace {
 			fmt.Printf("RET  skipping syscall %v\n", id)
 		}
 	}
@@ -656,8 +754,8 @@ func syscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (uint64, error) {
 	return 0, nil
 }
 
-func ktrace(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) {
-	if !cpu.Ktrace {
+func ktrace(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) {
+	if !proc.Ktrace {
 		return
 	}
 
@@ -673,7 +771,7 @@ func ktrace(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) {
 			if idx > 0 {
 				fmt.Print(",")
 			}
-			arg := cpu.X[int(isa.A0)+idx]
+			arg := proc.CPU.X[int(isa.A0)+idx]
 
 			switch ch {
 			case 'i':
@@ -691,14 +789,14 @@ func ktrace(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) {
 			if i > 0 {
 				fmt.Print(",")
 			}
-			fmt.Printf("%v", cpu.X[int(isa.A0)+i])
+			fmt.Printf("%v", proc.CPU.X[int(isa.A0)+i])
 		}
 		fmt.Println(")")
 	}
 }
 
-func ktraceResult(cpu *hw.CPU, id, ret uint64, err error) {
-	if !cpu.Ktrace {
+func ktraceResult(proc *posix.Process, id, ret uint64, err error) {
+	if !proc.Ktrace {
 		return
 	}
 
@@ -713,8 +811,8 @@ func ktraceResult(cpu *hw.CPU, id, ret uint64, err error) {
 	if err != nil {
 		fmt.Printf("ERR  %v %v\n", name, err)
 	} else if int64(ret) < 0 {
-		errno := Errno(int64(ret))
-		fmt.Printf("ERR  %v %v[%v]", name, errno, int64(ret))
+		errno := Errno(-int64(ret))
+		fmt.Printf("ERR  %v %v[%v]\n", name, errno, int64(ret))
 	} else {
 		fmt.Printf("RET  %v %v\n", name, ret)
 	}

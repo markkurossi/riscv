@@ -34,7 +34,6 @@ type CPU struct {
 
 	Mem     *Memory
 	Syscall Syscall
-	Ktrace  bool
 }
 
 func (cpu *CPU) Errorf(msg string, args ...interface{}) error {

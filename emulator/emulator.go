@@ -17,10 +17,12 @@ import (
 	"github.com/markkurossi/riscv/emulator/linux"
 	"github.com/markkurossi/riscv/hw"
 	"github.com/markkurossi/riscv/isa"
+	"github.com/markkurossi/riscv/posix"
 )
 
 type Emulator struct {
 	Verbose bool
+	Ktrace  bool
 
 	CPU *hw.CPU
 	Mem *hw.Memory
@@ -30,6 +32,8 @@ type Emulator struct {
 
 	Prog   *fileInfo
 	Interp *fileInfo
+
+	Process *posix.Process
 }
 
 func New(ktrace bool) *Emulator {
@@ -42,18 +46,21 @@ func New(ktrace bool) *Emulator {
 	mem.Add(stack)
 
 	cpu := &hw.CPU{
-		Mem:     mem,
-		Syscall: linux.Syscall,
-		Ktrace:  ktrace,
+		Mem: mem,
 	}
 	cpu.X[isa.Sp] = stack.End
 
-	return &Emulator{
+	emu := &Emulator{
+		Ktrace:      ktrace,
 		CPU:         cpu,
 		Mem:         mem,
 		ProgBase:    0x400000,
 		ProgBaseEnd: 0x400000,
 	}
+
+	cpu.Syscall = emu.Syscall
+
+	return emu
 }
 
 func (emu *Emulator) Debugf(msg string, args ...interface{}) {
@@ -372,6 +379,16 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 		emu.CPU.X[isa.A0+isa.Register(i)] = 0
 	}
 
+	emu.Process = &posix.Process{
+		Ktrace: emu.Ktrace,
+		CPU:    emu.CPU,
+		FDs: []*os.File{
+			os.Stdin,
+			os.Stdout,
+			os.Stderr,
+		},
+	}
+
 	return emu.CPU.Run()
 }
 
@@ -396,4 +413,10 @@ func (emu *Emulator) PushCString(val string) error {
 func (emu *Emulator) PushData(data []byte) error {
 	emu.CPU.X[isa.Sp] -= uint64(len(data))
 	return emu.Mem.StoreData(emu.CPU.X[isa.Sp], data)
+}
+
+func (emu *Emulator) Syscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (
+	uint64, error) {
+
+	return linux.Syscall(emu.Process, id, a0, a1, a2, a3, a4, a5)
 }
