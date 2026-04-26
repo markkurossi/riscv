@@ -527,39 +527,62 @@ func syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 			return Error(ErrnoEIO), nil
 		}
 
-		// Write a minimal stat struct (riscv64 Linux layout, 128
-		// bytes).  glibc reads st_mode to determine if stdout is a
-		// tty (line-buffered) or a regular file (fully-buffered), and
-		// st_blksize for buffer size.
+		// XXX change to use marshal(Stat)
 		stat := make([]byte, 128)
 
-		// st_mode @ offset 16
 		mode := fi.Mode()
-		bo.PutUint32(stat[16:], uint32(mode))
+		stMode := int(mode & fs.ModePerm)
+
+		if mode&fs.ModeNamedPipe != 0 {
+			stMode |= S_IFIFO
+		}
+		if mode&fs.ModeCharDevice != 0 {
+			stMode |= S_IFCHR
+		}
+		if mode&fs.ModeDir != 0 {
+			stMode |= S_IFDIR
+		}
+		if mode&fs.ModeDevice != 0 {
+			stMode |= S_IFBLK
+		}
+		if mode&fs.ModeSymlink != 0 {
+			stMode |= S_IFLNK
+		}
+		if mode&fs.ModeSocket != 0 {
+			stMode |= S_IFSOCK
+		}
+
+		if mode&fs.ModeType == 0 {
+			stMode |= S_IFREG
+		}
+
+		// st_mode @ offset 16
+		bo.PutUint32(stat[16:], uint32(stMode))
 
 		// st_nlink @ offset 20
-		stat[20] = 1
+		bo.PutUint32(stat[20:], 1)
 
 		// st_uid @ offset 24: 1000
-		stat[24] = 0xe8
-		stat[25] = 0x03
+		bo.PutUint32(stat[24:], 1000)
 
 		// st_gid @ offset 28: 1000
-		stat[28] = 0xe8
-		stat[29] = 0x03
+		bo.PutUint32(stat[28:], 1000)
 
 		if mode&fs.ModeDevice != 0 {
-			// st_rdev @ offset 40: tty device
-			stat[40] = 0x88
-			stat[41] = 0x08
+			// st_rdev @ offset 32: tty device
+			bo.PutUint64(stat[32:], 34816)
 		}
 
 		// st_size @ offset 48
 		bo.PutUint64(stat[48:], uint64(fi.Size()))
 
 		// st_blksize @ offset 56: 1024
-		stat[56] = 0x00
-		stat[57] = 0x04
+		bo.PutUint64(stat[56:], 1024)
+
+		modTime := uint64(fi.ModTime().Unix())
+		bo.PutUint64(stat[72:], modTime)  // st_atime
+		bo.PutUint64(stat[88:], modTime)  // st_mtime
+		bo.PutUint64(stat[104:], modTime) // st_ctime
 
 		if err := cpu.Mem.StoreData(statAddr, stat); err != nil {
 			return Error(ErrnoEFAULT), nil
