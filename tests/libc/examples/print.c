@@ -9,17 +9,28 @@
 #include <string.h>
 
 int
-main()
+main(int argc, char *argv[])
 {
   char buf[64];
-  int len;
+  int i;
+  struct iovec iovec[2];
 
-  itoa(12345, buf, sizeof(buf), 10);
+  itoa(argc, buf, sizeof(buf), 10);
 
-  len = strlen(buf);
-  buf[len++] = '\n';
+  iovec[0].iov_base = buf;
+  iovec[0].iov_len = strlen(buf);
 
-  write(1, buf, len);
+  iovec[1].iov_base = "\n";
+  iovec[1].iov_len = 1;
+
+  writev(1, iovec, 2);
+
+  for (i = 0; i < argc; i++)
+    {
+      iovec[0].iov_base = argv[i];
+      iovec[0].iov_len = strlen(argv[i]);
+      writev(1, iovec, 2);
+    }
 
   return 0;
 }

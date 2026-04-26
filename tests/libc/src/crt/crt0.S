@@ -2,11 +2,11 @@
 .global _start
 
 _start:
-    # a0 = argc
-    # a1 = argv
+        ld      a0,0(sp)
+        addi    a1,sp,8
 
-    call main
+        call main
 
-    # return value in a0
-    li a7, 93      # SYS_exit
-    ecall
+        # return value in a0
+        li a7, 93      # SYS_exit
+        ecall

@@ -14,6 +14,7 @@
 #define SYS_close   57
 #define SYS_read    63
 #define SYS_write   64
+#define SYS_writev  66
 #define SYS_exit    93
 #define SYS_futex   98
 #define SYS_brk     214
