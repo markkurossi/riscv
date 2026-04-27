@@ -388,6 +388,14 @@ func Decode(data []byte) (Instr, int, error) {
 					int32(raw&0b10000_00000000)>>7
 				instr.Op = Slli
 
+			case 0b001:
+				instr.Imm = int32(raw&0b11100)<<4 |
+					int32(raw&0b1100000)>>2 |
+					int32(raw&0b10000_00000000)>>7
+				instr.Rd = rds1
+				instr.Rs1 = Sp
+				instr.Op = Fld
+
 			case 0b010:
 				instr.Imm = int32(raw&0b1110000)>>2 |
 					int32(raw&0b10000_00000000)>>7 |
@@ -439,6 +447,13 @@ func Decode(data []byte) (Instr, int, error) {
 						}
 					}
 				}
+
+			case 0b101:
+				instr.Rs1 = Sp
+				instr.Rs2 = rs2
+				instr.Imm = int32(raw&0b11100_00000000)>>7 |
+					int32(raw&0b11_10000000)>>1
+				instr.Op = Fsd
 
 			case 0b110:
 				instr.Rs1 = Sp
