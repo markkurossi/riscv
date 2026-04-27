@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
+	"time"
 
 	"github.com/markkurossi/riscv/isa"
 )
@@ -78,7 +79,7 @@ func (cpu *CPU) Run() error {
 		}
 		instr, size, err := isa.Decode(seg.Data[ofs:])
 		if err != nil {
-			return err
+			return cpu.Errorf("decode: %w", err)
 		}
 		cpu.IC++
 
@@ -146,6 +147,15 @@ func (cpu *CPU) Run() error {
 				continue
 			}
 
+		case isa.Div:
+			if cpu.X[instr.Rs2] == 0 {
+				// Division by zero → result = -1
+				cpu.X[instr.Rd] = ^uint64(0)
+			} else {
+				cpu.X[instr.Rd] = uint64(int64(cpu.X[instr.Rs1]) /
+					int64(cpu.X[instr.Rs2]))
+			}
+
 		case isa.Divu:
 			if cpu.X[instr.Rs2] == 0 {
 				// Division by zero → result = -1
@@ -180,6 +190,16 @@ func (cpu *CPU) Run() error {
 			}
 			cpu.F[instr.Rd] = math.Float64frombits(v)
 
+		case isa.Flw:
+			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+			v32, err := cpu.Mem.Load32(addr)
+			if err != nil {
+				return err
+			}
+			v64 := uint64(v32)
+			v64 |= uint64(0xffffffff) << 32
+			cpu.F[instr.Rd] = math.Float64frombits(v64)
+
 		case isa.Fsd:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
 			v := math.Float64bits(cpu.F[instr.Rs2])
@@ -187,7 +207,25 @@ func (cpu *CPU) Run() error {
 				return err
 			}
 
+		case isa.Fsw:
+			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+			v := math.Float32bits(float32(cpu.F[instr.Rs2]))
+			if err := cpu.Mem.Store32(addr, uint64(v)); err != nil {
+				return err
+			}
+
 		case isa.Fence:
+
+		case isa.FeqS:
+			b1 := math.Float64bits(cpu.F[instr.Rs1])
+			b2 := math.Float64bits(cpu.F[instr.Rs1])
+
+			if math.Float32frombits(uint32(b1)) ==
+				math.Float32frombits(uint32(b2)) {
+				cpu.X[instr.Rd] = 1
+			} else {
+				cpu.X[instr.Rd] = 0
+			}
 
 		case isa.Jal:
 			cpu.X[instr.Rd] = cpu.PC + uint64(size)
@@ -258,18 +296,22 @@ func (cpu *CPU) Run() error {
 			hi, _ := bits.Mul64(cpu.X[instr.Rs1], cpu.X[instr.Rs2])
 			cpu.X[instr.Rd] = hi
 
+		case isa.Mulw:
+			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1] *
+				cpu.X[instr.Rs2])))
+
 		case isa.Or:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] | cpu.X[instr.Rs2]
 
 		case isa.Ori:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] | uint64(int64(instr.Imm))
 
-		case isa.Remw:
+		case isa.Rem:
 			if cpu.X[instr.Rs2] == 0 {
 				cpu.X[instr.Rd] = cpu.X[instr.Rs1]
 			} else {
-				cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) %
-					int32(cpu.X[instr.Rs2])))
+				cpu.X[instr.Rd] = uint64(int64(cpu.X[instr.Rs1]) %
+					int64(cpu.X[instr.Rs2]))
 			}
 
 		case isa.Remu:
@@ -277,6 +319,22 @@ func (cpu *CPU) Run() error {
 				cpu.X[instr.Rd] = cpu.X[instr.Rs1]
 			} else {
 				cpu.X[instr.Rd] = cpu.X[instr.Rs1] % cpu.X[instr.Rs2]
+			}
+
+		case isa.Remuw:
+			if cpu.X[instr.Rs2] == 0 {
+				cpu.X[instr.Rd] = cpu.X[instr.Rs1]
+			} else {
+				cpu.X[instr.Rd] = uint64(uint32(cpu.X[instr.Rs1]) %
+					uint32(cpu.X[instr.Rs2]))
+			}
+
+		case isa.Remw:
+			if cpu.X[instr.Rs2] == 0 {
+				cpu.X[instr.Rd] = cpu.X[instr.Rs1]
+			} else {
+				cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) %
+					int32(cpu.X[instr.Rs2])))
 			}
 
 		case isa.Sb:
@@ -304,6 +362,13 @@ func (cpu *CPU) Run() error {
 		case isa.Slliw:
 			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) <<
 				instr.Imm))
+
+		case isa.Slti:
+			if int64(cpu.X[instr.Rs1]) < int64(instr.Imm) {
+				cpu.X[instr.Rd] = 1
+			} else {
+				cpu.X[instr.Rd] = 0
+			}
 
 		case isa.Sltiu:
 			if cpu.X[instr.Rs1] < uint64(instr.Imm) {
@@ -362,7 +427,20 @@ func (cpu *CPU) Run() error {
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] ^ cpu.X[instr.Rs2]
 
 		case isa.Xori:
-			cpu.X[instr.Rd] = cpu.X[instr.Rs1] ^ uint64(instr.Imm)
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] ^ uint64(int64(instr.Imm))
+
+			// Control and Status Registers (CSRs).
+		case isa.Csrrs:
+			csr := instr.Raw >> 20
+			switch csr {
+			case 0xc01: // time - RDCYCLE instruction
+				v := time.Now().Nanosecond()
+				cpu.X[instr.Rd] = uint64(v)
+				// XX check what to do with R[Rs1]
+
+			default:
+				return cpu.Errorf("%s csr=0x%03x", instr.Op, csr)
+			}
 
 			// Atomic (A extension).
 
@@ -416,6 +494,32 @@ func (cpu *CPU) Run() error {
 			}
 			cpu.X[instr.Rd] = uint64(int64(int32(v)))
 
+		case isa.AmoandW:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.Mem.Load32(addr)
+			if err != nil {
+				return err
+			}
+			t := uint64(int64(int32(v) & int32(cpu.X[instr.Rs2])))
+			err = cpu.Mem.Store32(addr, t)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = uint64(int64(int32(v)))
+
+		case isa.AmoorW:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.Mem.Load32(addr)
+			if err != nil {
+				return err
+			}
+			t := uint64(int64(int32(v) | int32(cpu.X[instr.Rs2])))
+			err = cpu.Mem.Store32(addr, t)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = uint64(int64(int32(v)))
+
 		case isa.LrD:
 			addr := cpu.X[instr.Rs1]
 			v, err := cpu.Mem.Load64(addr)
@@ -447,6 +551,58 @@ func (cpu *CPU) Run() error {
 				return err
 			}
 			cpu.X[instr.Rd] = 0
+
+			// Floating point extension.
+
+		case isa.FaddD:
+			cpu.F[instr.Rd] = cpu.F[instr.Rs1] + cpu.F[instr.Rs2]
+
+		case isa.FsubD:
+			cpu.F[instr.Rd] = cpu.F[instr.Rs1] - cpu.F[instr.Rs2]
+
+		case isa.FmulD:
+			cpu.F[instr.Rd] = cpu.F[instr.Rs1] * cpu.F[instr.Rs2]
+
+		case isa.FeqD:
+			if cpu.F[instr.Rs1] == cpu.F[instr.Rs2] {
+				cpu.X[instr.Rd] = 1
+			} else {
+				cpu.X[instr.Rd] = 0
+			}
+
+		case isa.FmvDX:
+			cpu.F[instr.Rd] = math.Float64frombits(cpu.X[instr.Rs1])
+
+		case isa.FmvWX:
+			v := uint64(uint32(cpu.X[instr.Rs1]))
+			v |= uint64(0xffffffff) << 32
+			cpu.F[instr.Rd] = math.Float64frombits(v)
+
+		case isa.FmvXD:
+			cpu.X[instr.Rd] = math.Float64bits(cpu.F[instr.Rs1])
+
+		case isa.FmaddD:
+			// Imm is Rs3
+			cpu.F[instr.Rd] = cpu.F[instr.Rs1]*cpu.F[instr.Rs2] +
+				cpu.F[instr.Imm]
+
+		case isa.FcvtDL:
+			// XXX The rounding mode (RM) is specified in the fcsr
+			// (Floating-point Control and Status Register)
+			cpu.F[instr.Rd] = float64(cpu.X[instr.Rs1])
+
+		case isa.FcvtWD:
+			// XXX If the floating-point value is too large to fit
+			// into a 32-bit signed integer the instruction returns
+			// the largest possible 32-bit integer and sets an
+			// "invalid operation" flag in the fcsr (Floating-point
+			// Control and Status Register).
+			cpu.X[instr.Rd] = uint64(int64(int32(cpu.F[instr.Rs1])))
+
+		case isa.FcvtLD:
+			// XXX If the value is out of range, fcsr.fflags.NV is set
+			// to 1
+			cpu.X[instr.Rd] = uint64(int64(cpu.F[instr.Rs1]))
 
 		default:
 			return cpu.Errorf("Instruction %v[0x%x] not implemented yet",
