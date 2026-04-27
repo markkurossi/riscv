@@ -849,12 +849,38 @@ func Decode(data []byte) (Instr, int, error) {
 					funct7, funct3, raw)
 			}
 
+		case 0b01000:
+			switch funct3 {
+			case 2:
+				instr.Op = AmoorW
+			case 3:
+				instr.Op = AmoorD
+			default:
+				return instr, 0, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
+					funct7, funct3, raw)
+			}
+
+		case 0b01100:
+			switch funct3 {
+			case 2:
+				instr.Op = AmoandW
+			case 3:
+				instr.Op = AmoandD
+			default:
+				return instr, 0, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
+					funct7, funct3, raw)
+			}
+
 		default:
 			return instr, 0, fmt.Errorf("AMO/%05b: raw=%08x", funct5, raw)
 		}
 
 	case GroupLOADFP:
 		switch funct3 {
+		case 0b010:
+			instr.Imm = int32(raw>>20) & 0b1111_11111111
+			instr.Op = Flw
+
 		case 0b011:
 			instr.Imm = int32(raw>>20) & 0b1111_11111111
 			instr.Op = Fld
@@ -873,6 +899,69 @@ func Decode(data []byte) (Instr, int, error) {
 			instr.Op = Fsd
 		default:
 			return instr, 0, fmt.Errorf("STORE-FP: funct3=%03b", funct3)
+		}
+
+	case GroupOPFP:
+		switch funct7 {
+		case 0b0000001:
+			instr.Op = FaddD
+		case 0b0000101:
+			instr.Op = FsubD
+		case 0b0001001:
+			instr.Op = FmulD
+		case 0b1010000:
+			instr.Op = FeqS
+		case 0b1010001:
+			instr.Op = FeqD
+
+		case 0b1100001:
+			funct5 := instr.Raw >> 20 & 0b11111
+			switch funct5 {
+			case 0b00000:
+				instr.Op = FcvtWD
+			case 0b00010:
+				instr.Op = FcvtLD
+			default:
+				return instr, 0, fmt.Errorf("OP-FP: funct7=%07b, funct5=%05b",
+					funct7, funct5)
+			}
+
+		case 0b1101001:
+			funct5 := instr.Raw >> 20 & 0b11111
+			switch funct5 {
+			case 0b00010:
+				instr.Op = FcvtDL
+			default:
+				return instr, 0, fmt.Errorf("OP-FP: funct7=%07b, funct5=%05b",
+					funct7, funct5)
+			}
+
+		case 0b1110001:
+			switch funct3 {
+			case 0b000:
+				instr.Op = FmvXD
+			default:
+				return instr, 0, fmt.Errorf("OP-FP: funct7=%07b, funct3=%03b",
+					funct7, funct3)
+			}
+
+		case 0b1111000:
+			instr.Op = FmvWX
+		case 0b1111001:
+			instr.Op = FmvDX
+		default:
+			return instr, 0, fmt.Errorf("OP-FP: funct7=%07b", funct7)
+		}
+
+	case GroupMADD:
+		instr.Imm = int32(funct7 >> 2) // rs3
+		switch funct7 & 0b11 {
+		case 0b00:
+			instr.Op = FmaddS
+		case 0b01:
+			instr.Op = FmaddD
+		default:
+			return instr, 0, fmt.Errorf("MADD: funct2=%02b", funct7&0b11)
 		}
 
 	default:

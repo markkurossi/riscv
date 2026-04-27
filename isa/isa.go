@@ -301,6 +301,10 @@ const (
 	FclassS
 	FclassD
 
+	// Floating-point Fused Multiply-Add
+	FmaddS
+	FmaddD
+
 	// Zba & Zbb Bit-Manipulation Extensions.
 	AddUw
 	Sh1addUw
@@ -767,6 +771,12 @@ var operands = map[Op]OpInfo{
 	},
 	FclassD: OpInfo{
 		Name: "fclass.d",
+	},
+	FmaddS: OpInfo{
+		Name: "fmadd.s",
+	},
+	FmaddD: OpInfo{
+		Name: "fmadd.d",
 	},
 	AddUw: OpInfo{
 		Name: "add.uw",
