@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/markkurossi/riscv/hw"
 	"github.com/markkurossi/riscv/isa"
@@ -144,7 +145,7 @@ var SyscallInfo = map[uint64]SyscallI{
 	110: {0, "", "timer_settime"},
 	111: {0, "", "timer_delete"},
 	112: {0, "", "clock_settime"},
-	113: {0, "", "clock_gettime"},
+	113: {2, "up", "clock_gettime"},
 	114: {0, "", "clock_getres"},
 	115: {0, "", "clock_nanosleep"},
 	116: {0, "", "syslog"},
@@ -154,7 +155,7 @@ var SyscallInfo = map[uint64]SyscallI{
 	120: {0, "", "sched_getscheduler"},
 	121: {0, "", "sched_getparam"},
 	122: {0, "", "sched_setaffinity"},
-	123: {0, "", "sched_getaffinity"},
+	123: {3, "uup", "sched_getaffinity"},
 	124: {0, "", "sched_yield"},
 	125: {0, "", "sched_get_priority_max"},
 	126: {0, "", "sched_get_priority_min"},
@@ -166,7 +167,7 @@ var SyscallInfo = map[uint64]SyscallI{
 	132: {0, "", "sigaltstack"},
 	133: {0, "", "rt_sigsuspend"},
 	134: {0, "", "rt_sigaction"},
-	135: {0, "", "rt_sigprocmask"},
+	135: {3, "ipp", "rt_sigprocmask"},
 	136: {0, "", "rt_sigpending"},
 	137: {0, "", "rt_sigtimedwait"},
 	138: {0, "", "rt_sigqueueinfo"},
@@ -251,7 +252,7 @@ var SyscallInfo = map[uint64]SyscallI{
 	217: {0, "", "add_key"},
 	218: {0, "", "request_key"},
 	219: {0, "", "keyctl"},
-	220: {5, "", "clone"},
+	220: {5, "upppp", "clone"},
 	221: {3, "", "execve"},
 	222: {6, "piiiii", "mmap"},
 	223: {0, "", "fadvise64"},
@@ -264,7 +265,7 @@ var SyscallInfo = map[uint64]SyscallI{
 	230: {0, "", "mlockall"},
 	231: {0, "", "munlockall"},
 	232: {0, "", "mincore"},
-	233: {0, "", "madvise"},
+	233: {3, "pui", "madvise"},
 	234: {0, "", "remap_file_pages"},
 	235: {0, "", "mbind"},
 	236: {0, "", "get_mempolicy"},
@@ -289,7 +290,7 @@ var SyscallInfo = map[uint64]SyscallI{
 	255: {0, "", "process_vm_writev"},
 	256: {0, "", "kcmp"},
 	257: {0, "", "finit_module"},
-	258: {0, "", "sched_setattr"},
+	258: {3, "upu", "sched_setattr"},
 	259: {0, "", "sched_getattr"},
 	260: {0, "", "renameat2"},
 	261: {4, "iipp", "prlimit64"},
@@ -436,43 +437,36 @@ func syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		return uint64(n), nil
 
 	case 64: // write
-		fd := a0
 		addr := a1
 		length := a2
 
-		_ = fd
+		f := proc.GetFD(int(a0))
+		// XXX write to 0 should fail
+		if f == nil || a0 == 0 {
+			return Error(ErrnoEBADF), nil
+		}
 
-		var i uint64
+		var i, wrote uint64
 
 		for i = 0; i < length; i++ {
 			b, err := cpu.Mem.Load8(addr + i)
 			if err != nil {
 				return Error(ErrnoEFAULT), nil
 			}
-			os.Stdout.Write([]byte{b})
+			n, err := f.Write([]byte{b})
 			if err != nil {
-				break
+				return Error(ErrnoEIO), nil
 			}
+			wrote += uint64(n)
 		}
-		if i < length {
-			return Error(ErrnoEIO), nil
-		}
-		return length, nil
+		return wrote, nil
 
 	case 66: // writev
-		fd := int(a0)
 		iov := a1
 		iovcnt := int(a2)
 
-		var f *os.File
-		switch fd {
-		case 0:
-			f = os.Stdin
-		case 1:
-			f = os.Stdout
-		case 2:
-			f = os.Stderr
-		default:
+		f := proc.GetFD(int(a0))
+		if f == nil {
 			return Error(ErrnoEBADF), nil
 		}
 
@@ -637,14 +631,14 @@ func syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 			opName = "FUTEX_LOCK_PI2"
 		}
 
-		fmt.Printf("    => futex(%x,%v[%v],%v)\n", addr, op, opName, val)
+		ktracef(proc, "    => futex(%x,%v[%v],%v)\n", addr, op, opName, val)
 		switch op & 127 {
 		case 0: // FUTEX_WAIT
 			v, err := cpu.Mem.Load32(addr)
 			if err != nil {
 				return Error(ErrnoEFAULT), nil
 			}
-			fmt.Printf("    => val=%v, wait=%v\n", v, val)
+			ktracef(proc, "    => val=%v, wait=%v\n", v, val)
 			if uint64(v) != val {
 				return Error(ErrnoEAGAIN), nil
 			}
@@ -667,6 +661,19 @@ func syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		}
 
 	case 99: // set_robust_list
+
+	case 113: // clock_gettime
+		addr := a1
+		now := time.Now()
+
+		var buf [16]byte
+		bo.PutUint64(buf[0:], uint64(now.Unix()))
+		bo.PutUint64(buf[8:], uint64(now.UnixNano()%1000000000))
+
+		if err := cpu.Mem.StoreData(addr, buf[:]); err != nil {
+			return Error(ErrnoEFAULT), nil
+		}
+		return 0, nil
 
 	case 134: // rt_sigaction
 		// Accept signal handler registrations but don't store them;
@@ -714,6 +721,10 @@ func syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 	case 215: // munmap
 		// XXX check if the region was mmap'ed
 
+	case 220: // clone
+		// XXX clone, emulate parent.
+		return 42, nil
+
 	case 222: // mmap
 		length := a1
 		prot := a2
@@ -721,36 +732,54 @@ func syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 
 		_ = flags
 
+		var addr uint64
+
 		if a0 == 0 {
 			// Choose address from the mmap region
-			addr := cpu.Mem.MmapEnd
-
-			// Align size to page size.
-			length = (length + 4095) &^ 4095
-
-			// Create the segment
-			seg := &hw.Segment{
-				Start: addr,
-				End:   addr + length,
-				Data:  make([]byte, length),
-				Read:  (prot & 1) != 0, // PROT_READ
-				Write: (prot & 2) != 0, // PROT_WRITE
-			}
-			cpu.Mem.Add(seg)
-
-			// Update pointer for next call.
-			cpu.Mem.MmapEnd += length
-
-			fmt.Printf("    => %x:%x\n", addr, addr+length)
-
-			// Return the allocated address in A0
-			return addr, nil
+			addr = cpu.Mem.MmapEnd
 		} else {
-			if true {
-				return 0, fmt.Errorf("mmap: unsupported flow")
-			}
-			return Error(ErrnoEINVAL), nil
+			// XXX
+			ktracef(proc, "     ?? using provided address %x\n", a0)
+			addr = a0
 		}
+		var ps []string
+		if prot&ProtRead != 0 {
+			ps = append(ps, "read")
+		}
+		if prot&ProtWrite != 0 {
+			ps = append(ps, "write")
+		}
+		if prot&ProtExec != 0 {
+			ps = append(ps, "exec")
+		}
+		ktracef(proc, "     prot=%v\n", ps)
+
+		if prot == ProtNone {
+			ktracef(proc, "     PROT_NONE: pc=%x\n", proc.CPU.PC)
+			// XXX force RW
+			prot = ProtRead | ProtWrite
+		}
+
+		// Align size to page size.
+		length = (length + 4095) &^ 4095
+
+		// Create the segment
+		seg := &hw.Segment{
+			Start: addr,
+			End:   addr + length,
+			Data:  make([]byte, length),
+			Read:  (prot & 1) != 0, // PROT_READ
+			Write: (prot & 2) != 0, // PROT_WRITE
+		}
+		cpu.Mem.Add(seg)
+
+		// Update pointer for next call.
+		cpu.Mem.MmapEnd += length
+
+		ktracef(proc, "     => %x:%x\n", addr, addr+length)
+
+		// Return the allocated address in A0
+		return addr, nil
 
 	case 226: // mprotec
 
@@ -816,6 +845,13 @@ func ktrace(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) {
 		}
 		fmt.Println(")")
 	}
+}
+
+func ktracef(proc *posix.Process, format string, args ...interface{}) {
+	if !proc.Ktrace {
+		return
+	}
+	fmt.Printf(format, args...)
 }
 
 func ktraceResult(proc *posix.Process, id, ret uint64, err error) {
