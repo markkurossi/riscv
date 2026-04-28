@@ -45,3 +45,10 @@ sizeof(struct stat)=128
  - st_mtime  : 88
  - st_ctime  : 104
 ```
+
+``` c
+struct timespec {
+    time_t   tv_sec;        /* seconds */
+    long     tv_nsec;       /* nanoseconds */
+};
+```
