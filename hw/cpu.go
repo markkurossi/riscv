@@ -25,6 +25,7 @@ type Syscall func(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (
 	uint64, error)
 
 type CPU struct {
+	PID uint64
 	// Registers x0-x31.
 	X  [32]uint64
 	F  [32]float64
@@ -41,7 +42,7 @@ func (cpu *CPU) Errorf(msg string, args ...interface{}) error {
 	err := fmt.Errorf(msg, args...)
 	fmt.Println(err.Error())
 
-	fmt.Printf("CPU: 0 IC: %v\n", cpu.IC)
+	fmt.Printf("CPU: 0 PID: %v IC: %v\n", cpu.PID, cpu.IC)
 	fmt.Printf("epc : %016x ra : %016x sp : %016x\n",
 		cpu.PC, cpu.X[isa.Ra], cpu.X[isa.Sp])
 	fmt.Printf(" gp : %016x tp : %016x t0 : %016x\n",

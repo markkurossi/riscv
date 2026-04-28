@@ -133,7 +133,7 @@ var SyscallInfo = map[uint64]SyscallI{
 	98:  {6, "pipppp", "futex"},
 	99:  {2, "pi", "set_robust_list"},
 	100: {0, "", "get_robust_list"},
-	101: {2, "", "nanosleep"},
+	101: {2, "pp", "nanosleep"},
 	102: {0, "", "getitimer"},
 	103: {0, "", "setitimer"},
 	104: {0, "", "kexec_load"},
@@ -591,7 +591,7 @@ func syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		os.Exit(int(a0))
 
 	case 96: // set_tid_address
-		return 1000, nil // Caller's tread ID.
+		return 1000, nil // Caller's thread ID.
 
 	case 98: // futex
 		addr := a0
@@ -662,6 +662,25 @@ func syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 
 	case 99: // set_robust_list
 
+	case 101: // nanosleep
+		tvSec, err := cpu.Mem.Load64(a0)
+		if err != nil {
+			return Error(ErrnoEFAULT), nil
+		}
+		tvNsec, err := cpu.Mem.Load64(a0 + 8)
+		if err != nil {
+			return Error(ErrnoEFAULT), nil
+		}
+		t := time.Duration(tvSec) * time.Second
+		t += time.Duration(tvNsec) * time.Nanosecond
+
+		ktracef(proc, "     nanosleep: %v,%v\n", tvSec, tvNsec)
+		time.Sleep(t)
+
+		// XXX handle rem argument.
+
+		return 0, nil
+
 	case 113: // clock_gettime
 		addr := a1
 		now := time.Now()
@@ -722,8 +741,57 @@ func syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		// XXX check if the region was mmap'ed
 
 	case 220: // clone
-		// XXX clone, emulate parent.
-		return 42, nil
+		flags := a0
+
+		// Create child.
+
+		// The CPU updates PC after the instruction completes. The
+		// cloned process start executing with CPU.Run() so we must
+		// increment PC to the next instruction. The ecall instruction
+		// is always 32 bits so the +4 below works.
+		child := proc.Kernel.NewProcess(proc)
+		child.CPU = &hw.CPU{
+			PID:     child.PID,
+			PC:      proc.CPU.PC + 4,
+			Mem:     proc.CPU.Mem,
+			Syscall: proc.CPU.Syscall,
+		}
+
+		// Copy registers.
+		copy(child.CPU.X[:], proc.CPU.X[:])
+		copy(child.CPU.F[:], proc.CPU.F[:])
+
+		// Init child.
+		child.CPU.X[isa.A0] = 0
+		child.CPU.X[isa.Sp] = a1
+
+		if flags&CloneParentSettid != 0 {
+			return 0, cpu.Errorf("clone: PARENT_SETTID")
+		}
+		if flags&CloneSettls != 0 {
+			return 0, cpu.Errorf("clone: SETTLS")
+		}
+		if flags&CloneChildSettid != 0 {
+			return 0, cpu.Errorf("clone: CHILD_SETTID")
+		}
+		ktracef(child, "clone: ret=%v, PC=%x\n",
+			child.CPU.X[isa.A0], child.CPU.PC)
+		go func(c *posix.Process) {
+			err := c.CPU.Run()
+			if err != nil {
+				fmt.Printf("process %v %v: %v\n", c.PID, c.TGID, err)
+			} else {
+				fmt.Printf("process %v %v: exit\n", c.PID, c.TGID)
+			}
+		}(child)
+
+		// Parent flow.
+
+		// XXX flags.
+
+		ktracef(proc, "clone: ret=%v, PC=%x\n", child.PID, proc.CPU.PC)
+
+		return child.PID, nil
 
 	case 222: // mmap
 		length := a1
@@ -798,18 +866,22 @@ func syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		return len, nil
 
 	default:
-		if proc.Ktrace {
-			fmt.Printf("RET  skipping syscall %v\n", id)
-		}
+		ktracef(proc, "RET  skipping syscall %v\n", id)
 	}
 
 	return 0, nil
+}
+
+func ktraceHeader(proc *posix.Process) {
+	fmt.Printf("%5d %5d ", proc.PID, proc.TGID)
 }
 
 func ktrace(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) {
 	if !proc.Ktrace {
 		return
 	}
+
+	ktraceHeader(proc)
 
 	info, ok := SyscallInfo[id]
 	if !ok {
@@ -851,6 +923,7 @@ func ktracef(proc *posix.Process, format string, args ...interface{}) {
 	if !proc.Ktrace {
 		return
 	}
+	ktraceHeader(proc)
 	fmt.Printf(format, args...)
 }
 
@@ -858,6 +931,8 @@ func ktraceResult(proc *posix.Process, id, ret uint64, err error) {
 	if !proc.Ktrace {
 		return
 	}
+
+	ktraceHeader(proc)
 
 	var name string
 	info, ok := SyscallInfo[id]

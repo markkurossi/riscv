@@ -13,7 +13,32 @@ import (
 	"github.com/markkurossi/riscv/hw"
 )
 
+type Kernel struct {
+	NextPID uint64
+	Ktrace  bool
+}
+
+func (kern *Kernel) NewProcess(tg *Process) *Process {
+	proc := &Process{
+		Kernel: kern,
+		PID:    kern.NextPID,
+		Ktrace: kern.Ktrace,
+	}
+	kern.NextPID++
+
+	if tg != nil {
+		proc.TGID = tg.TGID
+	} else {
+		proc.TGID = proc.PID
+	}
+
+	return proc
+}
+
 type Process struct {
+	Kernel *Kernel
+	PID    uint64
+	TGID   uint64
 	CPU    *hw.CPU
 	FDs    []*os.File
 	Ktrace bool

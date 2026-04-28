@@ -33,6 +33,7 @@ type Emulator struct {
 	Prog   *fileInfo
 	Interp *fileInfo
 
+	Kernel  *posix.Kernel
 	Process *posix.Process
 }
 
@@ -56,6 +57,10 @@ func New(ktrace bool) *Emulator {
 		Mem:         mem,
 		ProgBase:    0x400000,
 		ProgBaseEnd: 0x400000,
+
+		Kernel: &posix.Kernel{
+			Ktrace: ktrace,
+		},
 	}
 
 	cpu.Syscall = emu.Syscall
@@ -379,15 +384,14 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 		emu.CPU.X[isa.A0+isa.Register(i)] = 0
 	}
 
-	emu.Process = &posix.Process{
-		Ktrace: emu.Ktrace,
-		CPU:    emu.CPU,
-		FDs: []*os.File{
-			os.Stdin,
-			os.Stdout,
-			os.Stderr,
-		},
+	emu.Process = emu.Kernel.NewProcess(nil)
+	emu.Process.CPU = emu.CPU
+	emu.Process.FDs = []*os.File{
+		os.Stdin,
+		os.Stdout,
+		os.Stderr,
 	}
+	emu.Process.CPU.PID = emu.Process.PID
 
 	return emu.CPU.Run()
 }
