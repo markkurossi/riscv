@@ -363,6 +363,13 @@ func (cpu *CPU) Run() error {
 			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) <<
 				instr.Imm))
 
+		case isa.Slt:
+			if int64(cpu.X[instr.Rs1]) < int64(cpu.X[instr.Rs2]) {
+				cpu.X[instr.Rd] = 1
+			} else {
+				cpu.X[instr.Rd] = 0
+			}
+
 		case isa.Slti:
 			if int64(cpu.X[instr.Rs1]) < int64(instr.Imm) {
 				cpu.X[instr.Rd] = 1
