@@ -11,3 +11,6 @@ main-riscv64-linux: main.c
 
 types-riscv64-linux: types.c
 	$(RISCV64_LINUX_CC) -Wall -static -o $@ $+
+
+pthread-riscv64-linux: pthread.c
+	$(RISCV64_LINUX_CC) -Wall -static -o $@ $+
