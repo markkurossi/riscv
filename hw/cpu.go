@@ -73,7 +73,7 @@ func (cpu *CPU) Run() error {
 	for {
 		cpu.X[isa.Zero] = 0
 
-		seg, ofs, err := cpu.Mem.Map(cpu.PC, 4)
+		seg, ofs, err := cpu.Mem.Map(cpu.PC, AccessExec, 4)
 		if err != nil {
 			return cpu.Errorf("Unable to handle page fault for address: 0x%08x",
 				cpu.PC)

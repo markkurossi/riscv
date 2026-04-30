@@ -169,6 +169,9 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 			end := vaddr + prog.Memsz + 4095
 			end &= ^uint64(0xfff)
 
+			headPad := vaddr & 0xfff
+			vaddr &= ^uint64(0xfff)
+
 			fmt.Printf(" @ Vaddr: %x-%x\n", vaddr, end)
 
 			if end > emu.ProgBaseEnd {
@@ -179,7 +182,7 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 			}
 
 			data := make([]byte, end-vaddr)
-			_, err = prog.ReadAt(data[:prog.Filesz], 0)
+			_, err = prog.ReadAt(data[headPad:headPad+prog.Filesz], 0)
 			if err != nil {
 				return nil, err
 			}
@@ -367,7 +370,7 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 		return err
 	}
 
-	seg, ofs, err := emu.Mem.Map(emu.CPU.X[isa.Sp], 1)
+	seg, ofs, err := emu.Mem.Map(emu.CPU.X[isa.Sp], hw.AccessWrite, 1)
 	if err != nil {
 		return err
 	}

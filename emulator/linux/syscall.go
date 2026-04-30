@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/markkurossi/riscv/hw"
@@ -258,7 +259,7 @@ var SyscallInfo = map[uint64]SyscallI{
 	223: {0, "", "fadvise64"},
 	224: {0, "", "swapon"},
 	225: {0, "", "swapoff"},
-	226: {3, "", "mprotect"},
+	226: {3, "pui", "mprotect"},
 	227: {3, "", "msync"},
 	228: {0, "", "mlock"},
 	229: {0, "", "munlock"},
@@ -483,7 +484,7 @@ func syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 			}
 			iov += 16
 
-			seg, ofs, err := cpu.Mem.Map(base, int(l))
+			seg, ofs, err := cpu.Mem.Map(base, hw.AccessRead, int(l))
 			if err != nil {
 				return Error(ErrnoEFAULT), nil
 			}
@@ -655,9 +656,9 @@ func syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		default:
 			// Return 0 for all other ops rather than EINVAL, which
 			// glibc treats as fatal during lock initialization.
-			fmt.Printf("    => unimplemented futex op %v, returning 0\n",
+			fmt.Printf("    => unimplemented futex op %v, returning EINVAL\n",
 				op&127)
-			return 0, nil
+			return Error(ErrnoEINVAL), cpu.Errorf("futex op %v", op)
 		}
 
 	case 99: // set_robust_list
@@ -710,7 +711,7 @@ func syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 			brk := (a0 + 4095) & ^uint64(0xfff)
 
 			// Get current segment.
-			seg, _, err := cpu.Mem.Map(cpu.Mem.HeapStart, 8)
+			seg, _, err := cpu.Mem.Map(cpu.Mem.HeapStart, hw.AccessNone, 8)
 			if err != nil {
 				// Create memory.
 				seg = &hw.Segment{
@@ -820,13 +821,46 @@ func syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		if prot&ProtExec != 0 {
 			ps = append(ps, "exec")
 		}
-		ktracef(proc, "     prot=%v\n", ps)
-
-		if prot == ProtNone {
-			ktracef(proc, "     PROT_NONE: pc=%x\n", proc.CPU.PC)
-			// XXX force RW
-			prot = ProtRead | ProtWrite
+		var fs []string
+		if flags&MapFixed != 0 {
+			fs = append(fs, "FIXED")
 		}
+		if flags&MapNoreserve != 0 {
+			fs = append(fs, "NORESERVE")
+		}
+		if flags&MapAnonymous != 0 {
+			fs = append(fs, "ANONYMOUS")
+		}
+		if flags&MapGrowsdown != 0 {
+			fs = append(fs, "GROWSDOWN")
+		}
+		if flags&MapDenywrite != 0 {
+			fs = append(fs, "DENYWRITE")
+		}
+		if flags&MapExecutable != 0 {
+			fs = append(fs, "EXECUTABLE")
+		}
+		if flags&MapLocked != 0 {
+			fs = append(fs, "LOCKED")
+		}
+		if flags&MapPopulate != 0 {
+			fs = append(fs, "POPULATE")
+		}
+		if flags&MapNonblock != 0 {
+			fs = append(fs, "NONBLOCK")
+		}
+		if flags&MapStack != 0 {
+			fs = append(fs, "STACK")
+		}
+		if flags&MapHugetlb != 0 {
+			fs = append(fs, "HUGETLB")
+		}
+		if flags&MapFixedNoreplace != 0 {
+			fs = append(fs, "FIXED_NOREPLACE")
+		}
+
+		ktracef(proc, "     prot=%v, flags=%v\n",
+			strings.Join(ps, ","), strings.Join(fs, ","))
 
 		// Align size to page size.
 		length = (length + 4095) &^ 4095
@@ -850,6 +884,35 @@ func syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		return addr, nil
 
 	case 226: // mprotec
+		addr := a0
+		size := a1
+		prot := int(a2)
+
+		var p []string
+		if prot&ProtRead != 0 {
+			p = append(p, "R")
+		}
+		if prot&ProtWrite != 0 {
+			p = append(p, "W")
+		}
+		if prot&ProtExec != 0 {
+			p = append(p, "X")
+		}
+		ktracef(proc, "mprotect: %x:%x: %v\n", addr, addr+size,
+			strings.Join(p, ","))
+		seg, _, err := cpu.Mem.Map(addr, hw.AccessNone, int(size))
+		if err != nil {
+			fmt.Printf("EFAULT %x:%x\n", addr, addr+size)
+			fmt.Printf("       %x:%x\n", addr&^0xfff, (addr+size)&^0xfff)
+			for i, seg := range cpu.Mem.Segments {
+				fmt.Printf(" - %d: %v (%x:%x)\n", i, seg,
+					seg.Start&^0xfff, seg.End&^0xfff)
+			}
+			return Error(ErrnoEFAULT), nil
+		}
+		seg.Read = prot&ProtRead != 0
+		seg.Write = prot&ProtWrite != 0
+		seg.Exec = prot&ProtExec != 0
 
 	case 261: // prlimit64
 

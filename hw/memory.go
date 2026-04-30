@@ -8,6 +8,16 @@ package hw
 
 import (
 	"fmt"
+	"strings"
+)
+
+const (
+	AccessNone = 0
+	AccessRead = 1 << iota
+	AccessWrite
+	AccessExec
+
+	checkAccess = false
 )
 
 type Memory struct {
@@ -28,13 +38,50 @@ type Segment struct {
 	Exec  bool
 }
 
+func (seg *Segment) String() string {
+	var flags []string
+
+	if seg.Read {
+		flags = append(flags, "R")
+	}
+	if seg.Write {
+		flags = append(flags, "W")
+	}
+	if seg.Exec {
+		flags = append(flags, "X")
+	}
+
+	return fmt.Sprintf("Segment %x:%x [%v]",
+		seg.Start, seg.End, strings.Join(flags, ""))
+}
+
 func (mem *Memory) Add(seg *Segment) {
+	if seg.Start&0xfff != 0 {
+		panic(fmt.Sprintf("segment start: %x\n", seg.Start))
+	}
+
+	for _, s := range mem.Segments {
+		if seg.Start < s.End && seg.End > s.Start {
+			fmt.Printf("Memory.Add: %v overlaps %v\n", seg, s)
+		}
+	}
 	mem.Segments = append(mem.Segments, seg)
 }
 
-func (mem *Memory) Map(addr uint64, size int) (*Segment, uint64, error) {
+func (mem *Memory) Map(addr uint64, mode, size int) (*Segment, uint64, error) {
 	for _, seg := range mem.Segments {
 		if addr >= seg.Start && seg.End-uint64(size) >= addr {
+			if checkAccess {
+				if mode&AccessRead != 0 && !seg.Read {
+					return nil, 0, fmt.Errorf("address %x not readable", addr)
+				}
+				if mode&AccessWrite != 0 && !seg.Write {
+					return nil, 0, fmt.Errorf("address %x not writable", addr)
+				}
+				if mode&AccessExec != 0 && !seg.Exec {
+					return nil, 0, fmt.Errorf("address %x not executable", addr)
+				}
+			}
 			return seg, addr - seg.Start, nil
 		}
 	}
@@ -42,57 +89,41 @@ func (mem *Memory) Map(addr uint64, size int) (*Segment, uint64, error) {
 }
 
 func (mem *Memory) Load8(addr uint64) (uint8, error) {
-	seg, ofs, err := mem.Map(addr, 1)
+	seg, ofs, err := mem.Map(addr, AccessRead, 1)
 	if err != nil {
 		return 0, err
-	}
-	if !seg.Read {
-		return 0, fmt.Errorf("address %x not readable", addr)
 	}
 	return seg.Data[ofs], nil
 }
 
 func (mem *Memory) Load16(addr uint64) (uint16, error) {
-	seg, ofs, err := mem.Map(addr, 2)
+	seg, ofs, err := mem.Map(addr, AccessRead, 2)
 	if err != nil {
 		return 0, err
-	}
-	if !seg.Read {
-		return 0, fmt.Errorf("address %x not readable", addr)
 	}
 	return bo.Uint16(seg.Data[ofs:]), nil
 }
 
 func (mem *Memory) Load32(addr uint64) (uint32, error) {
-	seg, ofs, err := mem.Map(addr, 4)
+	seg, ofs, err := mem.Map(addr, AccessRead, 4)
 	if err != nil {
 		return 0, err
-	}
-	if !seg.Read {
-		return 0, fmt.Errorf("address %x not readable", addr)
 	}
 	return bo.Uint32(seg.Data[ofs:]), nil
 }
 
 func (mem *Memory) Load64(addr uint64) (uint64, error) {
-	seg, ofs, err := mem.Map(addr, 8)
+	seg, ofs, err := mem.Map(addr, AccessRead, 8)
 	if err != nil {
 		return 0, err
-	}
-	if !seg.Read {
-		return 0, fmt.Errorf("address %x not readable", addr)
 	}
 	return bo.Uint64(seg.Data[ofs:]), nil
 }
 
 func (mem *Memory) LoadString(addr uint64) (string, error) {
-	seg, ofs, err := mem.Map(addr, 1)
+	seg, ofs, err := mem.Map(addr, AccessRead, 1)
 	if err != nil {
 		return "", err
-	}
-	// XXX move checks to Map
-	if !seg.Read {
-		return "", fmt.Errorf("address %x not readable", addr)
 	}
 	// XXX paged data.
 	var end int
@@ -103,12 +134,9 @@ func (mem *Memory) LoadString(addr uint64) (string, error) {
 }
 
 func (mem *Memory) Store8(addr, val uint64) error {
-	seg, ofs, err := mem.Map(addr, 1)
+	seg, ofs, err := mem.Map(addr, AccessWrite, 1)
 	if err != nil {
 		return err
-	}
-	if !seg.Write {
-		return fmt.Errorf("address %x not writable", addr)
 	}
 	seg.Data[ofs] = uint8(val)
 
@@ -116,12 +144,9 @@ func (mem *Memory) Store8(addr, val uint64) error {
 }
 
 func (mem *Memory) Store16(addr, val uint64) error {
-	seg, ofs, err := mem.Map(addr, 2)
+	seg, ofs, err := mem.Map(addr, AccessWrite, 2)
 	if err != nil {
 		return err
-	}
-	if !seg.Write {
-		return fmt.Errorf("address %x not writable", addr)
 	}
 	bo.PutUint16(seg.Data[ofs:], uint16(val))
 
@@ -129,12 +154,9 @@ func (mem *Memory) Store16(addr, val uint64) error {
 }
 
 func (mem *Memory) Store32(addr, val uint64) error {
-	seg, ofs, err := mem.Map(addr, 4)
+	seg, ofs, err := mem.Map(addr, AccessWrite, 4)
 	if err != nil {
 		return err
-	}
-	if !seg.Write {
-		return fmt.Errorf("address %x not writable", addr)
 	}
 	bo.PutUint32(seg.Data[ofs:], uint32(val))
 
@@ -142,12 +164,9 @@ func (mem *Memory) Store32(addr, val uint64) error {
 }
 
 func (mem *Memory) Store64(addr, val uint64) error {
-	seg, ofs, err := mem.Map(addr, 8)
+	seg, ofs, err := mem.Map(addr, AccessWrite, 8)
 	if err != nil {
 		return err
-	}
-	if !seg.Write {
-		return fmt.Errorf("address %x not writable", addr)
 	}
 	bo.PutUint64(seg.Data[ofs:], val)
 
@@ -155,12 +174,9 @@ func (mem *Memory) Store64(addr, val uint64) error {
 }
 
 func (mem *Memory) StoreData(addr uint64, data []byte) error {
-	seg, ofs, err := mem.Map(addr, len(data))
+	seg, ofs, err := mem.Map(addr, AccessWrite, len(data))
 	if err != nil {
 		return err
-	}
-	if !seg.Write {
-		return fmt.Errorf("address %x not writable", addr)
 	}
 	copy(seg.Data[ofs:], data)
 
