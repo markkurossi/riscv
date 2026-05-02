@@ -658,7 +658,7 @@ func syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 			// glibc treats as fatal during lock initialization.
 			fmt.Printf("    => unimplemented futex op %v, returning EINVAL\n",
 				op&127)
-			return Error(ErrnoEINVAL), cpu.Errorf("futex op %v", op)
+			return Error(ErrnoEINVAL), fmt.Errorf("futex op %v", op)
 		}
 
 	case 99: // set_robust_list
@@ -767,13 +767,13 @@ func syscall(proc *posix.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		child.CPU.X[isa.Sp] = a1
 
 		if flags&CloneParentSettid != 0 {
-			return 0, cpu.Errorf("clone: PARENT_SETTID")
+			return 0, fmt.Errorf("clone: PARENT_SETTID")
 		}
 		if flags&CloneSettls != 0 {
-			return 0, cpu.Errorf("clone: SETTLS")
+			return 0, fmt.Errorf("clone: SETTLS")
 		}
 		if flags&CloneChildSettid != 0 {
-			return 0, cpu.Errorf("clone: CHILD_SETTID")
+			return 0, fmt.Errorf("clone: CHILD_SETTID")
 		}
 		ktracef(child, "clone: ret=%v, PC=%x\n",
 			child.CPU.X[isa.A0], child.CPU.PC)

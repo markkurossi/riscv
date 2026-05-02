@@ -5,10 +5,12 @@
 //
 
 // Package hw implements the virtual RISC-V hardware.
+// XXX rename to cpu
 package hw
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"math/bits"
@@ -26,63 +28,69 @@ type Syscall func(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (
 
 type CPU struct {
 	PID uint64
-	// Registers x0-x31.
-	X  [32]uint64
-	F  [32]float64
+	X   [32]uint64
+	F   [32]float64
+
+	// Address Translation.
+	Satp Satp
+
+	// Exception PC.
+	Sepc uint64
+
+	// Exception cause.
+	Scause uint64
+
+	// Trap Value - e.g. which virtual address caused page fault.
+	Stval uint64
+
 	PC uint64
 
 	// Instruction count
-	IC uint64
+	Instret uint64
 
-	Mem     *Memory
+	Memory Memory
+	TLB    [4096]TLBEntry
+
+	Mem     *MemoryX
 	Syscall Syscall
 }
 
-func (cpu *CPU) Errorf(msg string, args ...interface{}) error {
-	err := fmt.Errorf(msg, args...)
-	fmt.Println(err.Error())
-
-	fmt.Printf("CPU: 0 PID: %v IC: %v\n", cpu.PID, cpu.IC)
-	fmt.Printf("epc : %016x ra : %016x sp : %016x\n",
-		cpu.PC, cpu.X[isa.Ra], cpu.X[isa.Sp])
-	fmt.Printf(" gp : %016x tp : %016x t0 : %016x\n",
-		cpu.X[isa.Gp], cpu.X[isa.Tp], cpu.X[isa.T0])
-	fmt.Printf(" t1 : %016x t2 : %016x s0 : %016x\n",
-		cpu.X[isa.T1], cpu.X[isa.T2], cpu.X[isa.S0])
-	fmt.Printf(" s1 : %016x a0 : %016x a1 : %016x\n",
-		cpu.X[isa.S1], cpu.X[isa.A0], cpu.X[isa.A1])
-	fmt.Printf(" a2 : %016x a3 : %016x a4 : %016x\n",
-		cpu.X[isa.A2], cpu.X[isa.A3], cpu.X[isa.A4])
-	fmt.Printf(" a5 : %016x a6 : %016x a7 : %016x\n",
-		cpu.X[isa.A5], cpu.X[isa.A6], cpu.X[isa.A7])
-	fmt.Printf(" s2 : %016x s3 : %016x s4 : %016x\n",
-		cpu.X[isa.S2], cpu.X[isa.S3], cpu.X[isa.S4])
-	fmt.Printf(" s5 : %016x s6 : %016x s7 : %016x\n",
-		cpu.X[isa.S5], cpu.X[isa.S6], cpu.X[isa.S7])
-	fmt.Printf(" s8 : %016x s9 : %016x s10: %016x\n",
-		cpu.X[isa.S8], cpu.X[isa.S9], cpu.X[isa.S10])
-	fmt.Printf(" s11: %016x t3 : %016x t4 : %016x\n",
-		cpu.X[isa.S11], cpu.X[isa.T3], cpu.X[isa.T4])
-	fmt.Printf(" t5 : %016x t6 : %016x\n",
-		cpu.X[isa.T5], cpu.X[isa.T6])
-
-	return err
+func (cpu *CPU) Run() error {
+	for {
+		err := cpu.loop()
+		if err != nil {
+			if trap, ok := errors.AsType[*Trap](err); ok {
+				err = cpu.HandleTrap(trap)
+			}
+			if err != nil {
+				fmt.Printf("Unhandled error: %v\n", err)
+				cpu.Dump(cpu.PC)
+				return err
+			}
+			// Exception handled, let's continue
+		}
+	}
 }
 
-func (cpu *CPU) Run() error {
+func (cpu *CPU) loop() error {
 	for {
 		cpu.X[isa.Zero] = 0
 
 		seg, ofs, err := cpu.Mem.Map(cpu.PC, AccessExec, 4)
 		if err != nil {
-			return cpu.Errorf("Unable to handle page fault for address: 0x%08x",
-				cpu.PC)
+			return cpu.Trap(CauseInstPageFault, cpu.PC, err)
 		}
 		instr, size, err := isa.Decode(seg.Data[ofs:])
 		if err != nil {
-			return cpu.Errorf("decode: %w", err)
+			var raw uint64
+			if seg.Data[ofs]&0b11 == 0b11 {
+				raw = uint64(bo.Uint32(seg.Data[ofs:]))
+			} else {
+				raw = uint64(bo.Uint16(seg.Data[ofs:]))
+			}
+			return cpu.Trap(CauseIllegalInstr, raw, err)
 		}
-		cpu.IC++
+		cpu.Instret++
 
 		if false {
 			fmt.Printf("%8x:\t%08x\t%v\n", cpu.PC, instr.Raw, instr)
@@ -447,7 +455,7 @@ func (cpu *CPU) Run() error {
 				// XX check what to do with R[Rs1]
 
 			default:
-				return cpu.Errorf("%s csr=0x%03x", instr.Op, csr)
+				return cpu.Trap(CauseIllegalInstr, cpu.PC, nil)
 			}
 
 			// Atomic (A extension).
@@ -613,7 +621,7 @@ func (cpu *CPU) Run() error {
 			cpu.X[instr.Rd] = uint64(int64(cpu.F[instr.Rs1]))
 
 		default:
-			return cpu.Errorf("Instruction %v[0x%x] not implemented yet",
+			return fmt.Errorf("instruction %v[0x%x] not implemented yet",
 				instr, instr.Raw)
 		}
 		cpu.PC += uint64(size)

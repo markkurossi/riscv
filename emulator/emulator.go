@@ -25,7 +25,7 @@ type Emulator struct {
 	Ktrace  bool
 
 	CPU *hw.CPU
-	Mem *hw.Memory
+	Mem *hw.MemoryX
 
 	ProgBase    uint64
 	ProgBaseEnd uint64
@@ -38,7 +38,7 @@ type Emulator struct {
 }
 
 func New(ktrace bool) *Emulator {
-	mem := new(hw.Memory)
+	mem := new(hw.MemoryX)
 
 	mem.MmapStart = 0x4000000000
 	mem.MmapEnd = mem.MmapStart
