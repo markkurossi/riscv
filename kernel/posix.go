@@ -4,13 +4,13 @@
 // All rights reserved.
 //
 
-// Package posix implements POSIX process abstraction.
-package posix
+// Package kerlen implements the emulator kernel.
+package kernel
 
 import (
 	"os"
 
-	"github.com/markkurossi/riscv/hw"
+	"github.com/markkurossi/riscv/cpu"
 )
 
 type Kernel struct {
@@ -39,7 +39,7 @@ type Process struct {
 	Kernel *Kernel
 	PID    uint64
 	TGID   uint64
-	CPU    *hw.CPU
+	CPU    *cpu.CPU
 	FDs    []*os.File
 	Ktrace bool
 }

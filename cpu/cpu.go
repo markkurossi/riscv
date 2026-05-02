@@ -4,9 +4,8 @@
 // All rights reserved.
 //
 
-// Package hw implements the virtual RISC-V hardware.
-// XXX rename to cpu
-package hw
+// Package cpu implements the virtual RISC-V CPU.
+package cpu
 
 import (
 	"encoding/binary"

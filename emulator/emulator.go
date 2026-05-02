@@ -14,18 +14,18 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/markkurossi/riscv/cpu"
 	"github.com/markkurossi/riscv/emulator/linux"
-	"github.com/markkurossi/riscv/hw"
 	"github.com/markkurossi/riscv/isa"
-	"github.com/markkurossi/riscv/posix"
+	"github.com/markkurossi/riscv/kernel"
 )
 
 type Emulator struct {
 	Verbose bool
 	Ktrace  bool
 
-	CPU *hw.CPU
-	Mem *hw.MemoryX
+	CPU *cpu.CPU
+	Mem *cpu.MemoryX
 
 	ProgBase    uint64
 	ProgBaseEnd uint64
@@ -33,20 +33,20 @@ type Emulator struct {
 	Prog   *fileInfo
 	Interp *fileInfo
 
-	Kernel  *posix.Kernel
-	Process *posix.Process
+	Kernel  *kernel.Kernel
+	Process *kernel.Process
 }
 
 func New(ktrace bool) *Emulator {
-	mem := new(hw.MemoryX)
+	mem := new(cpu.MemoryX)
 
 	mem.MmapStart = 0x4000000000
 	mem.MmapEnd = mem.MmapStart
 
-	stack := hw.NewStack(0x7ffff000, 1<<20)
+	stack := cpu.NewStack(0x7ffff000, 1<<20)
 	mem.Add(stack)
 
-	cpu := &hw.CPU{
+	cpu := &cpu.CPU{
 		Mem: mem,
 	}
 	cpu.X[isa.Sp] = stack.End
@@ -58,7 +58,7 @@ func New(ktrace bool) *Emulator {
 		ProgBase:    0x400000,
 		ProgBaseEnd: 0x400000,
 
-		Kernel: &posix.Kernel{
+		Kernel: &kernel.Kernel{
 			Ktrace: ktrace,
 		},
 	}
@@ -187,7 +187,7 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 				return nil, err
 			}
 
-			seg := &hw.Segment{
+			seg := &cpu.Segment{
 				Start: vaddr,
 				End:   end,
 				Data:  data,
@@ -370,7 +370,7 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 		return err
 	}
 
-	seg, ofs, err := emu.Mem.Map(emu.CPU.X[isa.Sp], hw.AccessWrite, 1)
+	seg, ofs, err := emu.Mem.Map(emu.CPU.X[isa.Sp], cpu.AccessWrite, 1)
 	if err != nil {
 		return err
 	}
@@ -422,7 +422,7 @@ func (emu *Emulator) PushData(data []byte) error {
 	return emu.Mem.StoreData(emu.CPU.X[isa.Sp], data)
 }
 
-func (emu *Emulator) Syscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (
+func (emu *Emulator) Syscall(cpu *cpu.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (
 	uint64, error) {
 
 	return linux.Syscall(emu.Process, id, a0, a1, a2, a3, a4, a5)

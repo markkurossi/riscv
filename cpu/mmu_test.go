@@ -4,7 +4,7 @@
 // All rights reserved.
 //
 
-package hw
+package cpu
 
 import (
 	"errors"
