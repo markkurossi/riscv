@@ -62,6 +62,13 @@ func (vma *VMA) covers(o *VMA) bool {
 	return vma.Start <= o.Start && vma.End >= o.End
 }
 
+func (kern *Kernel) PrintVMA() {
+	fmt.Printf("VMA: kernel=%p\n", kern)
+	for i, vma := range kern.VMA {
+		fmt.Printf(" - %d: %v\n", i, vma)
+	}
+}
+
 func (kern *Kernel) AddVMA(start, end uint64, prot int) error {
 
 	vma := &VMA{
@@ -69,12 +76,9 @@ func (kern *Kernel) AddVMA(start, end uint64, prot int) error {
 		End:   end,
 		Prot:  prot,
 	}
-	fmt.Printf("add : %v\n", vma)
 
 	for i := 0; i < len(kern.VMA); {
 		o := kern.VMA[i]
-
-		fmt.Printf(" - %d: %v\n", i, o)
 
 		if vma.same(o) {
 			// Replace o.
@@ -132,6 +136,7 @@ func (kern *Kernel) AddVMA(start, end uint64, prot int) error {
 			}
 		} else if vma.Start < o.Start {
 			// Insert before o.
+			kern.VMA = append(kern.VMA, nil)
 			copy(kern.VMA[i+1:], kern.VMA[i:])
 			kern.VMA[i] = vma
 			return kern.compactVMA()

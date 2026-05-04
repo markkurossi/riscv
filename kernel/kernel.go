@@ -11,7 +11,11 @@ type Kernel struct {
 	NextPID uint64
 	Ktrace  bool
 
-	VMA []*VMA
+	VMA       []*VMA
+	HeapStart uint64
+	HeapEnd   uint64
+	MmapStart uint64
+	MmapEnd   uint64
 }
 
 func (kern *Kernel) NewProcess(tg *Process) *Process {

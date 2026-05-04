@@ -10,9 +10,23 @@ import (
 	"fmt"
 )
 
+const (
+	AccessNone = 0
+	AccessRead = 1 << iota
+	AccessWrite
+	AccessExec
+
+	checkAccess = false
+)
+
 type Memory interface {
 	AllocPage() (uint64, error)
+	Load(addr uint64, buf []byte) error
+	Load8(addr uint64) (uint8, error)
+	Load16(addr uint64) (uint16, error)
 	Load64(addr uint64) (uint64, error)
+	Store(addr uint64, data []byte) error
+	Store8(addr, val uint64) error
 	Store64(addr, val uint64) error
 }
 
@@ -54,14 +68,14 @@ func (satp Satp) PPN() uint64 {
 type PTE uint64
 
 const (
-	PteV = 1 << iota
-	PteR
-	PteW
-	PteX
-	PteU
-	PteG
-	PteA
-	PteD
+	PteV = 1 << iota // Valid
+	PteR             // Readable
+	PteW             // Writable
+	PteX             // Executable
+	PteU             // User
+	PteG             // Global
+	PteA             // Accessed
+	PteD             // Dirty
 )
 
 func MakePTE(ppn uint64, flags uint64) PTE {
@@ -226,7 +240,10 @@ func (cpu *CPU) MapSv39(root, vaddr uint64, access int) (uint64, error) {
 		pte := PTE(v)
 
 		if !pte.Valid() {
-			return 0, cpu.Trap(CauseLoadAccessFault, pteAddr, nil)
+			// XXX This is also a valid flow for lazy loading,
+			// consider dropping fmt.Errorf
+			return 0, cpu.Trap(CauseLoadAccessFault, vaddr,
+				fmt.Errorf("PTE not valid: %v", pte))
 		}
 		if pte.Leaf() {
 			return cpu.mapLeaf(pte, vaddr, level, access)
@@ -292,17 +309,154 @@ func (cpu *CPU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 	return paddr, nil
 }
 
+func (cpu *CPU) UserUint8(vaddr uint64) (uint8, error) {
+	paddr, err := cpu.Map(vaddr, AccessRead)
+	if err != nil {
+		return 0, err
+	}
+	return cpu.Memory.Load8(paddr)
+}
+
+func (cpu *CPU) UserUint16(vaddr uint64) (uint16, error) {
+	var buf [2]byte
+
+	err := cpu.CopyFromUser(vaddr, buf[:])
+	if err != nil {
+		return 0, err
+	}
+	return bo.Uint16(buf[:]), nil
+}
+
+func (cpu *CPU) UserUint32(vaddr uint64) (uint32, error) {
+	var buf [4]byte
+
+	err := cpu.CopyFromUser(vaddr, buf[:])
+	if err != nil {
+		return 0, err
+	}
+	return bo.Uint32(buf[:]), nil
+}
+
+func (cpu *CPU) UserUint64(vaddr uint64) (uint64, error) {
+	var buf [8]byte
+
+	err := cpu.CopyFromUser(vaddr, buf[:])
+	if err != nil {
+		return 0, err
+	}
+	return bo.Uint64(buf[:]), nil
+}
+
+func (cpu *CPU) UserCString(vaddr uint64) (string, error) {
+	var data []byte
+
+	for {
+		paddr, err := cpu.Map(vaddr, AccessRead)
+		if err != nil {
+			return "", err
+		}
+
+		l := PageSize - paddr%PageSize
+		for i := uint64(0); i < l; i++ {
+			b, err := cpu.Memory.Load8(paddr + i)
+			if err != nil {
+				return "", err
+			}
+			if b == 0 {
+				return string(data), nil
+			}
+			data = append(data, b)
+		}
+
+		vaddr += l
+	}
+}
+
+func (cpu *CPU) CopyFromUser(vaddr uint64, buf []byte) error {
+	for len(buf) > 0 {
+		l := PageSize - vaddr%PageSize
+		if l > uint64(len(buf)) {
+			l = uint64(len(buf))
+		}
+
+		paddr, err := cpu.Map(vaddr, AccessRead)
+		if err != nil {
+			return err
+		}
+		err = cpu.Memory.Load(paddr, buf[:l])
+		if err != nil {
+			return err
+		}
+		buf = buf[l:]
+	}
+	return nil
+}
+
+func (cpu *CPU) PutUserUint8(vaddr, v uint64) error {
+	paddr, err := cpu.Map(vaddr, AccessWrite)
+	if err != nil {
+		return err
+	}
+	return cpu.Memory.Store8(paddr, v)
+}
+
+func (cpu *CPU) PutUserUint16(vaddr, v uint64) error {
+	var buf [2]byte
+
+	bo.PutUint16(buf[:], uint16(v))
+
+	return cpu.CopyToUser(vaddr, buf[:])
+}
+
+func (cpu *CPU) PutUserUint32(vaddr, v uint64) error {
+	var buf [4]byte
+
+	bo.PutUint32(buf[:], uint32(v))
+
+	return cpu.CopyToUser(vaddr, buf[:])
+}
+
+func (cpu *CPU) PutUserUint64(vaddr, v uint64) error {
+	var buf [8]byte
+
+	bo.PutUint64(buf[:], v)
+
+	return cpu.CopyToUser(vaddr, buf[:])
+}
+
+func (cpu *CPU) CopyToUser(vaddr uint64, data []byte) error {
+	for len(data) > 0 {
+		l := PageSize - vaddr%PageSize
+		if l > uint64(len(data)) {
+			l = uint64(len(data))
+		}
+
+		paddr, err := cpu.Map(vaddr, AccessWrite)
+		if err != nil {
+			return nil
+		}
+		err = cpu.Memory.Store(paddr, data[:l])
+		if err != nil {
+			return err
+		}
+		data = data[l:]
+	}
+	return nil
+}
+
 func SetMapSv39(mem Memory, satp Satp, vpage, ppage, flags uint64) error {
 	if satp.Mode() != SatpModeSv39 {
 		return fmt.Errorf("invalid page-table mode: %v", satp.Mode())
 	}
+
+	flags |= PteV
 
 	root := satp.PPN()
 	base := root << 12
 
 	// Walk levels 2-1.
 	for level := 2; level > 0; level-- {
-		idx := vpage >> uint64(9*level)
+		idx := (vpage >> uint64(9*level)) & 0b111111111
 		pteAddr := base + idx*8
 
 		v, err := mem.Load64(pteAddr)

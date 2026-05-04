@@ -9,7 +9,6 @@ package linux
 import (
 	"crypto/rand"
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"os"
@@ -377,7 +376,7 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		_ = mode
 		_ = flags
 
-		pathname, err := proc.CPU.Mem.LoadString(addr)
+		pathname, err := proc.CPU.UserCString(addr)
 		if err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
@@ -399,7 +398,7 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		_ = mode
 		_ = flags
 
-		pathname, err := proc.CPU.Mem.LoadString(addr)
+		pathname, err := proc.CPU.UserCString(addr)
 		if err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
@@ -430,7 +429,7 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		if err != nil {
 			return Error(ErrnoEIO), nil
 		}
-		if err := proc.CPU.Mem.StoreData(addr, buf[:n]); err != nil {
+		if err := proc.CPU.CopyToUser(addr, buf[:n]); err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
 		return uint64(n), nil
@@ -448,7 +447,7 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		var i, wrote uint64
 
 		for i = 0; i < length; i++ {
-			b, err := proc.CPU.Mem.Load8(addr + i)
+			b, err := proc.CPU.UserUint8(addr + i)
 			if err != nil {
 				return Error(ErrnoEFAULT), nil
 			}
@@ -470,33 +469,36 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		}
 
 		var wrote uint64
+		var buf [1024]byte
 
 		for i := 0; i < iovcnt; i++ {
-			base, err := proc.CPU.Mem.Load64(iov)
+			base, err := proc.CPU.UserUint64(iov)
 			if err != nil {
 				return Error(ErrnoEFAULT), nil
 			}
-			l, err := proc.CPU.Mem.Load64(iov + 8)
+			l, err := proc.CPU.UserUint64(iov + 8)
 			if err != nil {
 				return Error(ErrnoEFAULT), nil
 			}
 			iov += 16
 
-			seg, ofs, err := proc.CPU.Mem.Map(base, cpu.AccessRead, int(l))
-			if err != nil {
-				return Error(ErrnoEFAULT), nil
+			for l > 0 {
+				n := l
+				if n > uint64(len(buf)) {
+					n = uint64(len(buf))
+				}
+				err = proc.CPU.CopyFromUser(base, buf[:n])
+				if err != nil {
+					return Error(ErrnoEFAULT), nil
+				}
+				_, err = f.Write(buf[:n])
+				if err != nil {
+					return Error(ErrnoEIO), nil
+				}
+				wrote += uint64(n)
+				l -= n
+				base += n
 			}
-
-			if false {
-				fmt.Printf("writev: iov=%d:\n%s",
-					i, hex.Dump(seg.Data[ofs:ofs+l]))
-			}
-
-			n, err := f.Write(seg.Data[ofs : ofs+l])
-			if err != nil {
-				return 0, err
-			}
-			wrote += uint64(n)
 		}
 		return wrote, nil
 
@@ -577,7 +579,7 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		bo.PutUint64(stat[88:], modTime)  // st_mtime
 		bo.PutUint64(stat[104:], modTime) // st_ctime
 
-		if err := proc.CPU.Mem.StoreData(statAddr, stat); err != nil {
+		if err := proc.CPU.CopyToUser(statAddr, stat); err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
 		return 0, nil
@@ -633,7 +635,7 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		ktracef(proc, "    => futex(%x,%v[%v],%v)\n", addr, op, opName, val)
 		switch op & 127 {
 		case 0: // FUTEX_WAIT
-			v, err := proc.CPU.Mem.Load32(addr)
+			v, err := proc.CPU.UserUint32(addr)
 			if err != nil {
 				return Error(ErrnoEFAULT), nil
 			}
@@ -662,11 +664,11 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 	case 99: // set_robust_list
 
 	case 101: // nanosleep
-		tvSec, err := proc.CPU.Mem.Load64(a0)
+		tvSec, err := proc.CPU.UserUint64(a0)
 		if err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
-		tvNsec, err := proc.CPU.Mem.Load64(a0 + 8)
+		tvNsec, err := proc.CPU.UserUint64(a0 + 8)
 		if err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
@@ -688,7 +690,7 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		bo.PutUint64(buf[0:], uint64(now.Unix()))
 		bo.PutUint64(buf[8:], uint64(now.UnixNano()%1000000000))
 
-		if err := proc.CPU.Mem.StoreData(addr, buf[:]); err != nil {
+		if err := proc.CPU.CopyToUser(addr, buf[:]); err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
 		return 0, nil
@@ -704,38 +706,30 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		return 0, nil
 
 	case 214: // brk
-		if a0 > proc.CPU.Mem.HeapEnd {
+		if a0 > proc.Kernel.HeapEnd {
 			// Compute brk.
 			brk := (a0 + 4095) & ^uint64(0xfff)
 
-			// Get current segment.
-			seg, _, err := proc.CPU.Mem.Map(proc.CPU.Mem.HeapStart,
-				cpu.AccessNone, 8)
-			if err != nil {
-				// Create memory.
-				seg = &cpu.Segment{
-					Start: proc.CPU.Mem.HeapStart,
-					End:   brk,
-					Data:  make([]byte, brk-proc.CPU.Mem.HeapStart),
-					Read:  true,
-					Write: true,
-				}
-				proc.CPU.Mem.Add(seg)
-			} else {
-				// Extend current segment.
-				n := make([]byte, brk-proc.CPU.Mem.HeapStart)
-				copy(n, seg.Data)
-				seg.Data = n
-				seg.End = brk
+			const brkDebug = false
+
+			if brkDebug {
+				fmt.Printf("     brk: => %x - %x\n", proc.Kernel.HeapEnd, brk)
+				proc.Kernel.PrintVMA()
 			}
 
-			proc.CPU.Mem.HeapEnd = brk
+			err := proc.Kernel.AddVMA(proc.Kernel.HeapEnd, brk,
+				cpu.AccessRead|cpu.AccessWrite)
+			if err != nil {
+				return Error(ErrnoENOMEM), nil
+			}
+
+			if brkDebug {
+				proc.Kernel.PrintVMA()
+			}
+
+			proc.Kernel.HeapEnd = brk
 		}
-		if false {
-			fmt.Printf("     brk: => %x - %x\n",
-				proc.CPU.Mem.HeapStart, proc.CPU.Mem.HeapEnd)
-		}
-		return proc.CPU.Mem.HeapEnd, nil
+		return proc.Kernel.HeapEnd, nil
 
 	case 215: // munmap
 		// XXX check if the region was mmap'ed
@@ -753,7 +747,7 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		child.CPU = &cpu.CPU{
 			PID:     child.PID,
 			PC:      proc.CPU.PC + 4,
-			Mem:     proc.CPU.Mem,
+			Memory:  proc.CPU.Memory,
 			Syscall: proc.CPU.Syscall,
 		}
 
@@ -804,21 +798,26 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 
 		if a0 == 0 {
 			// Choose address from the mmap region
-			addr = proc.CPU.Mem.MmapEnd
+			addr = proc.Kernel.MmapEnd
 		} else {
 			// XXX
 			ktracef(proc, "     ?? using provided address %x\n", a0)
 			addr = a0
 		}
 		var ps []string
+		var vmaProt int
+
 		if prot&ProtRead != 0 {
 			ps = append(ps, "read")
+			vmaProt |= cpu.AccessRead
 		}
 		if prot&ProtWrite != 0 {
 			ps = append(ps, "write")
+			vmaProt |= cpu.AccessWrite
 		}
 		if prot&ProtExec != 0 {
 			ps = append(ps, "exec")
+			vmaProt |= cpu.AccessExec
 		}
 		var fs []string
 		if flags&MapFixed != 0 {
@@ -864,18 +863,13 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		// Align size to page size.
 		length = (length + 4095) &^ 4095
 
-		// Create the segment
-		seg := &cpu.Segment{
-			Start: addr,
-			End:   addr + length,
-			Data:  make([]byte, length),
-			Read:  (prot & 1) != 0, // PROT_READ
-			Write: (prot & 2) != 0, // PROT_WRITE
+		err := proc.Kernel.AddVMA(addr, addr+length, vmaProt)
+		if err != nil {
+			return Error(ErrnoENOMEM), nil
 		}
-		proc.CPU.Mem.Add(seg)
 
 		// Update pointer for next call.
-		proc.CPU.Mem.MmapEnd += length
+		proc.Kernel.MmapEnd += length
 
 		ktracef(proc, "     => %x:%x\n", addr, addr+length)
 
@@ -887,31 +881,35 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		size := a1
 		prot := int(a2)
 
+		if addr&0xfff != 0 || size == 0 {
+			return Error(ErrnoEINVAL), nil
+		}
+		// Round size to full pages.
+		size = (size + 4095) & 0xfff
+
 		var p []string
+		var vmaProt int
 		if prot&ProtRead != 0 {
 			p = append(p, "R")
+			vmaProt |= cpu.AccessRead
 		}
 		if prot&ProtWrite != 0 {
 			p = append(p, "W")
+			vmaProt |= cpu.AccessWrite
 		}
 		if prot&ProtExec != 0 {
 			p = append(p, "X")
+			vmaProt |= cpu.AccessExec
 		}
 		ktracef(proc, "mprotect: %x:%x: %v\n", addr, addr+size,
 			strings.Join(p, ","))
-		seg, _, err := proc.CPU.Mem.Map(addr, cpu.AccessNone, int(size))
+
+		err := proc.Kernel.AddVMA(addr, addr+size, vmaProt)
 		if err != nil {
 			fmt.Printf("EFAULT %x:%x\n", addr, addr+size)
-			fmt.Printf("       %x:%x\n", addr&^0xfff, (addr+size)&^0xfff)
-			for i, seg := range proc.CPU.Mem.Segments {
-				fmt.Printf(" - %d: %v (%x:%x)\n", i, seg,
-					seg.Start&^0xfff, seg.End&^0xfff)
-			}
+			proc.Kernel.PrintVMA()
 			return Error(ErrnoEFAULT), nil
 		}
-		seg.Read = prot&ProtRead != 0
-		seg.Write = prot&ProtWrite != 0
-		seg.Exec = prot&ProtExec != 0
 
 	case 261: // prlimit64
 
@@ -922,7 +920,7 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		if _, err := rand.Read(random); err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
-		if err := proc.CPU.Mem.StoreData(addr, random); err != nil {
+		if err := proc.CPU.CopyToUser(addr, random); err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
 		return len, nil

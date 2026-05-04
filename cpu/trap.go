@@ -8,6 +8,8 @@ package cpu
 
 import (
 	"fmt"
+	"os"
+	"runtime/debug"
 
 	"github.com/markkurossi/riscv/isa"
 )
@@ -76,6 +78,12 @@ func (cpu *CPU) Trap(cause, tval uint64, err error) error {
 	cpu.Sepc = cpu.PC
 	cpu.Scause = cause
 	cpu.Stval = tval
+
+	if false {
+		fmt.Printf("Trap: epc=%x, tval=%x, err=%v\n", cpu.PC, tval, err)
+		debug.PrintStack()
+		os.Exit(1)
+	}
 
 	return &Trap{
 		PC:    cpu.PC,

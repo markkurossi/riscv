@@ -19,8 +19,11 @@ func main() {
 	flag.Parse()
 
 	for _, arg := range flag.Args() {
-		emu := emulator.New(*ktrace)
-		err := emu.LoadELF(arg)
+		emu, err := emulator.New(*ktrace)
+		if err != nil {
+			log.Fatalf("failed to create emulator: %v", err)
+		}
+		err = emu.LoadELF(arg)
 		if err != nil {
 			log.Fatalf("failed to load %v: %v", arg, err)
 		}

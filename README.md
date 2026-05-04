@@ -4,6 +4,16 @@ A RISC-V emulator written in Go. The goal is to implement the RV64GC
 (64-bit, general-purpose, compressed) profile, with support for running
 Linux applications and, eventually, the Linux operating system.
 
+## MMU Refactoring
+
+ - [ ] Fix page table MMU code to run the existing samples
+ - [ ] Refactor the whole emulator chain:
+   - [ ] CPU -> Kernel -> Process -> Emulator
+   - [ ] Kernel creates processes 1-n
+   - [ ] Virtual memory handled per process
+   - [ ] CPU has only {Load,Store}Uint{8,16,32,64}()
+   - [ ] Process has {Put,}Uint{8,16,32,64,String,Data}() functions
+
 ## Step 1 - Basics
 
 Run statically and dynamically linked simple C applications. Provide

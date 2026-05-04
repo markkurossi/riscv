@@ -11,15 +11,6 @@ import (
 	"strings"
 )
 
-const (
-	AccessNone = 0
-	AccessRead = 1 << iota
-	AccessWrite
-	AccessExec
-
-	checkAccess = false
-)
-
 type MemoryX struct {
 	Segments  []*Segment
 	HeapStart uint64

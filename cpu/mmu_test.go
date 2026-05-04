@@ -7,55 +7,12 @@
 package cpu
 
 import (
-	"errors"
 	"fmt"
 	"testing"
 )
 
-var (
-	_ Memory = &MemArray{}
-
-	ErrInvalidAddr = errors.New("invalid address")
-	ErrOutOfMemory = errors.New("out of memory")
-)
-
-type MemArray struct {
-	Data     []byte
-	NextPage uint64
-}
-
-func NewMemArray(numPages int) *MemArray {
-	return &MemArray{
-		Data: make([]byte, numPages*PageSize),
-	}
-}
-
-func (mem *MemArray) AllocPage() (uint64, error) {
-	if (mem.NextPage+1)*PageSize > uint64(len(mem.Data)) {
-		return 0, ErrOutOfMemory
-	}
-	mem.NextPage++
-	return mem.NextPage - 1, nil
-}
-
-func (mem *MemArray) Load64(addr uint64) (uint64, error) {
-	if addr+8 > uint64(len(mem.Data)) {
-		return 0, ErrInvalidAddr
-	}
-	return bo.Uint64(mem.Data[addr:]), nil
-}
-
-func (mem *MemArray) Store64(addr, val uint64) error {
-	if addr+8 > uint64(len(mem.Data)) {
-		return ErrInvalidAddr
-	}
-	bo.PutUint64(mem.Data[addr:], val)
-
-	return nil
-}
-
 func makeMem() (Memory, Satp, uint64) {
-	mem := NewMemArray(10)
+	mem := NewArrayMemory(10)
 
 	// Skip 0 page.
 	_, err := mem.AllocPage()
