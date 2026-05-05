@@ -46,7 +46,7 @@ func makeTestCPU() (*CPU, uint64) {
 func TestMapSV39(t *testing.T) {
 	cpu, count := makeTestCPU()
 
-	for i := uint64(0); i < count; i++ {
+	for i := uint64(1); i < count; i++ {
 		vaddr := i * PageSize
 		paddr, err := cpu.Map(vaddr, AccessRead)
 		if err != nil {

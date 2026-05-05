@@ -221,6 +221,7 @@ func (cpu *CPU) Map(vaddr uint64, access int) (uint64, error) {
 		return 0, cpu.Trap(CauseLoadPageFault, vaddr, nil)
 	}
 
+	// XXX this must be by virtual page number (VPN), not by address.
 	tlb := &cpu.TLB[vaddr%uint64(len(cpu.TLB))]
 	if tlb.Vaddr == vaddr {
 		return tlb.Paddr, nil
