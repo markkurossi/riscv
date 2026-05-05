@@ -31,7 +31,7 @@ func TestVMA(t *testing.T) {
 	kern := new(Kernel)
 
 	for idx, test := range vmaTests {
-		err := kern.AddVMA(test.Start, test.End, test.Prot)
+		err := kern.AddVMA(test.Start, test.End, test.Prot, nil, 0)
 		if err != nil {
 			t.Fatalf("VMA %v: failed to add: %v", idx, err)
 		}

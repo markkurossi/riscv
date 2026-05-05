@@ -8,6 +8,7 @@ package kernel
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/markkurossi/riscv/cpu"
 )
@@ -16,7 +17,8 @@ type VMA struct {
 	Start uint64
 	End   uint64
 
-	// XXX source
+	Source *os.File
+	Offset uint64
 
 	Prot int
 }
@@ -93,12 +95,17 @@ func (kern *Kernel) PrintVMA() {
 	}
 }
 
-func (kern *Kernel) AddVMA(start, end uint64, prot int) error {
+func (kern *Kernel) AddVMA(start, end uint64, prot int,
+	source *os.File, offset uint64) error {
 
 	vma := &VMA{
 		Start: start,
 		End:   end,
-		Prot:  prot,
+
+		Source: source,
+		Offset: offset,
+
+		Prot: prot,
 	}
 
 	for i := 0; i < len(kern.VMA); {
@@ -187,12 +194,16 @@ func (kern *Kernel) compactVMA() error {
 			continue
 		}
 
-		// XXX check source.
-		if vma.Start == prev.End && vma.Prot == prev.Prot {
+		if vma.Start == prev.End && vma.Prot == prev.Prot &&
+			vma.Source == prev.Source &&
+			vma.Start-prev.Start == vma.Offset-prev.Offset {
 			// Merge.
 			prev.End = vma.End
 			copy(kern.VMA[i:], kern.VMA[i+1:])
 			kern.VMA = kern.VMA[:len(kern.VMA)-1]
+			if vma.Source != nil {
+				// XXX file refcounts
+			}
 		} else {
 			prev = vma
 			i++

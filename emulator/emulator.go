@@ -70,7 +70,8 @@ func New(ktrace bool) (*Emulator, error) {
 	stackSize := uint64(1024 * 1024)
 	stackBottom := stackTop - stackSize
 
-	err = kernel.AddVMA(stackBottom, stackTop, cpu.AccessRead|cpu.AccessWrite)
+	err = kernel.AddVMA(stackBottom, stackTop, cpu.AccessRead|cpu.AccessWrite,
+		nil, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +253,7 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 				flags |= cpu.PteX
 			}
 
-			emu.Kernel.AddVMA(vaddr, end, prot)
+			emu.Kernel.AddVMA(vaddr, end, prot, nil, 0)
 			emu.Kernel.PrintVMA()
 
 			// Load data into memory.
@@ -484,11 +485,10 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 
 	emu.Process = emu.Kernel.NewProcess(nil)
 	emu.Process.CPU = emu.CPU
-	emu.Process.FDs = []*os.File{
-		os.Stdin,
-		os.Stdout,
-		os.Stderr,
-	}
+	emu.Process.AllocFD(os.Stdin)
+	emu.Process.AllocFD(os.Stdout)
+	emu.Process.AllocFD(os.Stderr)
+
 	emu.Process.CPU.PID = emu.Process.PID
 
 	fmt.Printf("VMA:\n")
@@ -542,6 +542,27 @@ func (emu *Emulator) TrapHandler(acpu *cpu.CPU, trap *cpu.Trap) (bool, error) {
 				}
 
 				vpage := trap.Tval >> 12
+
+				if vma.Source != nil {
+					pageStart := vpage << 12
+					offset := pageStart - vma.Start
+					if false {
+						fmt.Printf("mmap: vaddr=%x, offset=%x, fileOffset=%x\n",
+							trap.Tval, offset, vma.Offset+offset)
+					}
+
+					buf := make([]byte, 4096)
+
+					n, err := vma.Source.ReadAt(buf, int64(vma.Offset+offset))
+					if n == 0 && err != nil {
+						return false, err
+					}
+					err = emu.Memory.Store(page<<12, buf)
+					if err != nil {
+						return false, err
+					}
+				}
+
 				err = cpu.SetMapSv39(emu.Memory, emu.CPU.Satp, vpage, page,
 					vma.PageTableFlags())
 				if err != nil {

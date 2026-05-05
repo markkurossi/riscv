@@ -23,12 +23,14 @@ basic support for simple Go programs.
  - [x] Support for most common 64-bit instructions
  - [x] Run standalone binaries
  - [x] Run statically linked, single-threaded binaries
- - [ ] Run dynamically linked, single-threaded binaries
+ - [x] Run dynamically linked, single-threaded binaries
 
 ## Step 2 - MMU and Linux syscalls
 
- - [ ] MMU with page tables
+ - [x] MMU with page tables
    - [ ] Move pagetable to processes
+ - [ ] Refactor emulator source files
+ - [ ] Rethink FD handling.
  - [ ] Run most Linux and Go binaries
  - [ ] Proper Linux syscall support
 

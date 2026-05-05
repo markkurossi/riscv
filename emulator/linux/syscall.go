@@ -729,7 +729,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 			}
 
 			err := proc.Kernel.AddVMA(proc.Kernel.HeapEnd, brk,
-				cpu.AccessRead|cpu.AccessWrite)
+				cpu.AccessRead|cpu.AccessWrite, nil, 0)
 			if err != nil {
 				return Error(ErrnoENOMEM), nil
 			}
@@ -805,7 +805,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		prot := a2
 		flags := a3
 		fd := int(a4)
-		off := a5
+		offset := a5
 
 		var addr uint64
 
@@ -817,6 +817,21 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 			ktracef(proc, "     ?? using provided address %x\n", a0)
 			addr = a0
 		}
+		var f *os.File
+		if fd >= 0 {
+			f = proc.GetFD(fd)
+			if f == nil {
+				return Error(ErrnoEBADF), nil
+			}
+			if offset&0xfff != 0 {
+				// Offset must be multiple of page size.
+				return Error(ErrnoEINVAL), nil
+			}
+		} else if offset != 0 {
+			// No source, offset must be zero.
+			return Error(ErrnoEINVAL), nil
+		}
+
 		var ps []string
 		var vmaProt int
 
@@ -872,12 +887,17 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 
 		ktracef(proc, "     prot=%v, flags=%v\n",
 			strings.Join(ps, ","), strings.Join(fs, ","))
-		ktracef(proc, "     fd=%v, off=%v\n", fd, off)
+		ktracef(proc, "     fd=%v, offset=%x\n", fd, offset)
 
 		// Align size to page size.
 		length = (length + 4095) &^ 4095
 
-		err := proc.Kernel.AddVMA(addr, addr+length, vmaProt)
+		// Add a reference to the file descriptor.
+		if f != nil && !proc.RefFD(fd) {
+			return Error(ErrnoEBADF), nil
+		}
+
+		err := proc.Kernel.AddVMA(addr, addr+length, vmaProt, f, offset)
 		if err != nil {
 			return Error(ErrnoENOMEM), nil
 		}
@@ -918,7 +938,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		ktracef(proc, "mprotect: %x:%x: %v\n", addr, addr+size,
 			strings.Join(p, ","))
 
-		err := proc.Kernel.AddVMA(addr, addr+size, vmaProt)
+		err := proc.Kernel.AddVMA(addr, addr+size, vmaProt, nil, 0)
 		if err != nil {
 			fmt.Printf("EFAULT %x:%x\n", addr, addr+size)
 			proc.Kernel.PrintVMA()
