@@ -433,6 +433,10 @@ func (cpu *CPU) loop() error {
 			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) >>
 				instr.Imm))
 
+		case isa.Sraw:
+			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) >>
+				(cpu.X[instr.Rs2] & 0b11111)))
+
 		case isa.Srl:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> (cpu.X[instr.Rs2] & 0b111111)
 
