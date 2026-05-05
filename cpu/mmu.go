@@ -208,7 +208,9 @@ func (cpu *CPU) Map(vaddr uint64, access int) (uint64, error) {
 		return 0, fmt.Errorf("unsupported memory model %v", cpu.Satp.Mode())
 	}
 
-	if vaddr == 0 {
+	vpn := vaddr >> 12
+
+	if vpn == 0 {
 		// XXX Refactor this to function, used also in MapSv39.
 		if access&AccessWrite != 0 {
 			return 0, cpu.Trap(CauseStorePageFault, vaddr, nil)
