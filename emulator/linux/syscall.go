@@ -325,7 +325,7 @@ var SyscallInfo = map[uint64]SyscallI{
 	290: {0, "", "clone3"},
 	291: {0, "", "close_range"},
 	292: {0, "", "openat2"},
-	293: {3, "iiu", "pidfd_getfd"},
+	293: {4, "puiu", "rseq"},
 	294: {0, "", "faccessat2"},
 	295: {0, "", "process_madvise"},
 	296: {0, "", "epoll_pwait2"},
@@ -745,10 +745,12 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		// is always 32 bits so the +4 below works.
 		child := proc.Kernel.NewProcess(proc)
 		child.CPU = &cpu.CPU{
-			PID:     child.PID,
-			PC:      proc.CPU.PC + 4,
-			Memory:  proc.CPU.Memory,
-			Syscall: proc.CPU.Syscall,
+			PID:         child.PID,
+			Satp:        proc.CPU.Satp,
+			PC:          proc.CPU.PC + 4,
+			Memory:      proc.CPU.Memory,
+			Syscall:     proc.CPU.Syscall,
+			TrapHandler: proc.CPU.TrapHandler,
 		}
 
 		// Copy registers.

@@ -28,6 +28,7 @@ basic support for simple Go programs.
 ## Step 2 - MMU and Linux syscalls
 
  - [ ] MMU with page tables
+   - [ ] Move pagetable to processes
  - [ ] Run most Linux and Go binaries
  - [ ] Proper Linux syscall support
 

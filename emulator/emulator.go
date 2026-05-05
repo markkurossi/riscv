@@ -70,7 +70,6 @@ func New(ktrace bool) (*Emulator, error) {
 	stackSize := uint64(1024 * 1024)
 	stackBottom := stackTop - stackSize
 
-	fmt.Printf("kernel(%p).AddVMA(%x,%x)\n", kernel, stackBottom, stackTop)
 	err = kernel.AddVMA(stackBottom, stackTop, cpu.AccessRead|cpu.AccessWrite)
 	if err != nil {
 		return nil, err
@@ -218,7 +217,8 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 			headPad := vaddr & 0xfff
 			vaddr &= ^uint64(0xfff)
 
-			fmt.Printf(" @ Vaddr: %x-%x\n", vaddr, end)
+			fmt.Printf(" @ Vaddr: %x/%x-%x/%x\n",
+				vaddr, vaddr+headPad, vaddr+headPad+prog.Memsz, end)
 
 			if end > emu.ProgBaseEnd {
 				emu.ProgBaseEnd = end
@@ -252,7 +252,6 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 				flags |= cpu.PteX
 			}
 
-			fmt.Printf("kernel(%p).AddVMA\n", emu.Kernel)
 			emu.Kernel.AddVMA(vaddr, end, prot)
 			emu.Kernel.PrintVMA()
 
@@ -397,15 +396,6 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 	emu.Push(linux.AtPhdr)
 	fmt.Printf("AT_PHDR:  %x\n", phdr)
 
-	if false {
-		var buf [392]byte
-		err = emu.CPU.CopyFromUser(phdr, buf[:])
-		if err != nil {
-			return err
-		}
-		fmt.Printf("Data at AT_PHDR %x:\n%s", phdr, hex.Dump(buf[:]))
-	}
-
 	emu.Push(56)
 	emu.Push(linux.AtPhent)
 	fmt.Printf("AT_PHENT: %d\n", 56)
@@ -413,6 +403,15 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 	emu.Push(emu.Prog.Phnum)
 	emu.Push(linux.AtPhnum)
 	fmt.Printf("AT_PHNUM: %d\n", emu.Prog.Phnum)
+
+	if false {
+		buf := make([]byte, emu.Prog.Phnum*56)
+		err = emu.CPU.CopyFromUser(phdr, buf[:])
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Data at AT_PHDR %x:\n%s", phdr, hex.Dump(buf[:]))
+	}
 
 	if emu.Interp != nil {
 		emu.Push(emu.Interp.Base)
@@ -548,9 +547,10 @@ func (emu *Emulator) TrapHandler(acpu *cpu.CPU, trap *cpu.Trap) (bool, error) {
 				if err != nil {
 					return false, err
 				}
-				fmt.Printf("trap: %v\n", trap)
-				fmt.Printf("  vpage: %x => ppage: %x\n", vpage, page)
-				// cpu.Debug = true
+				if false {
+					fmt.Printf("trap: %v\n", trap)
+					fmt.Printf("  vpage: %x => ppage: %x\n", vpage, page)
+				}
 				return true, nil
 			}
 		}
