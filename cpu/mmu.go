@@ -208,6 +208,19 @@ func (cpu *CPU) Map(vaddr uint64, access int) (uint64, error) {
 		return 0, fmt.Errorf("unsupported memory model %v", cpu.Satp.Mode())
 	}
 
+	if vaddr == 0 {
+		// XXX Refactor this to function, used also in MapSv39.
+		if access&AccessWrite != 0 {
+			return 0, cpu.Trap(CauseStorePageFault, vaddr, nil)
+		}
+		if access&AccessExec != 0 {
+			return 0, cpu.Trap(CauseInstPageFault, vaddr, nil)
+		}
+
+		// Default to load page fault.
+		return 0, cpu.Trap(CauseLoadPageFault, vaddr, nil)
+	}
+
 	tlb := &cpu.TLB[vaddr%uint64(len(cpu.TLB))]
 	if tlb.Vaddr == vaddr {
 		return tlb.Paddr, nil
@@ -240,10 +253,20 @@ func (cpu *CPU) MapSv39(root, vaddr uint64, access int) (uint64, error) {
 		pte := PTE(v)
 
 		if !pte.Valid() {
-			// XXX This is also a valid flow for lazy loading,
-			// consider dropping fmt.Errorf
-			return 0, cpu.Trap(CauseLoadAccessFault, vaddr,
-				fmt.Errorf("PTE not valid: %v", pte))
+			var err error
+			if true {
+				err = fmt.Errorf("PTE not valid: %v", pte)
+			}
+
+			if access&AccessWrite != 0 {
+				return 0, cpu.Trap(CauseStorePageFault, vaddr, err)
+			}
+			if access&AccessExec != 0 {
+				return 0, cpu.Trap(CauseInstPageFault, vaddr, err)
+			}
+
+			// Default to load page fault.
+			return 0, cpu.Trap(CauseLoadPageFault, vaddr, err)
 		}
 		if pte.Leaf() {
 			return cpu.mapLeaf(pte, vaddr, level, access)
@@ -388,6 +411,7 @@ func (cpu *CPU) CopyFromUser(vaddr uint64, buf []byte) error {
 			return err
 		}
 		buf = buf[l:]
+		vaddr += l
 	}
 	return nil
 }
@@ -433,13 +457,14 @@ func (cpu *CPU) CopyToUser(vaddr uint64, data []byte) error {
 
 		paddr, err := cpu.Map(vaddr, AccessWrite)
 		if err != nil {
-			return nil
+			return err
 		}
 		err = cpu.Memory.Store(paddr, data[:l])
 		if err != nil {
 			return err
 		}
 		data = data[l:]
+		vaddr += l
 	}
 	return nil
 }

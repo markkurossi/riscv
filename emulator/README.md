@@ -26,6 +26,30 @@ status: 0000000200000120 badaddr: 0000000000000000 cause: 000000000000000f
 Kernel panic - not syncing: Fatal exception
 ```
 
+## tests/static/main-riscv64-linux
+
+``` shell
+AT_SYSINFO_EHDR:      0x7fff4e70a000
+AT_HWCAP:             9f8bfbff
+AT_PAGESZ:            4096
+AT_CLKTCK:            100
+AT_PHDR:              0x564148372040
+AT_PHENT:             56
+AT_PHNUM:             14
+AT_BASE:              0x7f857e8db000
+AT_FLAGS:             0x0
+AT_ENTRY:             0x5641483b3fc0
+AT_UID:               0
+AT_EUID:              0
+AT_GID:               0
+AT_EGID:              0
+AT_SECURE:            0
+AT_RANDOM:            0x7fff4e6bcc09
+AT_HWCAP2:            0x2
+AT_EXECFN:            /usr/bin/qemu-riscv64
+AT_PLATFORM:          x86_64
+```
+
 ## /lib/ld-linux-riscv64-lp64d.so.1
 
 ``` shell

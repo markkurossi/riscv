@@ -25,6 +25,8 @@ var (
 type Syscall func(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (
 	uint64, error)
 
+type TrapHandler func(cpu *CPU, trap *Trap) (bool, error)
+
 type CPU struct {
 	PID uint64 // XXX how is this set?
 	X   [32]uint64
@@ -50,7 +52,8 @@ type CPU struct {
 	Memory Memory
 	TLB    [4096]TLBEntry
 
-	Syscall Syscall
+	Syscall     Syscall
+	TrapHandler TrapHandler
 }
 
 func (cpu *CPU) Run() error {
@@ -61,8 +64,6 @@ func (cpu *CPU) Run() error {
 				err = cpu.HandleTrap(trap)
 			}
 			if err != nil {
-				fmt.Printf("Unhandled error: %v\n", err)
-				cpu.Dump(cpu.PC)
 				return err
 			}
 			// Exception handled, let's continue

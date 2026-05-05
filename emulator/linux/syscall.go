@@ -592,7 +592,7 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		os.Exit(int(a0))
 
 	case 96: // set_tid_address
-		return 1000, nil // Caller's thread ID.
+		return proc.PID, nil // Caller's thread ID.
 
 	case 98: // futex
 		addr := a0
@@ -710,7 +710,7 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 			// Compute brk.
 			brk := (a0 + 4095) & ^uint64(0xfff)
 
-			const brkDebug = false
+			const brkDebug = true
 
 			if brkDebug {
 				fmt.Printf("     brk: => %x - %x\n", proc.Kernel.HeapEnd, brk)

@@ -108,6 +108,7 @@ func New(ktrace bool) (*Emulator, error) {
 	}
 
 	cpu.Syscall = emu.Syscall
+	cpu.TrapHandler = emu.TrapHandler
 
 	return emu, nil
 }
@@ -182,6 +183,7 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 			var buf [8]byte
 			if _, err2 = raw.ReadAt(buf[:], 32); err2 == nil {
 				info.Phoff = f.ByteOrder.Uint64(buf[:])
+				fmt.Printf("Phoff: %x\n", info.Phoff)
 			}
 			raw.Close()
 		}
@@ -393,23 +395,38 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 	}
 	emu.Push(phdr)
 	emu.Push(linux.AtPhdr)
+	fmt.Printf("AT_PHDR:  %x\n", phdr)
+
+	if false {
+		var buf [392]byte
+		err = emu.CPU.CopyFromUser(phdr, buf[:])
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Data at AT_PHDR %x:\n%s", phdr, hex.Dump(buf[:]))
+	}
 
 	emu.Push(56)
 	emu.Push(linux.AtPhent)
+	fmt.Printf("AT_PHENT: %d\n", 56)
 
 	emu.Push(emu.Prog.Phnum)
 	emu.Push(linux.AtPhnum)
+	fmt.Printf("AT_PHNUM: %d\n", emu.Prog.Phnum)
 
 	if emu.Interp != nil {
 		emu.Push(emu.Interp.Base)
 		emu.Push(linux.AtBase)
+		fmt.Printf("AT_BASE: %x\n", emu.Interp.Base)
 	} else {
 		emu.Push(0)
 		emu.Push(linux.AtBase)
+		fmt.Printf("AT_BASE:  %x\n", 0)
 	}
 
 	emu.Push(emu.Prog.Entry)
 	emu.Push(linux.AtEntry)
+	fmt.Printf("AT_ENTRY: %x\n", emu.Prog.Entry)
 
 	emu.Push(1000)
 	emu.Push(linux.AtUID)
@@ -504,4 +521,57 @@ func (emu *Emulator) Syscall(cpu *cpu.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (
 	uint64, error) {
 
 	return linux.Syscall(emu.Process, id, a0, a1, a2, a3, a4, a5)
+}
+
+func (emu *Emulator) TrapHandler(acpu *cpu.CPU, trap *cpu.Trap) (bool, error) {
+	switch trap.Cause {
+	case cpu.CauseInstAccessFault, cpu.CauseLoadAccessFault,
+		cpu.CauseStoreAccessFault:
+		fmt.Printf("trap: %vn", trap)
+		emu.Kernel.PrintVMA()
+		return false, nil
+
+	case cpu.CauseInstPageFault, cpu.CauseLoadPageFault,
+		cpu.CauseStorePageFault:
+
+		for _, vma := range emu.Kernel.VMA {
+			if vma.Contains(trap.Tval) {
+				// Allocate page.
+				page, err := emu.Memory.AllocPage()
+				if err != nil {
+					return false, err
+				}
+
+				vpage := trap.Tval >> 12
+				err = cpu.SetMapSv39(emu.Memory, emu.CPU.Satp, vpage, page,
+					vma.PageTableFlags())
+				if err != nil {
+					return false, err
+				}
+				fmt.Printf("trap: %v\n", trap)
+				fmt.Printf("  vpage: %x => ppage: %x\n", vpage, page)
+				// cpu.Debug = true
+				return true, nil
+			}
+		}
+
+		// Unmapped address.
+		fmt.Printf("trap: %v\n", trap)
+		emu.Kernel.PrintVMA()
+
+		return false, nil
+
+	case cpu.CauseIllegalInstr, cpu.CauseStoreAddrMisaligned,
+		cpu.CauseLoadAddrMisaligned, cpu.CauseInstAddrMisaligned:
+		fmt.Printf("trap: %v\n", trap)
+		return false, nil
+
+	case cpu.CauseBreakpoint, cpu.CauseEcallU, cpu.CauseEcallS,
+		cpu.CauseEcallVS, cpu.CauseEcallM:
+		fmt.Printf("trap: %v\n", trap)
+		return false, nil
+	}
+
+	fmt.Printf("unknown trap: %v\n", trap)
+	return false, nil
 }

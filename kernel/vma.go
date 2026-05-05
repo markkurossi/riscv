@@ -21,6 +21,26 @@ type VMA struct {
 	Prot int
 }
 
+func (vma *VMA) PageTableFlags() uint64 {
+	var flags uint64
+
+	if vma.Prot&cpu.AccessRead != 0 {
+		flags |= cpu.PteR
+	}
+	if vma.Prot&cpu.AccessWrite != 0 {
+		flags |= cpu.PteW
+	}
+	if vma.Prot&cpu.AccessRead != 0 {
+		flags |= cpu.PteR
+	}
+	if vma.Prot&cpu.AccessExec != 0 {
+		flags |= cpu.PteX
+	}
+	flags |= cpu.PteU | cpu.PteV
+
+	return flags
+}
+
 func (vma *VMA) clone() *VMA {
 	return &VMA{
 		Start: vma.Start,
@@ -47,7 +67,11 @@ func (vma *VMA) String() string {
 		prot += "."
 	}
 
-	return fmt.Sprintf("%8x:%8x %s", vma.Start, vma.End, prot)
+	return fmt.Sprintf("%10x:%10x %s", vma.Start, vma.End, prot)
+}
+
+func (vma *VMA) Contains(addr uint64) bool {
+	return vma.Start <= addr && addr < vma.End
 }
 
 func (vma *VMA) same(o *VMA) bool {
@@ -63,9 +87,9 @@ func (vma *VMA) covers(o *VMA) bool {
 }
 
 func (kern *Kernel) PrintVMA() {
-	fmt.Printf("VMA: kernel=%p\n", kern)
+	fmt.Printf("VMA:\n")
 	for i, vma := range kern.VMA {
-		fmt.Printf(" - %d: %v\n", i, vma)
+		fmt.Printf("%3d: %v\n", i, vma)
 	}
 }
 
@@ -155,6 +179,13 @@ func (kern *Kernel) compactVMA() error {
 
 	for i := 1; i < len(kern.VMA); {
 		vma := kern.VMA[i]
+
+		if vma.Start == vma.End {
+			// Delete empty areas.
+			copy(kern.VMA[i:], kern.VMA[i+1:])
+			kern.VMA = kern.VMA[:len(kern.VMA)-1]
+			continue
+		}
 
 		// XXX check source.
 		if vma.Start == prev.End && vma.Prot == prev.Prot {

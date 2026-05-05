@@ -94,8 +94,15 @@ func (cpu *CPU) Trap(cause, tval uint64, err error) error {
 }
 
 func (cpu *CPU) HandleTrap(trap *Trap) error {
-	// XXX check if our trap handler can handle this. If not handled,
-	// print the error message below and return the trap as error.
+	if cpu.TrapHandler != nil {
+		ok, err := cpu.TrapHandler(cpu, trap)
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+	}
 
 	fmt.Println(trap.Error())
 	if trap.Err != nil {
