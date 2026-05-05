@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/markkurossi/riscv/cpu"
@@ -349,7 +350,7 @@ func Syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 
 	ktrace(proc, id, a0, a1, a2, a3, a4, a5)
 
-	ret, err := syscall(proc, id, a0, a1, a2, a3, a4, a5)
+	ret, err := linuxSyscall(proc, id, a0, a1, a2, a3, a4, a5)
 
 	ktraceResult(proc, id, ret, err)
 
@@ -362,7 +363,7 @@ func mkpath(pathname string) string {
 	return filepath.Join(root, pathname)
 }
 
-func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
+func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 	uint64, error) {
 
 	switch id {
@@ -402,7 +403,7 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		if err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
-		fmt.Printf("     - pathname=%v\n", pathname)
+		fmt.Printf("     - pathname=%v => %v\n", pathname, mkpath(pathname))
 		f, err := os.Open(mkpath(pathname))
 		if err != nil {
 			return Error(ErrnoENOENT), nil
@@ -574,10 +575,20 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		// st_blksize @ offset 56: 1024
 		bo.PutUint64(stat[56:], 1024)
 
+		// st_blocks @ offset 64: fi.Size+1023/1024
+		bo.PutUint64(stat[64:], uint64(fi.Size()+1023)/1024)
+
 		modTime := uint64(fi.ModTime().Unix())
 		bo.PutUint64(stat[72:], modTime)  // st_atime
 		bo.PutUint64(stat[88:], modTime)  // st_mtime
 		bo.PutUint64(stat[104:], modTime) // st_ctime
+
+		native, ok := fi.Sys().(*syscall.Stat_t)
+		if ok {
+			// fmt.Printf("native: %#vn", native)
+			// st_ino @ offset 8
+			bo.PutUint64(stat[8:], native.Ino)
+		}
 
 		if err := proc.CPU.CopyToUser(statAddr, stat); err != nil {
 			return Error(ErrnoEFAULT), nil
@@ -793,8 +804,8 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		length := a1
 		prot := a2
 		flags := a3
-
-		_ = flags
+		fd := int(a4)
+		off := a5
 
 		var addr uint64
 
@@ -861,6 +872,7 @@ func syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 
 		ktracef(proc, "     prot=%v, flags=%v\n",
 			strings.Join(ps, ","), strings.Join(fs, ","))
+		ktracef(proc, "     fd=%v, off=%v\n", fd, off)
 
 		// Align size to page size.
 		length = (length + 4095) &^ 4095
