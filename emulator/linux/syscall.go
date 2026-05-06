@@ -196,7 +196,7 @@ var SyscallInfo = map[uint64]SyscallI{
 	157: {0, "", "setsid"},
 	158: {0, "", "getgroups"},
 	159: {0, "", "setgroups"},
-	160: {0, "", "uname"},
+	160: {1, "p", "uname"},
 	161: {0, "", "sethostname"},
 	162: {0, "", "setdomainname"},
 	163: {0, "", "getrlimit"},
@@ -722,6 +722,19 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 
 	case 135: // rt_sigprocmask
 		// No signal mask to manage in a single-threaded emulator.
+		return 0, nil
+
+	case 160: // uname
+		var buf [390]byte
+		copy(buf[0:64], []byte("Goemu Linux"))
+		copy(buf[65:129], []byte("goemu.local"))
+		copy(buf[130:194], []byte("0.0.1"))
+		copy(buf[195:259], []byte("Goemu Kernel Version 0.0"))
+		copy(buf[260:], []byte("RISC-V RV64"))
+
+		if err := proc.MMU.CopyToUser(a0, buf[:]); err != nil {
+			return Error(ErrnoEFAULT), nil
+		}
 		return 0, nil
 
 	case 214: // brk
