@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/markkurossi/riscv/cpu"
+	"github.com/markkurossi/riscv/mmu"
 )
 
 var vmaTests = []struct {
@@ -18,13 +18,13 @@ var vmaTests = []struct {
 	End   uint64
 	Prot  int
 }{
-	{0x2000, 0x3000, cpu.AccessRead},
-	{0x1000, 0x2000, cpu.AccessRead},
-	{0x1000, 0x3000, cpu.AccessRead},
-	{0x1000, 0x3000, cpu.AccessRead | cpu.AccessWrite},
-	{0x1500, 0x2000, cpu.AccessExec},
-	{0x0500, 0x1800, cpu.AccessRead},
-	{0x2500, 0x5000, cpu.AccessRead},
+	{0x2000, 0x3000, mmu.AccessRead},
+	{0x1000, 0x2000, mmu.AccessRead},
+	{0x1000, 0x3000, mmu.AccessRead},
+	{0x1000, 0x3000, mmu.AccessRead | mmu.AccessWrite},
+	{0x1500, 0x2000, mmu.AccessExec},
+	{0x0500, 0x1800, mmu.AccessRead},
+	{0x2500, 0x5000, mmu.AccessRead},
 }
 
 func TestVMA(t *testing.T) {

@@ -21,6 +21,7 @@ import (
 	"github.com/markkurossi/riscv/cpu"
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/kernel"
+	"github.com/markkurossi/riscv/mmu"
 )
 
 var (
@@ -379,7 +380,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		_ = mode
 		_ = flags
 
-		pathname, err := proc.CPU.UserCString(addr)
+		pathname, err := proc.MMU.UserCString(addr)
 		if err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
@@ -401,7 +402,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		_ = mode
 		_ = flags
 
-		pathname, err := proc.CPU.UserCString(addr)
+		pathname, err := proc.MMU.UserCString(addr)
 		if err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
@@ -432,7 +433,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		if err != nil {
 			return Error(ErrnoEIO), nil
 		}
-		if err := proc.CPU.CopyToUser(addr, buf[:n]); err != nil {
+		if err := proc.MMU.CopyToUser(addr, buf[:n]); err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
 		return uint64(n), nil
@@ -450,7 +451,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		var i, wrote uint64
 
 		for i = 0; i < length; i++ {
-			b, err := proc.CPU.UserUint8(addr + i)
+			b, err := proc.MMU.UserUint8(addr + i)
 			if err != nil {
 				return Error(ErrnoEFAULT), nil
 			}
@@ -475,11 +476,11 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		var buf [1024]byte
 
 		for i := 0; i < iovcnt; i++ {
-			base, err := proc.CPU.UserUint64(iov)
+			base, err := proc.MMU.UserUint64(iov)
 			if err != nil {
 				return Error(ErrnoEFAULT), nil
 			}
-			l, err := proc.CPU.UserUint64(iov + 8)
+			l, err := proc.MMU.UserUint64(iov + 8)
 			if err != nil {
 				return Error(ErrnoEFAULT), nil
 			}
@@ -490,7 +491,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 				if n > uint64(len(buf)) {
 					n = uint64(len(buf))
 				}
-				err = proc.CPU.CopyFromUser(base, buf[:n])
+				err = proc.MMU.CopyFromUser(base, buf[:n])
 				if err != nil {
 					return Error(ErrnoEFAULT), nil
 				}
@@ -592,7 +593,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 			bo.PutUint64(stat[8:], native.Ino)
 		}
 
-		if err := proc.CPU.CopyToUser(statAddr, stat); err != nil {
+		if err := proc.MMU.CopyToUser(statAddr, stat); err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
 		return 0, nil
@@ -653,7 +654,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		ktracef(proc, "    => futex(%x,%v[%v],%v)\n", addr, op, opName, val)
 		switch op & 127 {
 		case 0: // FUTEX_WAIT
-			v, err := proc.CPU.UserUint32(addr)
+			v, err := proc.MMU.UserUint32(addr)
 			if err != nil {
 				return Error(ErrnoEFAULT), nil
 			}
@@ -682,11 +683,11 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 	case 99: // set_robust_list
 
 	case 101: // nanosleep
-		tvSec, err := proc.CPU.UserUint64(a0)
+		tvSec, err := proc.MMU.UserUint64(a0)
 		if err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
-		tvNsec, err := proc.CPU.UserUint64(a0 + 8)
+		tvNsec, err := proc.MMU.UserUint64(a0 + 8)
 		if err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
@@ -708,7 +709,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		bo.PutUint64(buf[0:], uint64(now.Unix()))
 		bo.PutUint64(buf[8:], uint64(now.UnixNano()%1000000000))
 
-		if err := proc.CPU.CopyToUser(addr, buf[:]); err != nil {
+		if err := proc.MMU.CopyToUser(addr, buf[:]); err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
 		return 0, nil
@@ -736,7 +737,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 			}
 
 			err := proc.Kernel.AddVMA(proc.Kernel.HeapEnd, brk,
-				cpu.AccessRead|cpu.AccessWrite, nil, 0)
+				mmu.AccessRead|mmu.AccessWrite, nil, 0)
 			if err != nil {
 				return Error(ErrnoENOMEM), nil
 			}
@@ -764,8 +765,8 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		child := proc.Kernel.NewProcess(proc)
 		child.CPU = &cpu.CPU{
 			PID:         child.PID,
-			Satp:        proc.CPU.Satp,
 			PC:          proc.CPU.PC + 4,
+			MMU:         proc.CPU.MMU,
 			Memory:      proc.CPU.Memory,
 			Syscall:     proc.CPU.Syscall,
 			TrapHandler: proc.CPU.TrapHandler,
@@ -844,15 +845,15 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 
 		if prot&ProtRead != 0 {
 			ps = append(ps, "read")
-			vmaProt |= cpu.AccessRead
+			vmaProt |= mmu.AccessRead
 		}
 		if prot&ProtWrite != 0 {
 			ps = append(ps, "write")
-			vmaProt |= cpu.AccessWrite
+			vmaProt |= mmu.AccessWrite
 		}
 		if prot&ProtExec != 0 {
 			ps = append(ps, "exec")
-			vmaProt |= cpu.AccessExec
+			vmaProt |= mmu.AccessExec
 		}
 		var fs []string
 		if flags&MapFixed != 0 {
@@ -932,15 +933,15 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		var vmaProt int
 		if prot&ProtRead != 0 {
 			p = append(p, "R")
-			vmaProt |= cpu.AccessRead
+			vmaProt |= mmu.AccessRead
 		}
 		if prot&ProtWrite != 0 {
 			p = append(p, "W")
-			vmaProt |= cpu.AccessWrite
+			vmaProt |= mmu.AccessWrite
 		}
 		if prot&ProtExec != 0 {
 			p = append(p, "X")
-			vmaProt |= cpu.AccessExec
+			vmaProt |= mmu.AccessExec
 		}
 		ktracef(proc, "mprotect: %x:%x: %v\n", addr, addr+size,
 			strings.Join(p, ","))
@@ -961,7 +962,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		if _, err := rand.Read(random); err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
-		if err := proc.CPU.CopyToUser(addr, random); err != nil {
+		if err := proc.MMU.CopyToUser(addr, random); err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
 		return len, nil

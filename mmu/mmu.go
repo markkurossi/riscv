@@ -4,12 +4,19 @@
 // All rights reserved.
 //
 
-package cpu
+// Package mmu implements the memory management unit.
+package mmu
 
 import (
+	"encoding/binary"
 	"fmt"
 
+	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/memory"
+)
+
+var (
+	bo = binary.LittleEndian
 )
 
 const (
@@ -28,6 +35,13 @@ const (
 	SatpModeSv57 = 10
 	SatpModeSv64 = 11
 )
+
+type MMU struct {
+	Satp Satp
+	Mem  memory.Memory
+
+	TLB [4096]TLBEntry
+}
 
 type Satp uint64
 
@@ -133,13 +147,13 @@ func (flags PTEFlags) Executable() bool {
 
 func (flags PTEFlags) CanAccess(access int) (bool, uint64) {
 	if access&AccessRead != 0 && !flags.Readable() {
-		return false, CauseLoadPageFault
+		return false, isa.CauseLoadPageFault
 	}
 	if access&AccessWrite != 0 && !flags.Writable() {
-		return false, CauseStorePageFault
+		return false, isa.CauseStorePageFault
 	}
 	if access&AccessExec != 0 && !flags.Executable() {
-		return false, CauseInstPageFault
+		return false, isa.CauseInstPageFault
 	}
 	return true, 0
 }
@@ -229,15 +243,15 @@ type TLBEntry struct {
 	Level uint8
 }
 
-func (cpu *CPU) Map(vaddr uint64, access int) (uint64, error) {
-	switch cpu.Satp.Mode() {
+func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
+	switch mmu.Satp.Mode() {
 	case SatpModeBare:
 		return vaddr, nil
 
 	case SatpModeSv39:
 
 	default:
-		return 0, fmt.Errorf("unsupported memory model %v", cpu.Satp.Mode())
+		return 0, fmt.Errorf("unsupported memory model %v", mmu.Satp.Mode())
 	}
 
 	vpn := vaddr >> 12
@@ -247,16 +261,16 @@ func (cpu *CPU) Map(vaddr uint64, access int) (uint64, error) {
 	var flags PTEFlags
 	var level int
 
-	tlb := &cpu.TLB[vpn%uint64(len(cpu.TLB))]
+	tlb := &mmu.TLB[vpn%uint64(len(mmu.TLB))]
 	if tlb.VPN == vpn && tlb.Flags.Valid() {
 		ok, cause := tlb.Flags.CanAccess(access)
 		if !ok {
-			return 0, cpu.Trap(cause, vaddr, nil)
+			return 0, isa.NewTrap(cause, vaddr, nil)
 		}
 		page = tlb.Page
 		level = int(tlb.Level)
 	} else {
-		page, flags, level, err = cpu.MapSv39(cpu.Satp.PPN(), vaddr, access)
+		page, flags, level, err = mmu.MapSv39(mmu.Satp.PPN(), vaddr, access)
 		if err != nil {
 			return 0, err
 		}
@@ -278,7 +292,7 @@ func (cpu *CPU) Map(vaddr uint64, access int) (uint64, error) {
 	}
 }
 
-func (cpu *CPU) MapSv39(root, vaddr uint64, access int) (
+func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 	uint64, PTEFlags, int, error) {
 
 	base := root << 12
@@ -287,9 +301,9 @@ func (cpu *CPU) MapSv39(root, vaddr uint64, access int) (
 		idx := index(vaddr, level)
 		pteAddr := base + idx*8
 
-		v, err := cpu.Memory.Load64(pteAddr)
+		v, err := mmu.Mem.Load64(pteAddr)
 		if err != nil {
-			return 0, 0, 0, cpu.Trap(CauseLoadPageFault, pteAddr, err)
+			return 0, 0, 0, isa.NewTrap(isa.CauseLoadPageFault, pteAddr, err)
 		}
 
 		pte := PTE(v)
@@ -301,39 +315,39 @@ func (cpu *CPU) MapSv39(root, vaddr uint64, access int) (
 			}
 
 			if access&AccessWrite != 0 {
-				return 0, 0, 0, cpu.Trap(CauseStorePageFault, vaddr, err)
+				return 0, 0, 0, isa.NewTrap(isa.CauseStorePageFault, vaddr, err)
 			}
 			if access&AccessExec != 0 {
-				return 0, 0, 0, cpu.Trap(CauseInstPageFault, vaddr, err)
+				return 0, 0, 0, isa.NewTrap(isa.CauseInstPageFault, vaddr, err)
 			}
 
 			// Default to load page fault.
-			return 0, 0, 0, cpu.Trap(CauseLoadPageFault, vaddr, err)
+			return 0, 0, 0, isa.NewTrap(isa.CauseLoadPageFault, vaddr, err)
 		}
 		if pte.Leaf() {
-			return cpu.mapLeaf(pte, vaddr, level, access)
+			return mmu.mapLeaf(pte, vaddr, level, access)
 		}
 
 		// Walk to the next level.
 		base = pte.PPN() << 12
 	}
 
-	return 0, 0, 0, cpu.Trap(CauseLoadPageFault, vaddr,
+	return 0, 0, 0, isa.NewTrap(isa.CauseLoadPageFault, vaddr,
 		fmt.Errorf("no leaf page found"))
 }
 
-func (cpu *CPU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
+func (mmu *MMU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 	uint64, PTEFlags, int, error) {
 
 	// Check permissions.
 	if access&AccessRead != 0 && !pte.Readable() {
-		return 0, 0, 0, cpu.Trap(CauseLoadPageFault, vaddr, nil)
+		return 0, 0, 0, isa.NewTrap(isa.CauseLoadPageFault, vaddr, nil)
 	}
 	if access&AccessWrite != 0 && !pte.Writable() {
-		return 0, 0, 0, cpu.Trap(CauseStorePageFault, vaddr, nil)
+		return 0, 0, 0, isa.NewTrap(isa.CauseStorePageFault, vaddr, nil)
 	}
 	if access&AccessExec != 0 && !pte.Executable() {
-		return 0, 0, 0, cpu.Trap(CauseInstPageFault, vaddr, nil)
+		return 0, 0, 0, isa.NewTrap(isa.CauseInstPageFault, vaddr, nil)
 	}
 
 	// Enforce superpage alignment rules.
@@ -347,13 +361,14 @@ func (cpu *CPU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 	}
 	if misaligned {
 		if access&AccessRead != 0 {
-			return 0, 0, 0, cpu.Trap(CauseLoadAddrMisaligned, vaddr, nil)
+			return 0, 0, 0, isa.NewTrap(isa.CauseLoadAddrMisaligned, vaddr, nil)
 		}
 		if access&AccessWrite != 0 {
-			return 0, 0, 0, cpu.Trap(CauseStoreAddrMisaligned, vaddr, nil)
+			return 0, 0, 0, isa.NewTrap(isa.CauseStoreAddrMisaligned, vaddr,
+				nil)
 		}
 		if access&AccessExec != 0 {
-			return 0, 0, 0, cpu.Trap(CauseInstAddrMisaligned, vaddr, nil)
+			return 0, 0, 0, isa.NewTrap(isa.CauseInstAddrMisaligned, vaddr, nil)
 		}
 	}
 
@@ -372,56 +387,56 @@ func (cpu *CPU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 	return page, pte.Flags(), level, nil
 }
 
-func (cpu *CPU) UserUint8(vaddr uint64) (uint8, error) {
-	paddr, err := cpu.Map(vaddr, AccessRead)
+func (mmu *MMU) UserUint8(vaddr uint64) (uint8, error) {
+	paddr, err := mmu.Map(vaddr, AccessRead)
 	if err != nil {
 		return 0, err
 	}
-	return cpu.Memory.Load8(paddr)
+	return mmu.Mem.Load8(paddr)
 }
 
-func (cpu *CPU) UserUint16(vaddr uint64) (uint16, error) {
+func (mmu *MMU) UserUint16(vaddr uint64) (uint16, error) {
 	var buf [2]byte
 
-	err := cpu.CopyFromUser(vaddr, buf[:])
+	err := mmu.CopyFromUser(vaddr, buf[:])
 	if err != nil {
 		return 0, err
 	}
 	return bo.Uint16(buf[:]), nil
 }
 
-func (cpu *CPU) UserUint32(vaddr uint64) (uint32, error) {
+func (mmu *MMU) UserUint32(vaddr uint64) (uint32, error) {
 	var buf [4]byte
 
-	err := cpu.CopyFromUser(vaddr, buf[:])
+	err := mmu.CopyFromUser(vaddr, buf[:])
 	if err != nil {
 		return 0, err
 	}
 	return bo.Uint32(buf[:]), nil
 }
 
-func (cpu *CPU) UserUint64(vaddr uint64) (uint64, error) {
+func (mmu *MMU) UserUint64(vaddr uint64) (uint64, error) {
 	var buf [8]byte
 
-	err := cpu.CopyFromUser(vaddr, buf[:])
+	err := mmu.CopyFromUser(vaddr, buf[:])
 	if err != nil {
 		return 0, err
 	}
 	return bo.Uint64(buf[:]), nil
 }
 
-func (cpu *CPU) UserCString(vaddr uint64) (string, error) {
+func (mmu *MMU) UserCString(vaddr uint64) (string, error) {
 	var data []byte
 
 	for {
-		paddr, err := cpu.Map(vaddr, AccessRead)
+		paddr, err := mmu.Map(vaddr, AccessRead)
 		if err != nil {
 			return "", err
 		}
 
 		l := memory.PageSize - paddr%memory.PageSize
 		for i := uint64(0); i < l; i++ {
-			b, err := cpu.Memory.Load8(paddr + i)
+			b, err := mmu.Mem.Load8(paddr + i)
 			if err != nil {
 				return "", err
 			}
@@ -435,18 +450,18 @@ func (cpu *CPU) UserCString(vaddr uint64) (string, error) {
 	}
 }
 
-func (cpu *CPU) CopyFromUser(vaddr uint64, buf []byte) error {
+func (mmu *MMU) CopyFromUser(vaddr uint64, buf []byte) error {
 	for len(buf) > 0 {
 		l := memory.PageSize - vaddr%memory.PageSize
 		if l > uint64(len(buf)) {
 			l = uint64(len(buf))
 		}
 
-		paddr, err := cpu.Map(vaddr, AccessRead)
+		paddr, err := mmu.Map(vaddr, AccessRead)
 		if err != nil {
 			return err
 		}
-		err = cpu.Memory.Load(paddr, buf[:l])
+		err = mmu.Mem.Load(paddr, buf[:l])
 		if err != nil {
 			return err
 		}
@@ -456,50 +471,50 @@ func (cpu *CPU) CopyFromUser(vaddr uint64, buf []byte) error {
 	return nil
 }
 
-func (cpu *CPU) PutUserUint8(vaddr, v uint64) error {
-	paddr, err := cpu.Map(vaddr, AccessWrite)
+func (mmu *MMU) PutUserUint8(vaddr, v uint64) error {
+	paddr, err := mmu.Map(vaddr, AccessWrite)
 	if err != nil {
 		return err
 	}
-	return cpu.Memory.Store8(paddr, v)
+	return mmu.Mem.Store8(paddr, v)
 }
 
-func (cpu *CPU) PutUserUint16(vaddr, v uint64) error {
+func (mmu *MMU) PutUserUint16(vaddr, v uint64) error {
 	var buf [2]byte
 
 	bo.PutUint16(buf[:], uint16(v))
 
-	return cpu.CopyToUser(vaddr, buf[:])
+	return mmu.CopyToUser(vaddr, buf[:])
 }
 
-func (cpu *CPU) PutUserUint32(vaddr, v uint64) error {
+func (mmu *MMU) PutUserUint32(vaddr, v uint64) error {
 	var buf [4]byte
 
 	bo.PutUint32(buf[:], uint32(v))
 
-	return cpu.CopyToUser(vaddr, buf[:])
+	return mmu.CopyToUser(vaddr, buf[:])
 }
 
-func (cpu *CPU) PutUserUint64(vaddr, v uint64) error {
+func (mmu *MMU) PutUserUint64(vaddr, v uint64) error {
 	var buf [8]byte
 
 	bo.PutUint64(buf[:], v)
 
-	return cpu.CopyToUser(vaddr, buf[:])
+	return mmu.CopyToUser(vaddr, buf[:])
 }
 
-func (cpu *CPU) CopyToUser(vaddr uint64, data []byte) error {
+func (mmu *MMU) CopyToUser(vaddr uint64, data []byte) error {
 	for len(data) > 0 {
 		l := memory.PageSize - vaddr%memory.PageSize
 		if l > uint64(len(data)) {
 			l = uint64(len(data))
 		}
 
-		paddr, err := cpu.Map(vaddr, AccessWrite)
+		paddr, err := mmu.Map(vaddr, AccessWrite)
 		if err != nil {
 			return err
 		}
-		err = cpu.Memory.Store(paddr, data[:l])
+		err = mmu.Mem.Store(paddr, data[:l])
 		if err != nil {
 			return err
 		}

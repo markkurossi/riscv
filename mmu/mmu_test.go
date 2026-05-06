@@ -4,7 +4,7 @@
 // All rights reserved.
 //
 
-package cpu
+package mmu
 
 import (
 	"fmt"
@@ -37,20 +37,20 @@ func makeMem() (memory.Memory, Satp, uint64) {
 	}
 }
 
-func makeTestCPU() (*CPU, uint64) {
+func makeTestMMU() (*MMU, uint64) {
 	mem, satp, count := makeMem()
-	return &CPU{
-		Satp:   satp,
-		Memory: mem,
+	return &MMU{
+		Satp: satp,
+		Mem:  mem,
 	}, count
 }
 
 func TestMapSV39(t *testing.T) {
-	cpu, count := makeTestCPU()
+	mmu, count := makeTestMMU()
 
 	for i := uint64(1); i < count; i++ {
 		vaddr := i * memory.PageSize
-		paddr, err := cpu.Map(vaddr, AccessRead)
+		paddr, err := mmu.Map(vaddr, AccessRead)
 		if err != nil {
 			t.Fatalf("MapSv39(%v): %v", vaddr, err)
 		}
@@ -60,7 +60,7 @@ func TestMapSV39(t *testing.T) {
 
 		var ofs uint64 = 42
 
-		paddr, err = cpu.Map(vaddr+ofs, AccessRead)
+		paddr, err = mmu.Map(vaddr+ofs, AccessRead)
 		if err != nil {
 			t.Fatalf("MapSv39(%v): %v", vaddr+ofs, err)
 		}
@@ -71,10 +71,10 @@ func TestMapSV39(t *testing.T) {
 }
 
 func BenchmarkMapSv39(b *testing.B) {
-	cpu, _ := makeTestCPU()
+	mmu, _ := makeTestMMU()
 
 	for b.Loop() {
-		_, err := cpu.Map(4096, AccessRead)
+		_, err := mmu.Map(4096, AccessRead)
 		if err != nil {
 			b.Fatal(err)
 		}

@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/markkurossi/riscv/cpu"
+	"github.com/markkurossi/riscv/mmu"
 )
 
 type VMA struct {
@@ -23,22 +23,22 @@ type VMA struct {
 	Prot int
 }
 
-func (vma *VMA) PageTableFlags() cpu.PTEFlags {
-	var flags cpu.PTEFlags
+func (vma *VMA) PageTableFlags() mmu.PTEFlags {
+	var flags mmu.PTEFlags
 
-	if vma.Prot&cpu.AccessRead != 0 {
-		flags |= cpu.PteR
+	if vma.Prot&mmu.AccessRead != 0 {
+		flags |= mmu.PteR
 	}
-	if vma.Prot&cpu.AccessWrite != 0 {
-		flags |= cpu.PteW
+	if vma.Prot&mmu.AccessWrite != 0 {
+		flags |= mmu.PteW
 	}
-	if vma.Prot&cpu.AccessRead != 0 {
-		flags |= cpu.PteR
+	if vma.Prot&mmu.AccessRead != 0 {
+		flags |= mmu.PteR
 	}
-	if vma.Prot&cpu.AccessExec != 0 {
-		flags |= cpu.PteX
+	if vma.Prot&mmu.AccessExec != 0 {
+		flags |= mmu.PteX
 	}
-	flags |= cpu.PteU | cpu.PteV
+	flags |= mmu.PteU | mmu.PteV
 
 	return flags
 }
@@ -53,17 +53,17 @@ func (vma *VMA) clone() *VMA {
 
 func (vma *VMA) String() string {
 	var prot string
-	if vma.Prot&cpu.AccessExec != 0 {
+	if vma.Prot&mmu.AccessExec != 0 {
 		prot += "X"
 	} else {
 		prot += "."
 	}
-	if vma.Prot&cpu.AccessWrite != 0 {
+	if vma.Prot&mmu.AccessWrite != 0 {
 		prot += "W"
 	} else {
 		prot += "."
 	}
-	if vma.Prot&cpu.AccessRead != 0 {
+	if vma.Prot&mmu.AccessRead != 0 {
 		prot += "R"
 	} else {
 		prot += "."

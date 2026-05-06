@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/markkurossi/riscv/cpu"
+	"github.com/markkurossi/riscv/mmu"
 )
 
 type FD struct {
@@ -22,6 +23,7 @@ type Process struct {
 	PID    uint64
 	TGID   uint64
 	CPU    *cpu.CPU
+	MMU    *mmu.MMU
 	FDs    []*FD
 	Ktrace bool
 }
