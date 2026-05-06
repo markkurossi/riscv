@@ -6,7 +6,7 @@ Linux applications and, eventually, the Linux operating system.
 
 ## MMU Refactoring
 
- - [ ] Fix page table MMU code to run the existing samples
+ - [x] Fix page table MMU code to run the existing samples
  - [ ] Refactor the whole emulator chain:
    - [ ] CPU -> Kernel -> Process -> Emulator
    - [ ] Kernel creates processes 1-n
