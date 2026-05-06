@@ -9,6 +9,9 @@ all: $(PROGS)
 main-riscv64-linux: main.c
 	$(RISCV64_LINUX_CC) -Wall -static -o $@ $+
 
+fibo-riscv64-linux: fibo.c
+	$(RISCV64_LINUX_CC) -Wall -static -o $@ $+
+
 types-riscv64-linux: types.c
 	$(RISCV64_LINUX_CC) -Wall -static -o $@ $+
 

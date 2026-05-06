@@ -10,22 +10,27 @@ package emulator
 import (
 	"crypto/rand"
 	"debug/elf"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"os"
 
+	"github.com/markkurossi/riscv/cpu"
 	"github.com/markkurossi/riscv/emulator/linux"
-	"github.com/markkurossi/riscv/hw"
 	"github.com/markkurossi/riscv/isa"
-	"github.com/markkurossi/riscv/posix"
+	"github.com/markkurossi/riscv/kernel"
+)
+
+var (
+	bo = binary.LittleEndian
 )
 
 type Emulator struct {
 	Verbose bool
-	Ktrace  bool
+	Profile bool
 
-	CPU *hw.CPU
-	Mem *hw.Memory
+	CPU    *cpu.CPU
+	Memory cpu.Memory
 
 	ProgBase    uint64
 	ProgBaseEnd uint64
@@ -33,39 +38,80 @@ type Emulator struct {
 	Prog   *fileInfo
 	Interp *fileInfo
 
-	Kernel  *posix.Kernel
-	Process *posix.Process
+	Kernel  *kernel.Kernel
+	Process *kernel.Process
 }
 
-func New(ktrace bool) *Emulator {
-	mem := new(hw.Memory)
+func New(ktrace, profile bool) (*Emulator, error) {
+	mem := cpu.NewArrayMemory(2048) // 8 MB
 
-	mem.MmapStart = 0x4000000000
-	mem.MmapEnd = mem.MmapStart
-
-	stack := hw.NewStack(0x7ffff000, 1<<20)
-	mem.Add(stack)
-
-	cpu := &hw.CPU{
-		Mem: mem,
+	// Skip page 0.
+	_, err := mem.AllocPage()
+	if err != nil {
+		return nil, err
 	}
-	cpu.X[isa.Sp] = stack.End
+	page, err := mem.AllocPage()
+	satp := cpu.NewSATP(cpu.SatpModeSv39, page)
+
+	mmapStart := uint64(0x4000000000)
+
+	kernel := &kernel.Kernel{
+		Ktrace:    ktrace,
+		Profile:   profile,
+		MmapStart: mmapStart,
+		MmapEnd:   mmapStart,
+	}
+
+	// Mmap pool.
+	kernel.MmapStart = 0x4000000000
+	kernel.MmapEnd = kernel.MmapStart
+
+	// Stack.
+	stackTop := uint64(0x7ffff000)
+	stackSize := uint64(1024 * 1024)
+	stackBottom := stackTop - stackSize
+
+	err = kernel.AddVMA(stackBottom, stackTop, cpu.AccessRead|cpu.AccessWrite,
+		nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	kernel.PrintVMA()
+
+	// Allocate stack pages.
+	stackBottomPage := stackBottom >> 12
+	stackSizePages := stackSize / 4096
+	for i := uint64(0); i < stackSizePages; i++ {
+		page, err = mem.AllocPage()
+		if err != nil {
+			return nil, err
+		}
+		err = cpu.SetMapSv39(mem, satp, stackBottomPage+i, page,
+			cpu.PteR|cpu.PteW|cpu.PteU)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	cpu := &cpu.CPU{
+		Satp:   satp,
+		Memory: mem,
+	}
+	cpu.X[isa.Sp] = stackTop
 
 	emu := &Emulator{
-		Ktrace:      ktrace,
 		CPU:         cpu,
-		Mem:         mem,
+		Memory:      mem,
 		ProgBase:    0x400000,
 		ProgBaseEnd: 0x400000,
 
-		Kernel: &posix.Kernel{
-			Ktrace: ktrace,
-		},
+		Kernel: kernel,
 	}
 
 	cpu.Syscall = emu.Syscall
+	cpu.TrapHandler = emu.TrapHandler
 
-	return emu
+	return emu, nil
 }
 
 func (emu *Emulator) Debugf(msg string, args ...interface{}) {
@@ -138,6 +184,7 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 			var buf [8]byte
 			if _, err2 = raw.ReadAt(buf[:], 32); err2 == nil {
 				info.Phoff = f.ByteOrder.Uint64(buf[:])
+				fmt.Printf("Phoff: %x\n", info.Phoff)
 			}
 			raw.Close()
 		}
@@ -172,7 +219,8 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 			headPad := vaddr & 0xfff
 			vaddr &= ^uint64(0xfff)
 
-			fmt.Printf(" @ Vaddr: %x-%x\n", vaddr, end)
+			fmt.Printf(" @ Vaddr: %x/%x-%x/%x\n",
+				vaddr, vaddr+headPad, vaddr+headPad+prog.Memsz, end)
 
 			if end > emu.ProgBaseEnd {
 				emu.ProgBaseEnd = end
@@ -187,22 +235,57 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 				return nil, err
 			}
 
-			seg := &hw.Segment{
-				Start: vaddr,
-				End:   end,
-				Data:  data,
-				Read:  prog.Flags&elf.PF_R != 0,
-				Write: prog.Flags&elf.PF_W != 0,
-				Exec:  prog.Flags&elf.PF_X != 0,
+			var prot int
+			var writable bool
+
+			flags := uint64(cpu.PteU)
+
+			if prog.Flags&elf.PF_R != 0 {
+				prot |= cpu.AccessRead
+				flags |= cpu.PteR
+			}
+			if prog.Flags&elf.PF_W != 0 {
+				prot |= cpu.AccessWrite
+				writable = true
+				flags |= cpu.PteW
+			}
+			if prog.Flags&elf.PF_X != 0 {
+				prot |= cpu.AccessExec
+				flags |= cpu.PteX
 			}
 
-			emu.Mem.Add(seg)
+			emu.Kernel.AddVMA(vaddr, end, prot, nil, 0)
+			emu.Kernel.PrintVMA()
 
-			if seg.Write && seg.End > emu.Mem.HeapEnd {
-				fmt.Printf("seg.End    : 0x%x\n", seg.End)
-				emu.Mem.HeapEnd = (seg.End + 4095) & ^uint64(0xfff)
-				emu.Mem.HeapStart = emu.Mem.HeapEnd
-				fmt.Printf(" => HeapEnd: 0x%x\n", emu.Mem.HeapEnd)
+			// Load data into memory.
+			satp := emu.CPU.Satp
+			for addr := vaddr; addr < end; addr += cpu.PageSize {
+				page, err := emu.Memory.AllocPage()
+				if err != nil {
+					return nil, err
+				}
+				err = cpu.SetMapSv39(emu.Memory, satp, addr>>12, page, flags)
+				if err != nil {
+					return nil, err
+				}
+				idx := addr - vaddr
+				err = emu.Memory.Store(page*cpu.PageSize,
+					data[idx:idx+cpu.PageSize])
+				if err != nil {
+					return nil, err
+				}
+
+				if false {
+					fmt.Printf("Page %v => %v:\n%s", addr>>12, page,
+						hex.Dump(data[idx:idx+cpu.PageSize]))
+				}
+			}
+
+			if writable && end > emu.Kernel.HeapEnd {
+				fmt.Printf("prog.End    : 0x%x\n", end)
+				emu.Kernel.HeapStart = end
+				emu.Kernel.HeapEnd = end
+				fmt.Printf(" => HeapEnd: 0x%x\n", emu.Kernel.HeapEnd)
 			}
 
 		case elf.PT_INTERP:
@@ -237,6 +320,8 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 func (emu *Emulator) Run(argv []string, envp []string) error {
 	var argvPtrs []uint64
 	var envpPtrs []uint64
+
+	emu.Kernel.PrintVMA()
 
 	emu.Debugf("argv:\n")
 	for i, v := range argv {
@@ -311,23 +396,38 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 	}
 	emu.Push(phdr)
 	emu.Push(linux.AtPhdr)
+	fmt.Printf("AT_PHDR:  %x\n", phdr)
 
 	emu.Push(56)
 	emu.Push(linux.AtPhent)
+	fmt.Printf("AT_PHENT: %d\n", 56)
 
 	emu.Push(emu.Prog.Phnum)
 	emu.Push(linux.AtPhnum)
+	fmt.Printf("AT_PHNUM: %d\n", emu.Prog.Phnum)
+
+	if false {
+		buf := make([]byte, emu.Prog.Phnum*56)
+		err = emu.CPU.CopyFromUser(phdr, buf[:])
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Data at AT_PHDR %x:\n%s", phdr, hex.Dump(buf[:]))
+	}
 
 	if emu.Interp != nil {
 		emu.Push(emu.Interp.Base)
 		emu.Push(linux.AtBase)
+		fmt.Printf("AT_BASE: %x\n", emu.Interp.Base)
 	} else {
 		emu.Push(0)
 		emu.Push(linux.AtBase)
+		fmt.Printf("AT_BASE:  %x\n", 0)
 	}
 
 	emu.Push(emu.Prog.Entry)
 	emu.Push(linux.AtEntry)
+	fmt.Printf("AT_ENTRY: %x\n", emu.Prog.Entry)
 
 	emu.Push(1000)
 	emu.Push(linux.AtUID)
@@ -370,11 +470,8 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 		return err
 	}
 
-	seg, ofs, err := emu.Mem.Map(emu.CPU.X[isa.Sp], hw.AccessWrite, 1)
-	if err != nil {
-		return err
-	}
-	emu.Debugf("Stack:\n%s", hex.Dump(seg.Data[ofs:]))
+	// XXX dump stack
+	// emu.Debugf("Stack:\n%s", hex.Dump(seg.Data[ofs:]))
 
 	if emu.Interp != nil {
 		emu.CPU.PC = emu.Interp.Entry
@@ -389,41 +486,114 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 
 	emu.Process = emu.Kernel.NewProcess(nil)
 	emu.Process.CPU = emu.CPU
-	emu.Process.FDs = []*os.File{
-		os.Stdin,
-		os.Stdout,
-		os.Stderr,
-	}
+	emu.Process.AllocFD(os.Stdin)
+	emu.Process.AllocFD(os.Stdout)
+	emu.Process.AllocFD(os.Stderr)
+
 	emu.Process.CPU.PID = emu.Process.PID
+
+	fmt.Printf("VMA:\n")
+	for i, vma := range emu.Kernel.VMA {
+		fmt.Printf(" - %d: %v\n", i, vma)
+	}
 
 	return emu.CPU.Run()
 }
 
 func (emu *Emulator) Push(val uint64) error {
-	emu.CPU.X[isa.Sp] -= 8
-	return emu.Mem.Store64(emu.CPU.X[isa.Sp], val)
+	var buf [8]byte
+	bo.PutUint64(buf[:], val)
+
+	return emu.PushData(buf[:])
 }
 
 func (emu *Emulator) PushCString(val string) error {
-	emu.CPU.X[isa.Sp]--
-
-	err := emu.Mem.Store8(emu.CPU.X[isa.Sp], uint64(0))
-	if err != nil {
-		return err
-	}
-	bytes := []byte(val)
-
-	emu.CPU.X[isa.Sp] -= uint64(len(bytes))
-	return emu.Mem.StoreData(emu.CPU.X[isa.Sp], bytes)
+	return emu.PushData(append([]byte(val), 0))
 }
 
 func (emu *Emulator) PushData(data []byte) error {
 	emu.CPU.X[isa.Sp] -= uint64(len(data))
-	return emu.Mem.StoreData(emu.CPU.X[isa.Sp], data)
+
+	return emu.CPU.CopyToUser(emu.CPU.X[isa.Sp], data)
 }
 
-func (emu *Emulator) Syscall(cpu *hw.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (
+func (emu *Emulator) Syscall(cpu *cpu.CPU, id, a0, a1, a2, a3, a4, a5 uint64) (
 	uint64, error) {
 
 	return linux.Syscall(emu.Process, id, a0, a1, a2, a3, a4, a5)
+}
+
+func (emu *Emulator) TrapHandler(acpu *cpu.CPU, trap *cpu.Trap) (bool, error) {
+	switch trap.Cause {
+	case cpu.CauseInstAccessFault, cpu.CauseLoadAccessFault,
+		cpu.CauseStoreAccessFault:
+		fmt.Printf("trap: %vn", trap)
+		emu.Kernel.PrintVMA()
+		return false, nil
+
+	case cpu.CauseInstPageFault, cpu.CauseLoadPageFault,
+		cpu.CauseStorePageFault:
+
+		for _, vma := range emu.Kernel.VMA {
+			if vma.Contains(trap.Tval) {
+				// Allocate page.
+				page, err := emu.Memory.AllocPage()
+				if err != nil {
+					return false, err
+				}
+
+				vpage := trap.Tval >> 12
+
+				if vma.Source != nil {
+					pageStart := vpage << 12
+					offset := pageStart - vma.Start
+					if false {
+						fmt.Printf("mmap: vaddr=%x, offset=%x, fileOffset=%x\n",
+							trap.Tval, offset, vma.Offset+offset)
+					}
+
+					buf := make([]byte, 4096)
+
+					n, err := vma.Source.ReadAt(buf, int64(vma.Offset+offset))
+					if n == 0 && err != nil {
+						return false, err
+					}
+					err = emu.Memory.Store(page<<12, buf)
+					if err != nil {
+						return false, err
+					}
+				}
+
+				err = cpu.SetMapSv39(emu.Memory, emu.CPU.Satp, vpage, page,
+					vma.PageTableFlags())
+				if err != nil {
+					return false, err
+				}
+				if false {
+					fmt.Printf("trap: %v\n", trap)
+					fmt.Printf("  vpage: %x => ppage: %x\n", vpage, page)
+				}
+				return true, nil
+			}
+		}
+
+		// Unmapped address.
+		fmt.Printf("trap: %v\n", trap)
+		emu.Kernel.PrintVMA()
+
+		return false, nil
+
+	case cpu.CauseIllegalInstr, cpu.CauseStoreAddrMisaligned,
+		cpu.CauseLoadAddrMisaligned, cpu.CauseInstAddrMisaligned:
+		fmt.Printf("trap: %v\n", trap)
+		return false, nil
+
+	case cpu.CauseBreakpoint, cpu.CauseEcallU, cpu.CauseEcallS,
+		cpu.CauseEcallVS, cpu.CauseEcallM:
+		fmt.Printf("trap: %v\n", trap)
+		return false, nil
+	}
+
+	fmt.Printf("unknown trap: %v\n", trap)
+	return false, nil
 }
