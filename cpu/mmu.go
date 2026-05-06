@@ -8,6 +8,8 @@ package cpu
 
 import (
 	"fmt"
+
+	"github.com/markkurossi/riscv/memory"
 )
 
 const (
@@ -17,21 +19,6 @@ const (
 	AccessExec
 
 	checkAccess = false
-)
-
-type Memory interface {
-	AllocPage() (uint64, error)
-	Load(addr uint64, buf []byte) error
-	Load8(addr uint64) (uint8, error)
-	Load16(addr uint64) (uint16, error)
-	Load64(addr uint64) (uint64, error)
-	Store(addr uint64, data []byte) error
-	Store8(addr, val uint64) error
-	Store64(addr, val uint64) error
-}
-
-const (
-	PageSize = 4096
 )
 
 const (
@@ -432,7 +419,7 @@ func (cpu *CPU) UserCString(vaddr uint64) (string, error) {
 			return "", err
 		}
 
-		l := PageSize - paddr%PageSize
+		l := memory.PageSize - paddr%memory.PageSize
 		for i := uint64(0); i < l; i++ {
 			b, err := cpu.Memory.Load8(paddr + i)
 			if err != nil {
@@ -450,7 +437,7 @@ func (cpu *CPU) UserCString(vaddr uint64) (string, error) {
 
 func (cpu *CPU) CopyFromUser(vaddr uint64, buf []byte) error {
 	for len(buf) > 0 {
-		l := PageSize - vaddr%PageSize
+		l := memory.PageSize - vaddr%memory.PageSize
 		if l > uint64(len(buf)) {
 			l = uint64(len(buf))
 		}
@@ -503,7 +490,7 @@ func (cpu *CPU) PutUserUint64(vaddr, v uint64) error {
 
 func (cpu *CPU) CopyToUser(vaddr uint64, data []byte) error {
 	for len(data) > 0 {
-		l := PageSize - vaddr%PageSize
+		l := memory.PageSize - vaddr%memory.PageSize
 		if l > uint64(len(data)) {
 			l = uint64(len(data))
 		}
@@ -522,7 +509,7 @@ func (cpu *CPU) CopyToUser(vaddr uint64, data []byte) error {
 	return nil
 }
 
-func SetMapSv39(mem Memory, satp Satp, vpage, ppage uint64,
+func SetMapSv39(mem memory.Memory, satp Satp, vpage, ppage uint64,
 	flags PTEFlags) error {
 
 	if satp.Mode() != SatpModeSv39 {
@@ -560,7 +547,7 @@ func SetMapSv39(mem Memory, satp Satp, vpage, ppage uint64,
 			newPageAddr := newPage << 12
 
 			// Clear page.
-			for i := uint64(0); i < PageSize; i += 8 {
+			for i := uint64(0); i < memory.PageSize; i += 8 {
 				if err := mem.Store64(newPageAddr+i, 0); err != nil {
 					return err
 				}

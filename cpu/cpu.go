@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/markkurossi/riscv/isa"
+	"github.com/markkurossi/riscv/memory"
 )
 
 var (
@@ -49,7 +50,7 @@ type CPU struct {
 	// Instruction count
 	Instret uint64
 
-	Memory Memory
+	Memory memory.Memory
 	TLB    [4096]TLBEntry
 
 	Syscall     Syscall

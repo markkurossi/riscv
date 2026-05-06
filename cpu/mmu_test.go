@@ -9,10 +9,12 @@ package cpu
 import (
 	"fmt"
 	"testing"
+
+	"github.com/markkurossi/riscv/memory"
 )
 
-func makeMem() (Memory, Satp, uint64) {
-	mem := NewArrayMemory(10)
+func makeMem() (memory.Memory, Satp, uint64) {
+	mem := memory.NewArrayMemory(10)
 
 	// Skip 0 page.
 	_, err := mem.AllocPage()
@@ -47,7 +49,7 @@ func TestMapSV39(t *testing.T) {
 	cpu, count := makeTestCPU()
 
 	for i := uint64(1); i < count; i++ {
-		vaddr := i * PageSize
+		vaddr := i * memory.PageSize
 		paddr, err := cpu.Map(vaddr, AccessRead)
 		if err != nil {
 			t.Fatalf("MapSv39(%v): %v", vaddr, err)

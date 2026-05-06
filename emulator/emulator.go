@@ -19,6 +19,7 @@ import (
 	"github.com/markkurossi/riscv/emulator/linux"
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/kernel"
+	"github.com/markkurossi/riscv/memory"
 )
 
 var (
@@ -30,7 +31,7 @@ type Emulator struct {
 	Profile bool
 
 	CPU    *cpu.CPU
-	Memory cpu.Memory
+	Memory memory.Memory
 
 	ProgBase    uint64
 	ProgBaseEnd uint64
@@ -43,7 +44,7 @@ type Emulator struct {
 }
 
 func New(ktrace, profile bool) (*Emulator, error) {
-	mem := cpu.NewArrayMemory(2048) // 8 MB
+	mem := memory.NewArrayMemory(2048) // 8 MB
 
 	// Skip page 0.
 	_, err := mem.AllocPage()
@@ -259,7 +260,7 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 
 			// Load data into memory.
 			satp := emu.CPU.Satp
-			for addr := vaddr; addr < end; addr += cpu.PageSize {
+			for addr := vaddr; addr < end; addr += memory.PageSize {
 				page, err := emu.Memory.AllocPage()
 				if err != nil {
 					return nil, err
@@ -269,15 +270,15 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 					return nil, err
 				}
 				idx := addr - vaddr
-				err = emu.Memory.Store(page*cpu.PageSize,
-					data[idx:idx+cpu.PageSize])
+				err = emu.Memory.Store(page*memory.PageSize,
+					data[idx:idx+memory.PageSize])
 				if err != nil {
 					return nil, err
 				}
 
 				if false {
 					fmt.Printf("Page %v => %v:\n%s", addr>>12, page,
-						hex.Dump(data[idx:idx+cpu.PageSize]))
+						hex.Dump(data[idx:idx+memory.PageSize]))
 				}
 			}
 
