@@ -1,5 +1,7 @@
 # RISC-V in Go
 
+<img align="center" src="goemu-small.png">
+
 A RISC-V emulator written in Go. The goal is to implement the RV64GC
 (64-bit, general-purpose, compressed) profile, with support for running
 Linux applications and, eventually, the Linux operating system.
