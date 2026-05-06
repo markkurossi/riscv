@@ -199,6 +199,15 @@ func (cpu *CPU) loop() error {
 				cpu.X[instr.Rd] = cpu.X[instr.Rs1] / cpu.X[instr.Rs2]
 			}
 
+		case isa.Divuw:
+			if cpu.X[instr.Rs2] == 0 {
+				// Division by zero → result = -1
+				cpu.X[instr.Rd] = ^uint64(0)
+			} else {
+				cpu.X[instr.Rd] = uint64(int64(int32(uint32(cpu.X[instr.Rs1]) /
+					uint32(cpu.X[instr.Rs2]))))
+			}
+
 		case isa.Divw:
 			if cpu.X[instr.Rs2] == 0 {
 				// Division by zero → result = -1
