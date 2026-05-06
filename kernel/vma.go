@@ -23,8 +23,8 @@ type VMA struct {
 	Prot int
 }
 
-func (vma *VMA) PageTableFlags() uint64 {
-	var flags uint64
+func (vma *VMA) PageTableFlags() cpu.PTEFlags {
+	var flags cpu.PTEFlags
 
 	if vma.Prot&cpu.AccessRead != 0 {
 		flags |= cpu.PteR

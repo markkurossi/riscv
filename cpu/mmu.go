@@ -60,26 +60,105 @@ func (satp Satp) PPN() uint64 {
 	return uint64(satp & 0x7ffffffffff)
 }
 
-//  63           54 53        28 27        19 18        10 9 8 7 6 5 4 3 2 1 0
-// +---------------+------------+------------+------------+---+-+-+-+-+-+-+-+-+
-// |    Reserved   | PPN[2]     | PPN[1]     | PPN[0]     |RSW|D|A|G|U|X|W|R|V|
-// +---------------+------------+------------+------------+---+-+-+-+-+-+-+-+-+
-
+// PTE defines the page table entry.
+//
+//	 63           54 53        28 27     19 18     10 9 8 7 6 5 4 3 2 1 0
+//	+---------------+------------+---------+---------+---+-+-+-+-+-+-+-+-+
+//	|    Reserved   | PPN[2]     | PPN[1]  | PPN[0]  |RSW|D|A|G|U|X|W|R|V|
+//	+---------------+------------+---------+---------+---+-+-+-+-+-+-+-+-+
 type PTE uint64
 
+type PTEFlags uint8
+
 const (
-	PteV = 1 << iota // Valid
-	PteR             // Readable
-	PteW             // Writable
-	PteX             // Executable
-	PteU             // User
-	PteG             // Global
-	PteA             // Accessed
-	PteD             // Dirty
+	PteV PTEFlags = 1 << iota // Valid
+	PteR                      // Readable
+	PteW                      // Writable
+	PteX                      // Executable
+	PteU                      // User
+	PteG                      // Global
+	PteA                      // Accessed
+	PteD                      // Dirty
 )
 
-func MakePTE(ppn uint64, flags uint64) PTE {
-	return PTE(ppn<<10 | flags&0b1111111111)
+func (flags PTEFlags) String() string {
+	var result string
+
+	if flags&PteD != 0 {
+		result += "D"
+	} else {
+		result += "."
+	}
+	if flags&PteA != 0 {
+		result += "A"
+	} else {
+		result += "."
+	}
+	if flags&PteG != 0 {
+		result += "G"
+	} else {
+		result += "."
+	}
+	if flags&PteU != 0 {
+		result += "U"
+	} else {
+		result += "."
+	}
+	if flags&PteX != 0 {
+		result += "X"
+	} else {
+		result += "."
+	}
+	if flags&PteW != 0 {
+		result += "W"
+	} else {
+		result += "."
+	}
+	if flags&PteR != 0 {
+		result += "R"
+	} else {
+		result += "."
+	}
+	if flags&PteV != 0 {
+		result += "V"
+	} else {
+		result += "."
+	}
+
+	return result
+}
+
+func (flags PTEFlags) Valid() bool {
+	return flags&PteV != 0
+}
+
+func (flags PTEFlags) Readable() bool {
+	return flags&PteR != 0
+}
+
+func (flags PTEFlags) Writable() bool {
+	return flags&PteW != 0
+}
+
+func (flags PTEFlags) Executable() bool {
+	return flags&PteX != 0
+}
+
+func (flags PTEFlags) CanAccess(access int) (bool, uint64) {
+	if access&AccessRead != 0 && !flags.Readable() {
+		return false, CauseLoadPageFault
+	}
+	if access&AccessWrite != 0 && !flags.Writable() {
+		return false, CauseStorePageFault
+	}
+	if access&AccessExec != 0 && !flags.Executable() {
+		return false, CauseInstPageFault
+	}
+	return true, 0
+}
+
+func MakePTE(ppn uint64, flags PTEFlags) PTE {
+	return PTE(ppn<<10 | uint64(flags&0b11111111))
 }
 
 func (pte PTE) String() string {
@@ -93,68 +172,32 @@ func (pte PTE) String() string {
 
 	result += fmt.Sprintf("%02b,", pte>>8&0b11)
 
-	if pte&PteD != 0 {
-		result += "D"
-	} else {
-		result += "."
-	}
-	if pte&PteA != 0 {
-		result += "A"
-	} else {
-		result += "."
-	}
-	if pte&PteG != 0 {
-		result += "G"
-	} else {
-		result += "."
-	}
-	if pte&PteU != 0 {
-		result += "U"
-	} else {
-		result += "."
-	}
-	if pte&PteX != 0 {
-		result += "X"
-	} else {
-		result += "."
-	}
-	if pte&PteW != 0 {
-		result += "W"
-	} else {
-		result += "."
-	}
-	if pte&PteR != 0 {
-		result += "R"
-	} else {
-		result += "."
-	}
-	if pte&PteV != 0 {
-		result += "V"
-	} else {
-		result += "."
-	}
-
+	result += pte.Flags().String()
 	return result
 }
 
+func (pte PTE) Flags() PTEFlags {
+	return PTEFlags(pte & 0b11111111)
+}
+
 func (pte PTE) Valid() bool {
-	return pte&PteV != 0
+	return pte.Flags().Valid()
 }
 
 func (pte PTE) Readable() bool {
-	return pte&PteR != 0
+	return pte.Flags()&PteR != 0
 }
 
 func (pte PTE) Writable() bool {
-	return pte&PteW != 0
+	return pte.Flags()&PteW != 0
 }
 
 func (pte PTE) Executable() bool {
-	return pte&PteX != 0
+	return pte.Flags()&PteX != 0
 }
 
 func (pte PTE) Leaf() bool {
-	return (pte & (PteR | PteW | PteX)) != 0
+	return (pte.Flags() & (PteR | PteW | PteX)) != 0
 }
 
 func (pte PTE) PPN() uint64 {
@@ -195,8 +238,8 @@ func index(va uint64, level int) uint64 {
 type TLBEntry struct {
 	VPN   uint64
 	Page  uint64
-	Level int
-	// XXX must add access flags.
+	Flags PTEFlags
+	Level uint8
 }
 
 func (cpu *CPU) Map(vaddr uint64, access int) (uint64, error) {
@@ -212,37 +255,28 @@ func (cpu *CPU) Map(vaddr uint64, access int) (uint64, error) {
 
 	vpn := vaddr >> 12
 
-	// XXX should we remove this? Or just check 0 pointer?
-	if vpn == 0 {
-		// XXX Refactor this to function, used also in MapSv39.
-		if access&AccessWrite != 0 {
-			return 0, cpu.Trap(CauseStorePageFault, vaddr, nil)
-		}
-		if access&AccessExec != 0 {
-			return 0, cpu.Trap(CauseInstPageFault, vaddr, nil)
-		}
-
-		// Default to load page fault.
-		return 0, cpu.Trap(CauseLoadPageFault, vaddr, nil)
-	}
-
 	var err error
 	var page uint64
+	var flags PTEFlags
 	var level int
 
 	tlb := &cpu.TLB[vpn%uint64(len(cpu.TLB))]
-	if tlb.VPN == vpn {
-		// XXX Check access flags
+	if tlb.VPN == vpn && tlb.Flags.Valid() {
+		ok, cause := tlb.Flags.CanAccess(access)
+		if !ok {
+			return 0, cpu.Trap(cause, vaddr, nil)
+		}
 		page = tlb.Page
-		level = tlb.Level
+		level = int(tlb.Level)
 	} else {
-		page, level, err = cpu.MapSv39(cpu.Satp.PPN(), vaddr, access)
+		page, flags, level, err = cpu.MapSv39(cpu.Satp.PPN(), vaddr, access)
 		if err != nil {
 			return 0, err
 		}
 		tlb.VPN = vpn
 		tlb.Page = page
-		tlb.Level = level
+		tlb.Flags = flags
+		tlb.Level = uint8(level)
 	}
 
 	switch level {
@@ -257,7 +291,8 @@ func (cpu *CPU) Map(vaddr uint64, access int) (uint64, error) {
 	}
 }
 
-func (cpu *CPU) MapSv39(root, vaddr uint64, access int) (uint64, int, error) {
+func (cpu *CPU) MapSv39(root, vaddr uint64, access int) (
+	uint64, PTEFlags, int, error) {
 
 	base := root << 12
 
@@ -267,7 +302,7 @@ func (cpu *CPU) MapSv39(root, vaddr uint64, access int) (uint64, int, error) {
 
 		v, err := cpu.Memory.Load64(pteAddr)
 		if err != nil {
-			return 0, 0, cpu.Trap(CauseLoadPageFault, pteAddr, err)
+			return 0, 0, 0, cpu.Trap(CauseLoadPageFault, pteAddr, err)
 		}
 
 		pte := PTE(v)
@@ -279,14 +314,14 @@ func (cpu *CPU) MapSv39(root, vaddr uint64, access int) (uint64, int, error) {
 			}
 
 			if access&AccessWrite != 0 {
-				return 0, 0, cpu.Trap(CauseStorePageFault, vaddr, err)
+				return 0, 0, 0, cpu.Trap(CauseStorePageFault, vaddr, err)
 			}
 			if access&AccessExec != 0 {
-				return 0, 0, cpu.Trap(CauseInstPageFault, vaddr, err)
+				return 0, 0, 0, cpu.Trap(CauseInstPageFault, vaddr, err)
 			}
 
 			// Default to load page fault.
-			return 0, 0, cpu.Trap(CauseLoadPageFault, vaddr, err)
+			return 0, 0, 0, cpu.Trap(CauseLoadPageFault, vaddr, err)
 		}
 		if pte.Leaf() {
 			return cpu.mapLeaf(pte, vaddr, level, access)
@@ -296,22 +331,22 @@ func (cpu *CPU) MapSv39(root, vaddr uint64, access int) (uint64, int, error) {
 		base = pte.PPN() << 12
 	}
 
-	return 0, 0, cpu.Trap(CauseLoadPageFault, vaddr,
+	return 0, 0, 0, cpu.Trap(CauseLoadPageFault, vaddr,
 		fmt.Errorf("no leaf page found"))
 }
 
 func (cpu *CPU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
-	uint64, int, error) {
+	uint64, PTEFlags, int, error) {
 
 	// Check permissions.
 	if access&AccessRead != 0 && !pte.Readable() {
-		return 0, 0, cpu.Trap(CauseLoadPageFault, vaddr, nil)
+		return 0, 0, 0, cpu.Trap(CauseLoadPageFault, vaddr, nil)
 	}
 	if access&AccessWrite != 0 && !pte.Writable() {
-		return 0, 0, cpu.Trap(CauseStorePageFault, vaddr, nil)
+		return 0, 0, 0, cpu.Trap(CauseStorePageFault, vaddr, nil)
 	}
 	if access&AccessExec != 0 && !pte.Executable() {
-		return 0, 0, cpu.Trap(CauseInstPageFault, vaddr, nil)
+		return 0, 0, 0, cpu.Trap(CauseInstPageFault, vaddr, nil)
 	}
 
 	// Enforce superpage alignment rules.
@@ -325,13 +360,13 @@ func (cpu *CPU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 	}
 	if misaligned {
 		if access&AccessRead != 0 {
-			return 0, 0, cpu.Trap(CauseLoadAddrMisaligned, vaddr, nil)
+			return 0, 0, 0, cpu.Trap(CauseLoadAddrMisaligned, vaddr, nil)
 		}
 		if access&AccessWrite != 0 {
-			return 0, 0, cpu.Trap(CauseStoreAddrMisaligned, vaddr, nil)
+			return 0, 0, 0, cpu.Trap(CauseStoreAddrMisaligned, vaddr, nil)
 		}
 		if access&AccessExec != 0 {
-			return 0, 0, cpu.Trap(CauseInstAddrMisaligned, vaddr, nil)
+			return 0, 0, 0, cpu.Trap(CauseInstAddrMisaligned, vaddr, nil)
 		}
 	}
 
@@ -347,7 +382,7 @@ func (cpu *CPU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 		panic("invalid level")
 	}
 
-	return page, level, nil
+	return page, pte.Flags(), level, nil
 }
 
 func (cpu *CPU) UserUint8(vaddr uint64) (uint8, error) {
@@ -487,7 +522,9 @@ func (cpu *CPU) CopyToUser(vaddr uint64, data []byte) error {
 	return nil
 }
 
-func SetMapSv39(mem Memory, satp Satp, vpage, ppage, flags uint64) error {
+func SetMapSv39(mem Memory, satp Satp, vpage, ppage uint64,
+	flags PTEFlags) error {
+
 	if satp.Mode() != SatpModeSv39 {
 		return fmt.Errorf("invalid page-table mode: %v", satp.Mode())
 	}

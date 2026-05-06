@@ -238,7 +238,7 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 			var prot int
 			var writable bool
 
-			flags := uint64(cpu.PteU)
+			flags := cpu.PteU
 
 			if prog.Flags&elf.PF_R != 0 {
 				prot |= cpu.AccessRead
