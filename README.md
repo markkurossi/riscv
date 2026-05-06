@@ -39,6 +39,14 @@ basic support for simple Go programs.
  - [ ] Supervisor mode
  - [ ] Boot Linux kernel
 
+# Benchmarks
+
+| Optimization | fib 30 | fib 35 | fib 40 |
+|:-------------|-------:|-------:|-------:|
+| Base         |  2.920 | 31.973 |        |
+
+# Appendix
+
 ## Emulator Example
 
 ``` shell
