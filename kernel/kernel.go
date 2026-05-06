@@ -10,6 +10,7 @@ package kernel
 type Kernel struct {
 	NextPID uint64
 	Ktrace  bool
+	Profile bool
 
 	VMA       []*VMA
 	HeapStart uint64

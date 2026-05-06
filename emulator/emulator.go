@@ -27,7 +27,7 @@ var (
 
 type Emulator struct {
 	Verbose bool
-	Ktrace  bool
+	Profile bool
 
 	CPU    *cpu.CPU
 	Memory cpu.Memory
@@ -42,7 +42,7 @@ type Emulator struct {
 	Process *kernel.Process
 }
 
-func New(ktrace bool) (*Emulator, error) {
+func New(ktrace, profile bool) (*Emulator, error) {
 	mem := cpu.NewArrayMemory(2048) // 8 MB
 
 	// Skip page 0.
@@ -57,6 +57,7 @@ func New(ktrace bool) (*Emulator, error) {
 
 	kernel := &kernel.Kernel{
 		Ktrace:    ktrace,
+		Profile:   profile,
 		MmapStart: mmapStart,
 		MmapEnd:   mmapStart,
 	}

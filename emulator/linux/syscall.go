@@ -9,6 +9,7 @@ package linux
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -23,7 +24,8 @@ import (
 )
 
 var (
-	bo = binary.LittleEndian
+	bo         = binary.LittleEndian
+	ErrProfile = errors.New("profile")
 )
 
 type SyscallI struct {
@@ -596,10 +598,15 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		return 0, nil
 
 	case 93: // exit
+		if proc.Kernel.Profile {
+			return Error(ErrnoEINTR), ErrProfile
+		}
 		os.Exit(int(a0))
 
 	case 94: // exit_group
-		// XXX return CPUError containing the exit status.
+		if proc.Kernel.Profile {
+			return Error(ErrnoEINTR), ErrProfile
+		}
 		os.Exit(int(a0))
 
 	case 96: // set_tid_address
