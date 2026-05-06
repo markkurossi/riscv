@@ -6,6 +6,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/utsname.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stddef.h>
@@ -76,6 +77,21 @@ process_file(char *name)
   stat_fd(1);
 }
 
+#define ss(__name) sizeof(s. __name), offsetof(struct utsname, __name)
+
+void
+utsname()
+{
+  struct utsname s;
+
+  printf("sizeof(struct utsname)=%ld\n", sizeof(s));
+  printf("  sizeof(.sysname) =%ld @ %ld\n", ss(sysname));
+  printf("  sizeof(.nodename)=%ld @ %ld\n", ss(nodename));
+  printf("  sizeof(.release) =%ld @ %ld\n", ss(release));
+  printf("  sizeof(.version) =%ld @ %ld\n", ss(version));
+  printf("  sizeof(.machine) =%ld @ %ld\n", ss(machine));
+}
+
 int
 main(int argc, char *argv[], char *env[])
 {
@@ -99,6 +115,8 @@ main(int argc, char *argv[], char *env[])
 
   for (i = 1; i < argc; i++)
     process_file(argv[i]);
+
+  utsname();
 
   return 0;
 }
