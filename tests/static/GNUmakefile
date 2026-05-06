@@ -2,18 +2,27 @@
 RISCV64_LINUX_CC = riscv64-linux-gnu-gcc
 
 PROG_SRCS := $(wildcard *.c)
-PROGS := $(patsubst %.c,%-riscv64-linux,$(PROG_SRCS))
 
-all: $(PROGS)
+RISCV_PROGS := $(patsubst %.c,riscv64-linux/%,$(PROG_SRCS))
+HOST_PROGS := $(patsubst %.c,host/%,$(PROG_SRCS))
 
-main-riscv64-linux: main.c
+ALL_TARGETS :=
+
+UNAME_S := $(shell uname -s)
+
+ifeq ($(UNAME_S),Darwin)
+ALL_TARGETS += $(HOST_PROGS)
+else
+ALL_TARGETS += $(RISCV_PROGS)
+endif
+
+all: $(ALL_TARGETS)
+
+riscv64-linux/%: %.c
 	$(RISCV64_LINUX_CC) -Wall -static -o $@ $+
 
-fibo-riscv64-linux: fibo.c
-	$(RISCV64_LINUX_CC) -Wall -static -o $@ $+
+host/%: %.c
+	$(CC) -Wall -o $@ $+
 
-types-riscv64-linux: types.c
-	$(RISCV64_LINUX_CC) -Wall -static -o $@ $+
-
-pthread-riscv64-linux: pthread.c
-	$(RISCV64_LINUX_CC) -Wall -static -o $@ $+
+clean:
+	$(RM) -f $(HOST_PROGS) $(RISCV_PROGS)
