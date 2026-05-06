@@ -78,7 +78,6 @@ func New(ktrace, profile bool) (*Emulator, error) {
 	if err != nil {
 		return nil, err
 	}
-	kernel.PrintVMA()
 
 	// Allocate stack pages.
 	stackBottomPage := stackBottom >> 12
@@ -165,16 +164,20 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 	}
 	defer f.Close()
 
-	fmt.Printf("File:\n")
-	fmt.Printf(" - Class     : %v\n", f.Class)
-	fmt.Printf(" - Data      : %v\n", f.Data)
-	fmt.Printf(" - Version   : %v\n", f.Version)
-	fmt.Printf(" - OSABI     : %v\n", f.OSABI)
-	fmt.Printf(" - ABIVersion: %v\n", f.ABIVersion)
-	fmt.Printf(" - ByteOrder : %v\n", f.ByteOrder)
-	fmt.Printf(" - Type      : %v\n", f.Type)
-	fmt.Printf(" - Machine   : %v\n", f.Machine)
-	fmt.Printf(" - Entry     : %x\n", f.Entry)
+	const elfDebug = false
+
+	if elfDebug {
+		fmt.Printf("File:\n")
+		fmt.Printf(" - Class     : %v\n", f.Class)
+		fmt.Printf(" - Data      : %v\n", f.Data)
+		fmt.Printf(" - Version   : %v\n", f.Version)
+		fmt.Printf(" - OSABI     : %v\n", f.OSABI)
+		fmt.Printf(" - ABIVersion: %v\n", f.ABIVersion)
+		fmt.Printf(" - ByteOrder : %v\n", f.ByteOrder)
+		fmt.Printf(" - Type      : %v\n", f.Type)
+		fmt.Printf(" - Machine   : %v\n", f.Machine)
+		fmt.Printf(" - Entry     : %x\n", f.Entry)
+	}
 
 	info := &fileInfo{
 		Dynamic: f.Type == elf.ET_DYN,
@@ -189,7 +192,6 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 			var buf [8]byte
 			if _, err2 = raw.ReadAt(buf[:], 32); err2 == nil {
 				info.Phoff = f.ByteOrder.Uint64(buf[:])
-				fmt.Printf("Phoff: %x\n", info.Phoff)
 			}
 			raw.Close()
 		}
@@ -199,12 +201,14 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 	}
 
 	for idx, prog := range f.Progs {
-		fmt.Printf("Prog %v\n", idx)
-		fmt.Printf(" - Type : %v\n", prog.Type)
-		fmt.Printf(" - Flags: %v\n", prog.Flags)
-		fmt.Printf(" - Vaddr: %x\n", prog.Vaddr)
-		fmt.Printf(" - Memsz: %x\n", prog.Memsz)
-		fmt.Printf(" - Align: %x\n", prog.Align)
+		if elfDebug {
+			fmt.Printf("Prog %v\n", idx)
+			fmt.Printf(" - Type : %v\n", prog.Type)
+			fmt.Printf(" - Flags: %v\n", prog.Flags)
+			fmt.Printf(" - Vaddr: %x\n", prog.Vaddr)
+			fmt.Printf(" - Memsz: %x\n", prog.Memsz)
+			fmt.Printf(" - Align: %x\n", prog.Align)
+		}
 
 		switch prog.Type {
 		case elf.PT_PHDR:
@@ -224,8 +228,10 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 			headPad := vaddr & 0xfff
 			vaddr &= ^uint64(0xfff)
 
-			fmt.Printf(" @ Vaddr: %x/%x-%x/%x\n",
-				vaddr, vaddr+headPad, vaddr+headPad+prog.Memsz, end)
+			if elfDebug {
+				fmt.Printf(" @ Vaddr: %x/%x-%x/%x\n",
+					vaddr, vaddr+headPad, vaddr+headPad+prog.Memsz, end)
+			}
 
 			if end > emu.ProgBaseEnd {
 				emu.ProgBaseEnd = end
@@ -260,7 +266,6 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 			}
 
 			emu.Kernel.AddVMA(vaddr, end, prot, nil, 0)
-			emu.Kernel.PrintVMA()
 
 			// Load data into memory.
 			satp := emu.CPU.MMU.Satp
@@ -325,8 +330,6 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 func (emu *Emulator) Run(argv []string, envp []string) error {
 	var argvPtrs []uint64
 	var envpPtrs []uint64
-
-	emu.Kernel.PrintVMA()
 
 	emu.Debugf("argv:\n")
 	for i, v := range argv {
@@ -401,15 +404,12 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 	}
 	emu.Push(phdr)
 	emu.Push(linux.AtPhdr)
-	fmt.Printf("AT_PHDR:  %x\n", phdr)
 
 	emu.Push(56)
 	emu.Push(linux.AtPhent)
-	fmt.Printf("AT_PHENT: %d\n", 56)
 
 	emu.Push(emu.Prog.Phnum)
 	emu.Push(linux.AtPhnum)
-	fmt.Printf("AT_PHNUM: %d\n", emu.Prog.Phnum)
 
 	if false {
 		buf := make([]byte, emu.Prog.Phnum*56)
@@ -423,16 +423,13 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 	if emu.Interp != nil {
 		emu.Push(emu.Interp.Base)
 		emu.Push(linux.AtBase)
-		fmt.Printf("AT_BASE: %x\n", emu.Interp.Base)
 	} else {
 		emu.Push(0)
 		emu.Push(linux.AtBase)
-		fmt.Printf("AT_BASE:  %x\n", 0)
 	}
 
 	emu.Push(emu.Prog.Entry)
 	emu.Push(linux.AtEntry)
-	fmt.Printf("AT_ENTRY: %x\n", emu.Prog.Entry)
 
 	emu.Push(1000)
 	emu.Push(linux.AtUID)
@@ -497,11 +494,6 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 	emu.Process.AllocFD(os.Stderr)
 
 	emu.Process.CPU.PID = emu.Process.PID
-
-	fmt.Printf("VMA:\n")
-	for i, vma := range emu.Kernel.VMA {
-		fmt.Printf(" - %d: %v\n", i, vma)
-	}
 
 	return emu.CPU.Run()
 }
