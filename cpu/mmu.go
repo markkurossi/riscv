@@ -193,8 +193,10 @@ func index(va uint64, level int) uint64 {
 }
 
 type TLBEntry struct {
-	Vaddr uint64
-	Paddr uint64
+	VPN   uint64
+	Page  uint64
+	Level int
+	// XXX must add access flags.
 }
 
 func (cpu *CPU) Map(vaddr uint64, access int) (uint64, error) {
@@ -210,6 +212,7 @@ func (cpu *CPU) Map(vaddr uint64, access int) (uint64, error) {
 
 	vpn := vaddr >> 12
 
+	// XXX should we remove this? Or just check 0 pointer?
 	if vpn == 0 {
 		// XXX Refactor this to function, used also in MapSv39.
 		if access&AccessWrite != 0 {
@@ -223,25 +226,39 @@ func (cpu *CPU) Map(vaddr uint64, access int) (uint64, error) {
 		return 0, cpu.Trap(CauseLoadPageFault, vaddr, nil)
 	}
 
-	// XXX this must be by virtual page number (VPN), not by address.
-	tlb := &cpu.TLB[vaddr%uint64(len(cpu.TLB))]
-	if tlb.Vaddr == vaddr {
-		return tlb.Paddr, nil
+	var err error
+	var page uint64
+	var level int
+
+	tlb := &cpu.TLB[vpn%uint64(len(cpu.TLB))]
+	if tlb.VPN == vpn {
+		// XXX Check access flags
+		page = tlb.Page
+		level = tlb.Level
+	} else {
+		page, level, err = cpu.MapSv39(cpu.Satp.PPN(), vaddr, access)
+		if err != nil {
+			return 0, err
+		}
+		tlb.VPN = vpn
+		tlb.Page = page
+		tlb.Level = level
 	}
 
-	paddr, err := cpu.MapSv39(cpu.Satp.PPN(), vaddr, access)
-	if err != nil {
-		return 0, err
+	switch level {
+	case 2:
+		return page | (vaddr & (1<<30 - 1)), nil
+	case 1:
+		return page | (vaddr & (1<<21 - 1)), nil
+	case 0:
+		return page | (vaddr & (1<<12 - 1)), nil
+	default:
+		panic("invalid level")
 	}
-	if true {
-		tlb.Vaddr = vaddr
-		tlb.Paddr = paddr
-	}
-
-	return paddr, nil
 }
 
-func (cpu *CPU) MapSv39(root, vaddr uint64, access int) (uint64, error) {
+func (cpu *CPU) MapSv39(root, vaddr uint64, access int) (uint64, int, error) {
+
 	base := root << 12
 
 	for level := 2; level >= 0; level-- {
@@ -250,7 +267,7 @@ func (cpu *CPU) MapSv39(root, vaddr uint64, access int) (uint64, error) {
 
 		v, err := cpu.Memory.Load64(pteAddr)
 		if err != nil {
-			return 0, cpu.Trap(CauseLoadPageFault, pteAddr, err)
+			return 0, 0, cpu.Trap(CauseLoadPageFault, pteAddr, err)
 		}
 
 		pte := PTE(v)
@@ -262,14 +279,14 @@ func (cpu *CPU) MapSv39(root, vaddr uint64, access int) (uint64, error) {
 			}
 
 			if access&AccessWrite != 0 {
-				return 0, cpu.Trap(CauseStorePageFault, vaddr, err)
+				return 0, 0, cpu.Trap(CauseStorePageFault, vaddr, err)
 			}
 			if access&AccessExec != 0 {
-				return 0, cpu.Trap(CauseInstPageFault, vaddr, err)
+				return 0, 0, cpu.Trap(CauseInstPageFault, vaddr, err)
 			}
 
 			// Default to load page fault.
-			return 0, cpu.Trap(CauseLoadPageFault, vaddr, err)
+			return 0, 0, cpu.Trap(CauseLoadPageFault, vaddr, err)
 		}
 		if pte.Leaf() {
 			return cpu.mapLeaf(pte, vaddr, level, access)
@@ -279,22 +296,22 @@ func (cpu *CPU) MapSv39(root, vaddr uint64, access int) (uint64, error) {
 		base = pte.PPN() << 12
 	}
 
-	return 0, cpu.Trap(CauseLoadPageFault, vaddr,
+	return 0, 0, cpu.Trap(CauseLoadPageFault, vaddr,
 		fmt.Errorf("no leaf page found"))
 }
 
 func (cpu *CPU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
-	uint64, error) {
+	uint64, int, error) {
 
 	// Check permissions.
 	if access&AccessRead != 0 && !pte.Readable() {
-		return 0, cpu.Trap(CauseLoadAccessFault, vaddr, nil)
+		return 0, 0, cpu.Trap(CauseLoadPageFault, vaddr, nil)
 	}
 	if access&AccessWrite != 0 && !pte.Writable() {
-		return 0, cpu.Trap(CauseStoreAccessFault, vaddr, nil)
+		return 0, 0, cpu.Trap(CauseStorePageFault, vaddr, nil)
 	}
 	if access&AccessExec != 0 && !pte.Executable() {
-		return 0, cpu.Trap(CauseInstAccessFault, vaddr, nil)
+		return 0, 0, cpu.Trap(CauseInstPageFault, vaddr, nil)
 	}
 
 	// Enforce superpage alignment rules.
@@ -308,31 +325,29 @@ func (cpu *CPU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 	}
 	if misaligned {
 		if access&AccessRead != 0 {
-			return 0, cpu.Trap(CauseLoadAddrMisaligned, vaddr, nil)
+			return 0, 0, cpu.Trap(CauseLoadAddrMisaligned, vaddr, nil)
 		}
 		if access&AccessWrite != 0 {
-			return 0, cpu.Trap(CauseStoreAddrMisaligned, vaddr, nil)
+			return 0, 0, cpu.Trap(CauseStoreAddrMisaligned, vaddr, nil)
 		}
 		if access&AccessExec != 0 {
-			return 0, cpu.Trap(CauseInstAddrMisaligned, vaddr, nil)
+			return 0, 0, cpu.Trap(CauseInstAddrMisaligned, vaddr, nil)
 		}
 	}
 
-	// Construct physical address.
-
-	var paddr uint64
+	var page uint64
 	switch level {
 	case 2: // 1 GiB
-		paddr = pte.PPN2()<<30 | (vaddr & ((1 << 30) - 1))
+		page = pte.PPN2() << 30
 	case 1: // 2 MiB
-		paddr = pte.PPN2()<<30 | pte.PPN1()<<21 | (vaddr & ((1 << 21) - 1))
+		page = pte.PPN2()<<30 | pte.PPN1()<<21
 	case 0:
-		paddr = pte.PPN()<<12 | (vaddr & 0xfff)
+		page = pte.PPN() << 12
 	default:
 		panic("invalid level")
 	}
 
-	return paddr, nil
+	return page, level, nil
 }
 
 func (cpu *CPU) UserUint8(vaddr uint64) (uint8, error) {
@@ -533,7 +548,7 @@ func SetMapSv39(mem Memory, satp Satp, vpage, ppage, flags uint64) error {
 	}
 	pte := PTE(v)
 	if pte.Valid() {
-		return fmt.Errorf("mapping alredy exists: %v", pte)
+		return fmt.Errorf("mapping already exists: %v", pte)
 	}
 
 	return mem.Store64(pteAddr, uint64(MakePTE(ppage, flags)))

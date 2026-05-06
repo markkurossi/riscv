@@ -43,7 +43,7 @@ basic support for simple Go programs.
 
 | Optimization | fib 30 | fib 35 | fib 40 |
 |:-------------|-------:|-------:|-------:|
-| Base         |  2.920 | 31.973 |        |
+| Base         |  2.969 | 32.510 |        |
 
 # Appendix
 
