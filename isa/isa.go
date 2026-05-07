@@ -946,6 +946,19 @@ func (instr Instr) String() string {
 		case Sb, Sd, Sh, Sw: // GroupSTORE
 			return fmt.Sprintf("%v\t%v,%d(%v)",
 				instr.op(), instr.Rs2, instr.Imm, instr.Rs1)
+
+			// GroupAMO
+		case LrD, LrW:
+			return fmt.Sprintf("%v\t%v(%v)",
+				instr.Op, instr.Rd, instr.Rs1)
+		case AmoaddD, AmoaddW, AmoandD, AmoandW, AmoorD, AmoorW,
+			AmoswapD, AmoswapW, ScD, ScW:
+			return fmt.Sprintf("%v\t%v,%v(%v)",
+				instr.Op, instr.Rd, instr.Rs2, instr.Rs1)
+
+			// GroupMISCMEM
+		case Fence:
+			return fmt.Sprintf("%v", instr.Op)
 		}
 		fmt.Printf("Instr: Op=%v, Group=%v\n", instr.Op, group)
 	}
