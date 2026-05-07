@@ -14,11 +14,14 @@ import (
 	"runtime/pprof"
 
 	"github.com/markkurossi/riscv/emulator"
+	"github.com/markkurossi/riscv/kernel"
 )
 
 func main() {
 	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to `file`")
+	verbose := flag.Bool("v", false, "verbose output")
 	ktrace := flag.Bool("ktrace", false, "kernel trace")
+	fsroot := flag.String("fsroot", "", "filesystem root")
 	flag.Parse()
 
 	if len(*cpuprofile) > 0 {
@@ -33,8 +36,15 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
+	params := kernel.Params{
+		Verbose: *verbose,
+		Ktrace:  *ktrace,
+		Profile: len(*cpuprofile) > 0,
+		FSRoot:  *fsroot,
+	}
+
 	for _, arg := range flag.Args() {
-		emu, err := emulator.New(*ktrace, len(*cpuprofile) > 0)
+		emu, err := emulator.New(params)
 		if err != nil {
 			log.Fatalf("failed to create emulator: %v", err)
 		}

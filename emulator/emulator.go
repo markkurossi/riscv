@@ -28,9 +28,6 @@ var (
 )
 
 type Emulator struct {
-	Verbose bool
-	Profile bool
-
 	CPU    *cpu.CPU
 	Memory memory.Memory
 
@@ -44,7 +41,7 @@ type Emulator struct {
 	Process *kernel.Process
 }
 
-func New(ktrace, profile bool) (*Emulator, error) {
+func New(params kernel.Params) (*Emulator, error) {
 	mem := memory.NewArrayMemory(2048) // 8 MB
 
 	// Skip page 0.
@@ -58,8 +55,7 @@ func New(ktrace, profile bool) (*Emulator, error) {
 	mmapStart := uint64(0x4000000000)
 
 	kernel := &kernel.Kernel{
-		Ktrace:    ktrace,
-		Profile:   profile,
+		Params:    params,
 		MmapStart: mmapStart,
 		MmapEnd:   mmapStart,
 	}
@@ -119,7 +115,7 @@ func New(ktrace, profile bool) (*Emulator, error) {
 }
 
 func (emu *Emulator) Debugf(msg string, args ...interface{}) {
-	if !emu.Verbose {
+	if !emu.Kernel.Verbose {
 		return
 	}
 	fmt.Printf(msg, args...)
@@ -135,7 +131,7 @@ func (emu *Emulator) LoadELF(file string) error {
 	emu.Prog = info
 	if len(emu.Prog.Interp) > 0 {
 		// Dynamically linked executable.
-		fmt.Printf("PT_INTERP: %v\n", emu.Prog.Interp)
+		emu.Debugf("PT_INTERP: %v\n", emu.Prog.Interp)
 
 		info, err = emu.load("image" + emu.Prog.Interp)
 		if err != nil {
@@ -292,10 +288,8 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 			}
 
 			if writable && end > emu.Kernel.HeapEnd {
-				fmt.Printf("prog.End    : 0x%x\n", end)
 				emu.Kernel.HeapStart = end
 				emu.Kernel.HeapEnd = end
-				fmt.Printf(" => HeapEnd: 0x%x\n", emu.Kernel.HeapEnd)
 			}
 
 		case elf.PT_INTERP:

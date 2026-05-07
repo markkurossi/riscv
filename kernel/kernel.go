@@ -8,9 +8,9 @@
 package kernel
 
 type Kernel struct {
+	Params
+
 	NextPID uint64
-	Ktrace  bool
-	Profile bool
 
 	VMA       []*VMA
 	HeapStart uint64

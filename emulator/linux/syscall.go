@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -360,12 +359,6 @@ func Syscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 	return ret, err
 }
 
-var root string = "image"
-
-func mkpath(pathname string) string {
-	return filepath.Join(root, pathname)
-}
-
 func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 	uint64, error) {
 
@@ -384,8 +377,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		if err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
-		fmt.Printf("     - pathname=%v => %v\n", pathname, mkpath(pathname))
-		_, err = os.Stat(mkpath(pathname))
+		_, err = os.Stat(proc.Kernel.MakePath(pathname))
 		if err != nil {
 			return Error(ErrnoENOENT), nil
 		}
@@ -406,8 +398,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		if err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
-		fmt.Printf("     - pathname=%v => %v\n", pathname, mkpath(pathname))
-		f, err := os.Open(mkpath(pathname))
+		f, err := os.Open(proc.Kernel.MakePath(pathname))
 		if err != nil {
 			return Error(ErrnoENOENT), nil
 		}
@@ -742,21 +733,19 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 			// Compute brk.
 			brk := (a0 + 4095) & ^uint64(0xfff)
 
-			const brkDebug = true
-
-			if brkDebug {
-				fmt.Printf("     brk: => %x - %x\n", proc.Kernel.HeapEnd, brk)
-				proc.Kernel.PrintVMA()
-			}
-
 			err := proc.Kernel.AddVMA(proc.Kernel.HeapEnd, brk,
 				mmu.AccessRead|mmu.AccessWrite, nil, 0)
 			if err != nil {
 				return Error(ErrnoENOMEM), nil
 			}
 
-			if brkDebug {
-				proc.Kernel.PrintVMA()
+			if proc.Ktrace {
+				ktracef(proc, "     brk: => %x - %x\n",
+					proc.Kernel.HeapEnd, brk)
+				ktracef(proc, "     VMA:\n")
+				for i, vma := range proc.Kernel.VMA {
+					ktracef(proc, "     %3d: %v\n", i, vma)
+				}
 			}
 
 			proc.Kernel.HeapEnd = brk
