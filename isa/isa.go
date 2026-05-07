@@ -901,11 +901,15 @@ func (instr Instr) String() string {
 
 	if instr.Op != Invalid {
 		switch instr.Op {
-		case Add, Divw, Mul, Remw: // GroupOP, GroupOP32
+		case Add, And, Div, Divu, Divw, Mul, Mulhu, Mulw, Or, Rem, Remw,
+			Slt, Sll, Sltu, Srl, Sub, Xor:
+			// GroupOP, GroupOP32
 			return fmt.Sprintf("%v\t%v,%v,%v",
 				instr.op(), instr.Rd, instr.Rs1, instr.Rs2)
 
-		case Addi, Addiw, Andi, Slli, Srli: // GroupOPIMM, GroupOPIMM32
+		case Addi, Addiw, Andi, Slli, Slliw, Slti, Sltiu, Srai, Sraiw,
+			Srli, Srliw, Ori, Xori:
+			// GroupOPIMM, GroupOPIMM32
 			return fmt.Sprintf("%v\t%v,%v,%d",
 				instr.op(), instr.Rd, instr.Rs1, instr.Imm)
 
@@ -913,7 +917,7 @@ func (instr Instr) String() string {
 			return fmt.Sprintf("%v\t%v,0x%x",
 				instr.op(), instr.Rd, uint32(instr.Imm)>>12)
 
-		case Beq, Bge, Bgeu, Bne: // GroupBRANCH
+		case Beq, Bge, Bgeu, Blt, Bltu, Bne: // GroupBRANCH
 			return fmt.Sprintf("%v\t%v,%v,%d",
 				instr.Op, instr.Rs1, instr.Rs2, instr.Imm)
 
@@ -927,15 +931,19 @@ func (instr Instr) String() string {
 			return fmt.Sprintf("%v\t%v,%d(%v)",
 				instr.Op, instr.Rd, instr.Imm, instr.Rs1)
 
-		case Ld, Lbu: // GroupLOAD
+		case Lb, Lbu, Ld, Lhu, Lw, Lwu: // GroupLOAD
 			return fmt.Sprintf("%v\t%v,%d(%v)",
 				instr.op(), instr.Rd, instr.Imm, instr.Rs1)
+
+		case Fld, Flw:
+			return fmt.Sprintf("%v\tF%v,%d(%v)",
+				instr.op(), int(instr.Rd), instr.Imm, instr.Rs1)
 
 		case Lui: // GroupLUI
 			return fmt.Sprintf("%v\t%v,0x%x",
 				instr.op(), instr.Rd, uint32(instr.Imm)>>12)
 
-		case Sd, Sb: // GroupSTORE
+		case Sb, Sd, Sh, Sw: // GroupSTORE
 			return fmt.Sprintf("%v\t%v,%d(%v)",
 				instr.op(), instr.Rs2, instr.Imm, instr.Rs1)
 		}
