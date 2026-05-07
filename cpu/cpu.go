@@ -119,7 +119,11 @@ func (cpu *CPU) loop() error {
 		cpu.Instret++
 
 		if false {
-			fmt.Printf("%8x:\t%08x\t%v\n", cpu.PC, instr.Raw, instr)
+			if instr.Raw&0b11 == 0b11 {
+				fmt.Printf("%8x:    %08x    %v\n", cpu.PC, instr.Raw, instr)
+			} else {
+				fmt.Printf("%8x:    %-8x    %v\n", cpu.PC, instr.Raw, instr)
+			}
 		}
 
 		switch instr.Op {
@@ -262,7 +266,7 @@ func (cpu *CPU) loop() error {
 
 		case isa.FeqS:
 			b1 := math.Float64bits(cpu.F[instr.Rs1])
-			b2 := math.Float64bits(cpu.F[instr.Rs1])
+			b2 := math.Float64bits(cpu.F[instr.Rs2])
 
 			if math.Float32frombits(uint32(b1)) ==
 				math.Float32frombits(uint32(b2)) {
@@ -337,8 +341,20 @@ func (cpu *CPU) loop() error {
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] * cpu.X[instr.Rs2]
 
 		case isa.Mulh:
-			hi, _ := bits.Mul64(cpu.X[instr.Rs1], cpu.X[instr.Rs2])
-			cpu.X[instr.Rd] = hi
+			// XXX check this or use big.Int
+			a := int64(cpu.X[instr.Rs1])
+			b := int64(cpu.X[instr.Rs2])
+			h, _ := bits.Mul64(uint64(a), uint64(b))
+			hi := int64(h)
+
+			// Correct the sign.
+			if a < 0 {
+				hi -= b
+			}
+			if b < 0 {
+				hi -= a
+			}
+			cpu.X[instr.Rd] = uint64(hi)
 
 		case isa.Mulhu:
 			hi, _ := bits.Mul64(cpu.X[instr.Rs1], cpu.X[instr.Rs2])
@@ -371,7 +387,7 @@ func (cpu *CPU) loop() error {
 
 		case isa.Remuw:
 			if cpu.X[instr.Rs2] == 0 {
-				cpu.X[instr.Rd] = cpu.X[instr.Rs1]
+				cpu.X[instr.Rd] = uint64(uint32(cpu.X[instr.Rs1]))
 			} else {
 				cpu.X[instr.Rd] = uint64(uint32(cpu.X[instr.Rs1]) %
 					uint32(cpu.X[instr.Rs2]))
@@ -379,7 +395,7 @@ func (cpu *CPU) loop() error {
 
 		case isa.Remw:
 			if cpu.X[instr.Rs2] == 0 {
-				cpu.X[instr.Rd] = cpu.X[instr.Rs1]
+				cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1])))
 			} else {
 				cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) %
 					int32(cpu.X[instr.Rs2])))
@@ -455,7 +471,7 @@ func (cpu *CPU) loop() error {
 
 		case isa.Srlw:
 			cpu.X[instr.Rd] = uint64(uint32(cpu.X[instr.Rs1]) >>
-				(cpu.X[instr.Rs2] & 0b111111))
+				(cpu.X[instr.Rs2] & 0b11111))
 
 		case isa.Srli:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> instr.Imm
@@ -493,7 +509,7 @@ func (cpu *CPU) loop() error {
 			csr := instr.Raw >> 20
 			switch csr {
 			case 0xc01: // time - RDCYCLE instruction
-				v := time.Now().Nanosecond()
+				v := time.Now().UnixNano()
 				cpu.X[instr.Rd] = uint64(v)
 				// XX check what to do with R[Rs1]
 
