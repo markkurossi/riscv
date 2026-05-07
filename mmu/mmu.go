@@ -360,9 +360,6 @@ func (mmu *MMU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 		misaligned = pte.PPN0() != 0
 	}
 	if misaligned {
-		if access&AccessRead != 0 {
-			return 0, 0, 0, isa.NewTrap(isa.CauseLoadAddrMisaligned, vaddr, nil)
-		}
 		if access&AccessWrite != 0 {
 			return 0, 0, 0, isa.NewTrap(isa.CauseStoreAddrMisaligned, vaddr,
 				nil)
@@ -370,6 +367,8 @@ func (mmu *MMU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 		if access&AccessExec != 0 {
 			return 0, 0, 0, isa.NewTrap(isa.CauseInstAddrMisaligned, vaddr, nil)
 		}
+		// Default to load fault.
+		return 0, 0, 0, isa.NewTrap(isa.CauseLoadAddrMisaligned, vaddr, nil)
 	}
 
 	var page uint64
