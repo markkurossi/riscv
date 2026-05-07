@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/mmu"
 )
 
@@ -74,6 +75,22 @@ func (vma *VMA) String() string {
 
 func (vma *VMA) Contains(addr uint64) bool {
 	return vma.Start <= addr && addr < vma.End
+}
+
+func (vma *VMA) Satisfies(cause uint64) bool {
+	switch cause {
+	case isa.CauseLoadPageFault:
+		return vma.Prot&mmu.AccessRead != 0
+
+	case isa.CauseStorePageFault:
+		return vma.Prot&mmu.AccessWrite != 0
+
+	case isa.CauseInstPageFault:
+		return vma.Prot&mmu.AccessExec != 0
+
+	default:
+		return false
+	}
 }
 
 func (vma *VMA) same(o *VMA) bool {

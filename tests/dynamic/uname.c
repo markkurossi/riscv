@@ -6,7 +6,8 @@
 #include <stdlib.h>
 #include <sys/utsname.h>
 
-int main()
+int
+main()
 {
   // Define the structure to hold system information
   struct utsname buffer;

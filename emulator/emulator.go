@@ -528,6 +528,11 @@ func (emu *Emulator) TrapHandler(acpu *cpu.CPU, trap *isa.Trap) (bool, error) {
 
 		for _, vma := range emu.Kernel.VMA {
 			if vma.Contains(trap.Tval) {
+				if !vma.Satisfies(trap.Cause) {
+					fmt.Printf("trap: permission mismatch: %x/%v\n",
+						trap.Tval, vma)
+					return false, nil
+				}
 				// Allocate page.
 				page, err := emu.Memory.AllocPage()
 				if err != nil {
