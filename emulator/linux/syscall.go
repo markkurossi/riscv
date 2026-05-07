@@ -726,10 +726,10 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 
 	case 160: // uname
 		var buf [390]byte
-		copy(buf[0:64], []byte("Goemu Linux"))
+		copy(buf[0:64], []byte("GoEMU Linux"))
 		copy(buf[65:129], []byte("goemu.local"))
 		copy(buf[130:194], []byte("0.0.1"))
-		copy(buf[195:259], []byte("Goemu Kernel Version 0.0"))
+		copy(buf[195:259], []byte("GoEMU Kernel Version 0.0"))
 		copy(buf[260:], []byte("RISC-V RV64"))
 
 		if err := proc.MMU.CopyToUser(a0, buf[:]); err != nil {
