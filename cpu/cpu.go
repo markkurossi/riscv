@@ -685,20 +685,20 @@ func (cpu *CPU) loop() error {
 		case isa.FcvtDL:
 			// XXX The rounding mode (RM) is specified in the fcsr
 			// (Floating-point Control and Status Register)
-			cpu.F[instr.Rd] = float64(cpu.X[instr.Rs1])
+			cpu.F[instr.Rd] = float64(int64(cpu.X[instr.Rs1]))
 
-		case isa.FcvtWD:
-			// XXX If the floating-point value is too large to fit
-			// into a 32-bit signed integer the instruction returns
-			// the largest possible 32-bit integer and sets an
-			// "invalid operation" flag in the fcsr (Floating-point
-			// Control and Status Register).
-			cpu.X[instr.Rd] = uint64(int64(int32(cpu.F[instr.Rs1])))
+		case isa.FcvtDLU:
+			// XXX The rounding mode (RM) is specified in the fcsr
+			// (Floating-point Control and Status Register)
+			cpu.F[instr.Rd] = float64(cpu.X[instr.Rs1])
 
 		case isa.FcvtLD:
 			// XXX If the value is out of range, fcsr.fflags.NV is set
 			// to 1
 			cpu.X[instr.Rd] = uint64(int64(cpu.F[instr.Rs1]))
+
+		case isa.FcvtWUD:
+			cpu.X[instr.Rd] = uint64(uint32(cpu.F[instr.Rs1]))
 
 		default:
 			return fmt.Errorf("instruction %v[0x%x] not implemented yet",

@@ -945,6 +945,8 @@ func Decode(raw uint32) (Instr, error) {
 			switch funct5 {
 			case 0b00000:
 				instr.Op = FcvtWD
+			case 0b00001:
+				instr.Op = FcvtWUD
 			case 0b00010:
 				instr.Op = FcvtLD
 			default:
@@ -955,8 +957,14 @@ func Decode(raw uint32) (Instr, error) {
 		case 0b1101001:
 			funct5 := instr.Raw >> 20 & 0b11111
 			switch funct5 {
+			case 0b00000:
+				instr.Op = FcvtDW
+			case 0b00001:
+				instr.Op = FcvtDWU
 			case 0b00010:
 				instr.Op = FcvtDL
+			case 0b00011:
+				instr.Op = FcvtDLU
 			default:
 				return instr, fmt.Errorf("OP-FP: funct7=%07b, funct5=%05b",
 					funct7, funct5)
