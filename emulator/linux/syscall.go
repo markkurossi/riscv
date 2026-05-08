@@ -11,10 +11,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/markkurossi/riscv/cpu"
@@ -35,250 +33,250 @@ type SyscallI struct {
 }
 
 var SyscallInfo = map[uint64]SyscallI{
-	0:   {-1, "", "io_setup"},
-	1:   {-1, "", "io_destroy"},
-	2:   {-1, "", "io_submit"},
-	3:   {-1, "", "io_cancel"},
-	4:   {-1, "", "io_getevents"},
-	5:   {-1, "", "setxattr"},
-	6:   {-1, "", "lsetxattr"},
-	7:   {-1, "", "fsetxattr"},
-	8:   {-1, "", "getxattr"},
-	9:   {-1, "", "lgetxattr"},
-	10:  {-1, "", "fgetxattr"},
-	11:  {-1, "", "listxattr"},
-	12:  {-1, "", "llistxattr"},
-	13:  {-1, "", "flistxattr"},
-	14:  {-1, "", "removexattr"},
-	15:  {-1, "", "lremovexattr"},
-	16:  {-1, "", "fremovexattr"},
-	17:  {-1, "", "getcwd"},
-	18:  {-1, "", "lookup_dcookie"},
-	19:  {-1, "", "eventfd2"},
-	20:  {-1, "", "epoll_create1"},
-	21:  {-1, "", "epoll_ctl"},
-	22:  {-1, "", "epoll_pwait"},
-	23:  {1, "", "dup"},
-	24:  {3, "", "dup3"},
-	25:  {3, "", "fcntl"},
-	26:  {-1, "", "inotify_init1"},
-	27:  {-1, "", "inotify_add_watch"},
-	28:  {-1, "", "inotify_rm_watch"},
-	29:  {3, "", "ioctl"},
-	30:  {-1, "", "ioprio_set"},
-	31:  {-1, "", "ioprio_get"},
-	32:  {-1, "", "flock"},
-	33:  {-1, "", "mknodat"},
-	34:  {-1, "", "mkdirat"},
-	35:  {-1, "", "unlinkat"},
-	36:  {-1, "", "symlinkat"},
-	37:  {-1, "", "linkat"},
-	38:  {-1, "", "renameat"},
-	39:  {-1, "", "umount2"},
-	40:  {-1, "", "mount"},
-	41:  {-1, "", "pivot_root"},
-	42:  {-1, "", "nfsservctl"},
-	43:  {-1, "", "statfs"},
-	44:  {-1, "", "fstatfs"},
-	45:  {-1, "", "truncate"},
-	46:  {-1, "", "ftruncate"},
-	47:  {-1, "", "fallocate"},
-	48:  {4, "ipii", "faccessat"},
-	49:  {-1, "", "chdir"},
-	50:  {-1, "", "fchdir"},
-	51:  {-1, "", "chroot"},
-	52:  {-1, "", "fchmod"},
-	53:  {-1, "", "fchmodat"},
-	54:  {-1, "", "fchownat"},
-	55:  {-1, "", "fchown"},
-	56:  {4, "ipii", "openat"},
-	57:  {1, "", "close"},
-	58:  {-1, "", "vhangup"},
-	59:  {-1, "", "pipe2"},
-	60:  {-1, "", "quotactl"},
-	61:  {-1, "", "getdents64"},
-	62:  {3, "", "lseek"},
-	63:  {3, "ipu", "read"},
-	64:  {3, "ipu", "write"},
-	65:  {3, "", "readv"},
-	66:  {3, "ipi", "writev"},
-	67:  {4, "", "pread64"},
-	68:  {4, "", "pwrite64"},
-	69:  {4, "", "preadv"},
-	70:  {4, "", "pwritev"},
-	71:  {4, "", "sendfile"},
-	72:  {-1, "", "pselect6"},
-	73:  {-1, "", "ppoll"},
-	74:  {-1, "", "signalfd4"},
-	75:  {-1, "", "vmsplice"},
-	76:  {-1, "", "splice"},
-	77:  {-1, "", "tee"},
-	78:  {4, "ippi", "readlinkat"},
-	79:  {-1, "", "newfstatat"},
-	80:  {2, "ip", "fstat"},
-	81:  {-1, "", "sync"},
-	82:  {-1, "", "fsync"},
-	83:  {-1, "", "fdatasync"},
-	84:  {-1, "", "sync_file_range"},
-	85:  {-1, "", "timerfd_create"},
-	86:  {-1, "", "timerfd_settime"},
-	87:  {-1, "", "timerfd_gettime"},
-	88:  {-1, "", "utimensat"},
-	89:  {-1, "", "acct"},
-	90:  {-1, "", "capget"},
-	91:  {-1, "", "capset"},
-	92:  {-1, "", "personality"},
-	93:  {1, "i", "exit"},
-	94:  {1, "i", "exit_group"},
-	95:  {-1, "", "waitid"},
-	96:  {1, "p", "set_tid_address"},
-	97:  {-1, "", "unshare"},
-	98:  {6, "pipppp", "futex"},
-	99:  {2, "pi", "set_robust_list"},
-	100: {-1, "", "get_robust_list"},
-	101: {2, "pp", "nanosleep"},
-	102: {-1, "", "getitimer"},
-	103: {-1, "", "setitimer"},
-	104: {-1, "", "kexec_load"},
-	105: {-1, "", "init_module"},
-	106: {-1, "", "delete_module"},
-	107: {-1, "", "timer_create"},
-	108: {-1, "", "timer_gettime"},
-	109: {-1, "", "timer_getoverrun"},
-	110: {-1, "", "timer_settime"},
-	111: {-1, "", "timer_delete"},
-	112: {-1, "", "clock_settime"},
-	113: {2, "up", "clock_gettime"},
-	114: {-1, "", "clock_getres"},
-	115: {-1, "", "clock_nanosleep"},
-	116: {-1, "", "syslog"},
-	117: {-1, "", "ptrace"},
-	118: {-1, "", "sched_setparam"},
-	119: {-1, "", "sched_setscheduler"},
-	120: {-1, "", "sched_getscheduler"},
-	121: {-1, "", "sched_getparam"},
-	122: {-1, "", "sched_setaffinity"},
-	123: {3, "uup", "sched_getaffinity"},
-	124: {-1, "", "sched_yield"},
-	125: {-1, "", "sched_get_priority_max"},
-	126: {-1, "", "sched_get_priority_min"},
-	127: {-1, "", "sched_rr_get_interval"},
-	128: {-1, "", "restart_syscall"},
-	129: {-1, "", "kill"},
-	130: {-1, "", "tkill"},
-	131: {-1, "", "tgkill"},
-	132: {-1, "", "sigaltstack"},
-	133: {-1, "", "rt_sigsuspend"},
-	134: {-1, "", "rt_sigaction"},
-	135: {3, "ipp", "rt_sigprocmask"},
-	136: {-1, "", "rt_sigpending"},
-	137: {-1, "", "rt_sigtimedwait"},
-	138: {-1, "", "rt_sigqueueinfo"},
-	139: {-1, "", "rt_sigreturn"},
-	140: {-1, "", "setpriority"},
-	141: {-1, "", "getpriority"},
-	142: {-1, "", "reboot"},
-	143: {-1, "", "setregid"},
-	144: {-1, "", "setgid"},
-	145: {-1, "", "setreuid"},
-	146: {-1, "", "setuid"},
-	147: {-1, "", "setresuid"},
-	148: {-1, "", "getresuid"},
-	149: {-1, "", "setresgid"},
-	150: {-1, "", "getresgid"},
-	151: {-1, "", "setfsuid"},
-	152: {-1, "", "setfsgid"},
-	153: {-1, "", "times"},
-	154: {-1, "", "setpgid"},
-	155: {-1, "", "getpgid"},
-	156: {-1, "", "getsid"},
-	157: {-1, "", "setsid"},
-	158: {-1, "", "getgroups"},
-	159: {-1, "", "setgroups"},
-	160: {1, "p", "uname"},
-	161: {-1, "", "sethostname"},
-	162: {-1, "", "setdomainname"},
-	163: {-1, "", "getrlimit"},
-	164: {-1, "", "setrlimit"},
-	165: {-1, "", "getrusage"},
-	166: {-1, "", "umask"},
-	167: {-1, "", "prctl"},
-	168: {-1, "", "getcpu"},
-	169: {-1, "", "gettimeofday"},
-	170: {-1, "", "settimeofday"},
-	171: {-1, "", "adjtimex"},
-	172: {-1, "", "getpid"},
-	173: {-1, "", "getppid"},
-	174: {0, "", "getuid"},
-	175: {-1, "", "geteuid"},
-	176: {-1, "", "getgid"},
-	177: {-1, "", "getegid"},
-	178: {-1, "", "gettid"},
-	179: {-1, "", "sysinfo"},
-	180: {-1, "", "mq_open"},
-	181: {-1, "", "mq_unlink"},
-	182: {-1, "", "mq_timedsend"},
-	183: {-1, "", "mq_timedreceive"},
-	184: {-1, "", "mq_notify"},
-	185: {-1, "", "mq_getsetattr"},
-	186: {-1, "", "msgget"},
-	187: {-1, "", "msgctl"},
-	188: {-1, "", "msgrcv"},
-	189: {-1, "", "msgsnd"},
-	190: {-1, "", "semget"},
-	191: {-1, "", "semctl"},
-	192: {-1, "", "semtimedop"},
-	193: {-1, "", "semop"},
-	194: {-1, "", "shmget"},
-	195: {-1, "", "shmctl"},
-	196: {-1, "", "shmat"},
-	197: {-1, "", "shmdt"},
-	198: {3, "", "socket"},
-	199: {-1, "", "socketpair"},
-	200: {3, "", "bind"},
-	201: {2, "", "listen"},
-	202: {3, "", "accept"},
-	203: {3, "", "connect"},
-	204: {-1, "", "getsockname"},
-	205: {-1, "", "getpeername"},
-	206: {6, "", "sendto"},
-	207: {6, "", "recvfrom"},
-	208: {5, "", "setsockopt"},
-	209: {5, "", "getsockopt"},
-	210: {2, "", "shutdown"},
-	211: {-1, "", "sendmsg"},
-	212: {-1, "", "recvmsg"},
-	213: {-1, "", "readahead"},
-	214: {1, "p", "brk"},
-	215: {2, "pi", "munmap"},
-	216: {-1, "", "mremap"},
-	217: {-1, "", "add_key"},
-	218: {-1, "", "request_key"},
-	219: {-1, "", "keyctl"},
-	220: {5, "upppp", "clone"},
-	221: {3, "", "execve"},
-	222: {6, "piiiii", "mmap"},
-	223: {-1, "", "fadvise64"},
-	224: {-1, "", "swapon"},
-	225: {-1, "", "swapoff"},
-	226: {3, "pui", "mprotect"},
-	227: {3, "", "msync"},
-	228: {-1, "", "mlock"},
-	229: {-1, "", "munlock"},
-	230: {-1, "", "mlockall"},
-	231: {-1, "", "munlockall"},
-	232: {-1, "", "mincore"},
-	233: {3, "pui", "madvise"},
-	234: {-1, "", "remap_file_pages"},
-	235: {-1, "", "mbind"},
-	236: {-1, "", "get_mempolicy"},
-	237: {-1, "", "set_mempolicy"},
-	238: {-1, "", "migrate_pages"},
-	239: {-1, "", "move_pages"},
-	240: {-1, "", "rt_tgsigqueueinfo"},
-	241: {-1, "", "perf_event_open"},
-	242: {-1, "", "accept4"},
-	243: {-1, "", "recvmmsg"},
+	0:   {-1, "", "io_setup"},               // 0  	| io_setup
+	1:   {-1, "", "io_destroy"},             // 1  	| io_destroy
+	2:   {-1, "", "io_submit"},              // 2  	| io_submit
+	3:   {-1, "", "io_cancel"},              // 3  	| io_cancel
+	4:   {-1, "", "io_getevents"},           // 4  	| io_getevents
+	5:   {-1, "", "setxattr"},               // 5  	| setxattr
+	6:   {-1, "", "lsetxattr"},              // 6  	| lsetxattr
+	7:   {-1, "", "fsetxattr"},              // 7  	| fsetxattr
+	8:   {-1, "", "getxattr"},               // 8  	| getxattr
+	9:   {-1, "", "lgetxattr"},              // 9  	| lgetxattr
+	10:  {-1, "", "fgetxattr"},              // 10 	| fgetxattr
+	11:  {-1, "", "listxattr"},              // 11 	| listxattr
+	12:  {-1, "", "llistxattr"},             // 12 	| llistxattr
+	13:  {-1, "", "flistxattr"},             // 13 	| flistxattr
+	14:  {-1, "", "removexattr"},            // 14 	| removexattr
+	15:  {-1, "", "lremovexattr"},           // 15 	| lremovexattr
+	16:  {-1, "", "fremovexattr"},           // 16 	| fremovexattr
+	17:  {-1, "", "getcwd"},                 // 17 	| getcwd
+	18:  {-1, "", "lookup_dcookie"},         // 18 	| lookup_dcookie
+	19:  {-1, "", "eventfd2"},               // 19 	| eventfd2
+	20:  {-1, "", "epoll_create1"},          // 20 	| epoll_create1
+	21:  {-1, "", "epoll_ctl"},              // 21 	| epoll_ctl
+	22:  {-1, "", "epoll_pwait"},            // 22 	| epoll_pwait
+	23:  {1, "", "dup"},                     // 23 	| dup
+	24:  {3, "", "dup3"},                    // 24 	| dup3
+	25:  {3, "", "fcntl"},                   // 25 	| fcntl
+	26:  {-1, "", "inotify_init1"},          // 26 	| inotify_init1
+	27:  {-1, "", "inotify_add_watch"},      // 27 	| inotify_add_watch
+	28:  {-1, "", "inotify_rm_watch"},       // 28 	| inotify_rm_watch
+	29:  {3, "", "ioctl"},                   // 29 	| ioctl
+	30:  {-1, "", "ioprio_set"},             // 30 	| ioprio_set
+	31:  {-1, "", "ioprio_get"},             // 31 	| ioprio_get
+	32:  {-1, "", "flock"},                  // 32 	| flock
+	33:  {-1, "", "mknodat"},                // 33 	| mknodat
+	34:  {-1, "", "mkdirat"},                // 34 	| mkdirat
+	35:  {-1, "", "unlinkat"},               // 35 	| unlinkat
+	36:  {-1, "", "symlinkat"},              // 36 	| symlinkat
+	37:  {-1, "", "linkat"},                 // 37 	| linkat
+	38:  {-1, "", "renameat"},               // 38 	| renameat
+	39:  {-1, "", "umount2"},                // 39 	| umount2
+	40:  {-1, "", "mount"},                  // 40 	| mount
+	41:  {-1, "", "pivot_root"},             // 41 	| pivot_root
+	42:  {-1, "", "nfsservctl"},             // 42 	| nfsservctl
+	43:  {-1, "", "statfs"},                 // 43 	| statfs
+	44:  {-1, "", "fstatfs"},                // 44 	| fstatfs
+	45:  {-1, "", "truncate"},               // 45 	| truncate
+	46:  {-1, "", "ftruncate"},              // 46 	| ftruncate
+	47:  {-1, "", "fallocate"},              // 47 	| fallocate
+	48:  {4, "ipii", "faccessat"},           // 48 	| faccessat
+	49:  {-1, "", "chdir"},                  // 49 	| chdir
+	50:  {-1, "", "fchdir"},                 // 50 	| fchdir
+	51:  {-1, "", "chroot"},                 // 51 	| chroot
+	52:  {-1, "", "fchmod"},                 // 52 	| fchmod
+	53:  {-1, "", "fchmodat"},               // 53 	| fchmodat
+	54:  {-1, "", "fchownat"},               // 54 	| fchownat
+	55:  {-1, "", "fchown"},                 // 55 	| fchown
+	56:  {4, "ipii", "openat"},              // 56 	| openat
+	57:  {1, "", "close"},                   // 57 	| close
+	58:  {-1, "", "vhangup"},                // 58 	| vhangup
+	59:  {-1, "", "pipe2"},                  // 59 	| pipe2
+	60:  {-1, "", "quotactl"},               // 60 	| quotactl
+	61:  {3, "ipi", "getdents64"},           // 61 	| getdents64
+	62:  {3, "", "lseek"},                   // 62 	| lseek
+	63:  {3, "ipu", "read"},                 // 63 	| read
+	64:  {3, "ipu", "write"},                // 64 	| write
+	65:  {3, "", "readv"},                   // 65 	| readv
+	66:  {3, "ipi", "writev"},               // 66 	| writev
+	67:  {4, "", "pread64"},                 // 67 	| pread64
+	68:  {4, "", "pwrite64"},                // 68 	| pwrite64
+	69:  {4, "", "preadv"},                  // 69 	| preadv
+	70:  {4, "", "pwritev"},                 // 70 	| pwritev
+	71:  {4, "", "sendfile"},                // 71 	| sendfile
+	72:  {-1, "", "pselect6"},               // 72 	| pselect6
+	73:  {-1, "", "ppoll"},                  // 73 	| ppoll
+	74:  {-1, "", "signalfd4"},              // 74 	| signalfd4
+	75:  {-1, "", "vmsplice"},               // 75 	| vmsplice
+	76:  {-1, "", "splice"},                 // 76 	| splice
+	77:  {-1, "", "tee"},                    // 77 	| tee
+	78:  {4, "ippi", "readlinkat"},          // 78 	| readlinkat
+	79:  {4, "ippi", "newfstatat"},          // 79 	| newfstatat
+	80:  {2, "ip", "fstat"},                 // 80 	| fstat
+	81:  {-1, "", "sync"},                   // 81 	| sync
+	82:  {-1, "", "fsync"},                  // 82 	| fsync
+	83:  {-1, "", "fdatasync"},              // 83 	| fdatasync
+	84:  {-1, "", "sync_file_range"},        // 84 	| sync_file_range
+	85:  {-1, "", "timerfd_create"},         // 85 	| timerfd_create
+	86:  {-1, "", "timerfd_settime"},        // 86 	| timerfd_settime
+	87:  {-1, "", "timerfd_gettime"},        // 87 	| timerfd_gettime
+	88:  {-1, "", "utimensat"},              // 88 	| utimensat
+	89:  {-1, "", "acct"},                   // 89 	| acct
+	90:  {-1, "", "capget"},                 // 90 	| capget
+	91:  {-1, "", "capset"},                 // 91 	| capset
+	92:  {-1, "", "personality"},            // 92 	| personality
+	93:  {1, "i", "exit"},                   // 93 	| exit
+	94:  {1, "i", "exit_group"},             // 94 	| exit_group
+	95:  {-1, "", "waitid"},                 // 95 	| waitid
+	96:  {1, "p", "set_tid_address"},        // 96  | set_tid_address
+	97:  {-1, "", "unshare"},                // 97  | unshare
+	98:  {6, "pipppp", "futex"},             // 98  | futex
+	99:  {2, "pi", "set_robust_list"},       // 99  | set_robust_list
+	100: {-1, "", "get_robust_list"},        // 100 | get_robust_list
+	101: {2, "pp", "nanosleep"},             // 101 | nanosleep
+	102: {-1, "", "getitimer"},              // 102 | getitimer
+	103: {-1, "", "setitimer"},              // 103 | setitimer
+	104: {-1, "", "kexec_load"},             // 104 | kexec_load
+	105: {-1, "", "init_module"},            // 105 | init_module
+	106: {-1, "", "delete_module"},          // 106 | delete_module
+	107: {-1, "", "timer_create"},           // 107 | timer_create
+	108: {-1, "", "timer_gettime"},          // 108 | timer_gettime
+	109: {-1, "", "timer_getoverrun"},       // 109 | timer_getoverrun
+	110: {-1, "", "timer_settime"},          // 110 | timer_settime
+	111: {-1, "", "timer_delete"},           // 111 | timer_delete
+	112: {-1, "", "clock_settime"},          // 112 | clock_settime
+	113: {2, "up", "clock_gettime"},         // 113 | clock_gettime
+	114: {-1, "", "clock_getres"},           // 114 | clock_getres
+	115: {-1, "", "clock_nanosleep"},        // 115 | clock_nanosleep
+	116: {-1, "", "syslog"},                 // 116 | syslog
+	117: {-1, "", "ptrace"},                 // 117 | ptrace
+	118: {-1, "", "sched_setparam"},         // 118 | sched_setparam
+	119: {-1, "", "sched_setscheduler"},     // 119 | sched_setscheduler
+	120: {-1, "", "sched_getscheduler"},     // 120 | sched_getscheduler
+	121: {-1, "", "sched_getparam"},         // 121 | sched_getparam
+	122: {-1, "", "sched_setaffinity"},      // 122 | sched_setaffinity
+	123: {3, "uup", "sched_getaffinity"},    // 123 | sched_getaffinity
+	124: {-1, "", "sched_yield"},            // 124 | sched_yield
+	125: {-1, "", "sched_get_priority_max"}, // 125 | sched_get_priority_max
+	126: {-1, "", "sched_get_priority_min"}, // 126 | sched_get_priority_min
+	127: {-1, "", "sched_rr_get_interval"},  // 127 | sched_rr_get_interval
+	128: {-1, "", "restart_syscall"},        // 128 | restart_syscall
+	129: {-1, "", "kill"},                   // 129 | kill
+	130: {-1, "", "tkill"},                  // 130 | tkill
+	131: {-1, "", "tgkill"},                 // 131 | tgkill
+	132: {-1, "", "sigaltstack"},            // 132 | sigaltstack
+	133: {-1, "", "rt_sigsuspend"},          // 133 | rt_sigsuspend
+	134: {-1, "", "rt_sigaction"},           // 134 | rt_sigaction
+	135: {3, "ipp", "rt_sigprocmask"},       // 135 | rt_sigprocmask
+	136: {-1, "", "rt_sigpending"},          // 136 | rt_sigpending
+	137: {-1, "", "rt_sigtimedwait"},        // 137 | rt_sigtimedwait
+	138: {-1, "", "rt_sigqueueinfo"},        // 138 | rt_sigqueueinfo
+	139: {-1, "", "rt_sigreturn"},           // 139 | rt_sigreturn
+	140: {-1, "", "setpriority"},            // 140 | setpriority
+	141: {-1, "", "getpriority"},            // 141 | getpriority
+	142: {-1, "", "reboot"},                 // 142 | reboot
+	143: {-1, "", "setregid"},               // 143 | setregid
+	144: {-1, "", "setgid"},                 // 144 | setgid
+	145: {-1, "", "setreuid"},               // 145 | setreuid
+	146: {-1, "", "setuid"},                 // 146 | setuid
+	147: {-1, "", "setresuid"},              // 147 | setresuid
+	148: {-1, "", "getresuid"},              // 148 | getresuid
+	149: {-1, "", "setresgid"},              // 149 | setresgid
+	150: {-1, "", "getresgid"},              // 150 | getresgid
+	151: {-1, "", "setfsuid"},               // 151 | setfsuid
+	152: {-1, "", "setfsgid"},               // 152 | setfsgid
+	153: {-1, "", "times"},                  // 153 | times
+	154: {-1, "", "setpgid"},                // 154 | setpgid
+	155: {-1, "", "getpgid"},                // 155 | getpgid
+	156: {-1, "", "getsid"},                 // 156 | getsid
+	157: {-1, "", "setsid"},                 // 157 | setsid
+	158: {-1, "", "getgroups"},              // 158 | getgroups
+	159: {-1, "", "setgroups"},              // 159 | setgroups
+	160: {1, "p", "uname"},                  // 160 | uname
+	161: {-1, "", "sethostname"},            // 161 | sethostname
+	162: {-1, "", "setdomainname"},          // 162 | setdomainname
+	163: {-1, "", "getrlimit"},              // 163 | getrlimit
+	164: {-1, "", "setrlimit"},              // 164 | setrlimit
+	165: {-1, "", "getrusage"},              // 165 | getrusage
+	166: {-1, "", "umask"},                  // 166 | umask
+	167: {-1, "", "prctl"},                  // 167 | prctl
+	168: {-1, "", "getcpu"},                 // 168 | getcpu
+	169: {-1, "", "gettimeofday"},           // 169 | gettimeofday
+	170: {-1, "", "settimeofday"},           // 170 | settimeofday
+	171: {-1, "", "adjtimex"},               // 171 | adjtimex
+	172: {-1, "", "getpid"},                 // 172 | getpid
+	173: {-1, "", "getppid"},                // 173 | getppid
+	174: {0, "", "getuid"},                  // 174 | getuid
+	175: {-1, "", "geteuid"},                // 175 | geteuid
+	176: {-1, "", "getgid"},                 // 176 | getgid
+	177: {-1, "", "getegid"},                // 177 | getegid
+	178: {-1, "", "gettid"},                 // 178 | gettid
+	179: {-1, "", "sysinfo"},                // 179 | sysinfo
+	180: {-1, "", "mq_open"},                // 180 | mq_open
+	181: {-1, "", "mq_unlink"},              // 181 | mq_unlink
+	182: {-1, "", "mq_timedsend"},           // 182 | mq_timedsend
+	183: {-1, "", "mq_timedreceive"},        // 183 | mq_timedreceive
+	184: {-1, "", "mq_notify"},              // 184 | mq_notify
+	185: {-1, "", "mq_getsetattr"},          // 185 | mq_getsetattr
+	186: {-1, "", "msgget"},                 // 186 | msgget
+	187: {-1, "", "msgctl"},                 // 187 | msgctl
+	188: {-1, "", "msgrcv"},                 // 188 | msgrcv
+	189: {-1, "", "msgsnd"},                 // 189 | msgsnd
+	190: {-1, "", "semget"},                 // 190 | semget
+	191: {-1, "", "semctl"},                 // 191 | semctl
+	192: {-1, "", "semtimedop"},             // 192 | semtimedop
+	193: {-1, "", "semop"},                  // 193 | semop
+	194: {-1, "", "shmget"},                 // 194 | shmget
+	195: {-1, "", "shmctl"},                 // 195 | shmctl
+	196: {-1, "", "shmat"},                  // 196 | shmat
+	197: {-1, "", "shmdt"},                  // 197 | shmdt
+	198: {3, "", "socket"},                  // 198 | socket
+	199: {-1, "", "socketpair"},             // 199 | socketpair
+	200: {3, "", "bind"},                    // 200 | bind
+	201: {2, "", "listen"},                  // 201 | listen
+	202: {3, "", "accept"},                  // 202 | accept
+	203: {3, "", "connect"},                 // 203 | connect
+	204: {-1, "", "getsockname"},            // 204 | getsockname
+	205: {-1, "", "getpeername"},            // 205 | getpeername
+	206: {6, "", "sendto"},                  // 206 | sendto
+	207: {6, "", "recvfrom"},                // 207 | recvfrom
+	208: {5, "", "setsockopt"},              // 208 | setsockopt
+	209: {5, "", "getsockopt"},              // 209 | getsockopt
+	210: {2, "", "shutdown"},                // 210 | shutdown
+	211: {-1, "", "sendmsg"},                // 211 | sendmsg
+	212: {-1, "", "recvmsg"},                // 212 | recvmsg
+	213: {-1, "", "readahead"},              // 213 | readahead
+	214: {1, "p", "brk"},                    // 214 | brk
+	215: {2, "pi", "munmap"},                // 215 | munmap
+	216: {-1, "", "mremap"},                 // 216 | mremap
+	217: {-1, "", "add_key"},                // 217 | add_key
+	218: {-1, "", "request_key"},            // 218 | request_key
+	219: {-1, "", "keyctl"},                 // 219 | keyctl
+	220: {5, "upppp", "clone"},              // 220 | clone
+	221: {3, "", "execve"},                  // 221 | execve
+	222: {6, "piiiii", "mmap"},              // 222 | mmap
+	223: {-1, "", "fadvise64"},              // 223 | fadvise64
+	224: {-1, "", "swapon"},                 // 224 | swapon
+	225: {-1, "", "swapoff"},                // 225 | swapoff
+	226: {3, "pui", "mprotect"},             // 226 | mprotect
+	227: {3, "", "msync"},                   // 227 | msync
+	228: {-1, "", "mlock"},                  // 228 | mlock
+	229: {-1, "", "munlock"},                // 229 | munlock
+	230: {-1, "", "mlockall"},               // 230 | mlockall
+	231: {-1, "", "munlockall"},             // 231 | munlockall
+	232: {-1, "", "mincore"},                // 232 | mincore
+	233: {3, "pui", "madvise"},              // 233 | madvise
+	234: {-1, "", "remap_file_pages"},       // 234 | remap_file_pages
+	235: {-1, "", "mbind"},                  // 235 | mbind
+	236: {-1, "", "get_mempolicy"},          // 236 | get_mempolicy
+	237: {-1, "", "set_mempolicy"},          // 237 | set_mempolicy
+	238: {-1, "", "migrate_pages"},          // 238 | migrate_pages
+	239: {-1, "", "move_pages"},             // 239 | move_pages
+	240: {-1, "", "rt_tgsigqueueinfo"},      // 240 | rt_tgsigqueueinfo
+	241: {-1, "", "perf_event_open"},        // 241 | perf_event_open
+	242: {-1, "", "accept4"},                // 242 | accept4
+	243: {-1, "", "recvmmsg"},               // 243 | recvmmsg
 	244: {-1, "", "wait4"},
 	245: {-1, "", "prlimit64"},
 	246: {-1, "", "fanotify_init"},
@@ -506,6 +504,28 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		}
 		return Error(ErrnoENOENT), nil
 
+	case 79: // newfstatat
+		arg0 := int64(a0)
+		statAddr := a2
+
+		if arg0 == AtFdcwd {
+			ktracef(proc, "     - AT_FDCWD\n")
+		}
+		pathname, err := proc.MMU.UserCString(a1)
+		if err != nil {
+			return Error(ErrnoEFAULT), nil
+		}
+		fi, err := os.Stat(pathname)
+		if err != nil {
+			return Error(ErrnoEIO), nil
+		}
+		stat := MarshalFileInfo(fi)
+
+		if err := proc.MMU.CopyToUser(statAddr, stat); err != nil {
+			return Error(ErrnoEFAULT), nil
+		}
+		return 0, nil
+
 	case 80: // fstat
 		statAddr := a1
 
@@ -519,72 +539,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 			return Error(ErrnoEIO), nil
 		}
 
-		// XXX change to use marshal(Stat)
-		stat := make([]byte, 128)
-
-		mode := fi.Mode()
-		stMode := int(mode & fs.ModePerm)
-
-		if mode&fs.ModeNamedPipe != 0 {
-			stMode |= S_IFIFO
-		}
-		if mode&fs.ModeCharDevice != 0 {
-			stMode |= S_IFCHR
-		}
-		if mode&fs.ModeDir != 0 {
-			stMode |= S_IFDIR
-		}
-		if mode&fs.ModeDevice != 0 {
-			stMode |= S_IFBLK
-		}
-		if mode&fs.ModeSymlink != 0 {
-			stMode |= S_IFLNK
-		}
-		if mode&fs.ModeSocket != 0 {
-			stMode |= S_IFSOCK
-		}
-
-		if mode&fs.ModeType == 0 {
-			stMode |= S_IFREG
-		}
-
-		// st_mode @ offset 16
-		bo.PutUint32(stat[16:], uint32(stMode))
-
-		// st_nlink @ offset 20
-		bo.PutUint32(stat[20:], 1)
-
-		// st_uid @ offset 24: 1000
-		bo.PutUint32(stat[24:], 1000)
-
-		// st_gid @ offset 28: 1000
-		bo.PutUint32(stat[28:], 1000)
-
-		if mode&fs.ModeDevice != 0 {
-			// st_rdev @ offset 32: tty device
-			bo.PutUint64(stat[32:], 34816)
-		}
-
-		// st_size @ offset 48
-		bo.PutUint64(stat[48:], uint64(fi.Size()))
-
-		// st_blksize @ offset 56: 1024
-		bo.PutUint64(stat[56:], 1024)
-
-		// st_blocks @ offset 64: fi.Size+1023/1024
-		bo.PutUint64(stat[64:], uint64(fi.Size()+1023)/1024)
-
-		modTime := uint64(fi.ModTime().Unix())
-		bo.PutUint64(stat[72:], modTime)  // st_atime
-		bo.PutUint64(stat[88:], modTime)  // st_mtime
-		bo.PutUint64(stat[104:], modTime) // st_ctime
-
-		native, ok := fi.Sys().(*syscall.Stat_t)
-		if ok {
-			// fmt.Printf("native: %#vn", native)
-			// st_ino @ offset 8
-			bo.PutUint64(stat[8:], native.Ino)
-		}
+		stat := MarshalFileInfo(fi)
 
 		if err := proc.MMU.CopyToUser(statAddr, stat); err != nil {
 			return Error(ErrnoEFAULT), nil

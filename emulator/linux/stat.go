@@ -6,6 +6,11 @@
 
 package linux
 
+import (
+	"io/fs"
+	"syscall"
+)
+
 // Constants for the *at(2) family of syscalls.
 const (
 	AtFdcwd = -100
@@ -50,4 +55,75 @@ type Stat struct {
 	StCtime     int64
 	StCtimeNsec uint64
 	Unused      uint64
+}
+
+func MarshalFileInfo(fi fs.FileInfo) []byte {
+	// XXX change to use marshal(Stat)
+	stat := make([]byte, 128)
+
+	mode := fi.Mode()
+	stMode := int(mode & fs.ModePerm)
+
+	if mode&fs.ModeNamedPipe != 0 {
+		stMode |= S_IFIFO
+	}
+	if mode&fs.ModeCharDevice != 0 {
+		stMode |= S_IFCHR
+	}
+	if mode&fs.ModeDir != 0 {
+		stMode |= S_IFDIR
+	}
+	if mode&fs.ModeDevice != 0 {
+		stMode |= S_IFBLK
+	}
+	if mode&fs.ModeSymlink != 0 {
+		stMode |= S_IFLNK
+	}
+	if mode&fs.ModeSocket != 0 {
+		stMode |= S_IFSOCK
+	}
+
+	if mode&fs.ModeType == 0 {
+		stMode |= S_IFREG
+	}
+
+	// st_mode @ offset 16
+	bo.PutUint32(stat[16:], uint32(stMode))
+
+	// st_nlink @ offset 20
+	bo.PutUint32(stat[20:], 1)
+
+	// st_uid @ offset 24: 1000
+	bo.PutUint32(stat[24:], 1000)
+
+	// st_gid @ offset 28: 1000
+	bo.PutUint32(stat[28:], 1000)
+
+	if mode&fs.ModeDevice != 0 {
+		// st_rdev @ offset 32: tty device
+		bo.PutUint64(stat[32:], 34816)
+	}
+
+	// st_size @ offset 48
+	bo.PutUint64(stat[48:], uint64(fi.Size()))
+
+	// st_blksize @ offset 56: 1024
+	bo.PutUint64(stat[56:], 1024)
+
+	// st_blocks @ offset 64: fi.Size+1023/1024
+	bo.PutUint64(stat[64:], uint64(fi.Size()+1023)/1024)
+
+	modTime := uint64(fi.ModTime().Unix())
+	bo.PutUint64(stat[72:], modTime)  // st_atime
+	bo.PutUint64(stat[88:], modTime)  // st_mtime
+	bo.PutUint64(stat[104:], modTime) // st_ctime
+
+	native, ok := fi.Sys().(*syscall.Stat_t)
+	if ok {
+		// fmt.Printf("native: %#vn", native)
+		// st_ino @ offset 8
+		bo.PutUint64(stat[8:], native.Ino)
+	}
+
+	return stat
 }

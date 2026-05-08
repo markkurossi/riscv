@@ -5,6 +5,7 @@
  */
 
 #include <sys/types.h>
+#include <sys/random.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
 #include <unistd.h>
@@ -117,6 +118,19 @@ main(int argc, char *argv[], char *env[])
     process_file(argv[i]);
 
   utsname();
+
+  {
+    char buf[16];
+    ssize_t ret;
+
+    ret = getrandom(buf, sizeof(buf), 0);
+    if (ret == -1)
+      {
+        perror("getrandom");
+        return 1;
+      }
+    printf("getrandom: %ld\n", ret);
+  }
 
   return 0;
 }
