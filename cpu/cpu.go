@@ -80,6 +80,8 @@ func (cpu *CPU) loop() error {
 
 	for {
 		var instrbuf [4]byte
+		var instr isa.Instr
+		var size int
 
 		cpu.X[isa.Zero] = 0
 
@@ -107,12 +109,17 @@ func (cpu *CPU) loop() error {
 			if err != nil {
 				return err
 			}
+			size = 4
+			instr, err = isa.Decode(bo.Uint32(instrbuf[:]))
+		} else {
+			size = 2
+			instr, err = isa.DecodeC(bo.Uint16(instrbuf[:2]))
 		}
-		instr, size, err := isa.Decode(instrbuf[:])
 		if err != nil {
 			var raw uint64
 			if size == 4 {
 				raw = uint64(bo.Uint32(instrbuf[:]))
+				fmt.Printf("raw: %08x\n", raw)
 			} else {
 				raw = uint64(bo.Uint16(instrbuf[:]))
 			}
@@ -120,7 +127,7 @@ func (cpu *CPU) loop() error {
 		}
 		cpu.Instret++
 
-		if true {
+		if false {
 			var line string
 			if instr.Raw&0b11 == 0b11 {
 				line = fmt.Sprintf("%8x:  %08x   %v", cpu.PC, instr.Raw, instr)

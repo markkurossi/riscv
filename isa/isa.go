@@ -939,7 +939,7 @@ func (instr Instr) String() string {
 		case Addi, Addiw, Andi, Slli, Slliw, Slti, Sltiu, Srai, Sraiw,
 			Srli, Srliw, Ori, Xori:
 			// GroupOPIMM, GroupOPIMM32
-			return fmt.Sprintf("%v t%v,%v,%d",
+			return fmt.Sprintf("%v %v,%v,%d",
 				pad(instr.Op), instr.Rd, instr.Rs1, instr.Imm)
 
 		case Auipc: // GroupAUIPC

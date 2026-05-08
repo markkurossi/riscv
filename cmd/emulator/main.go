@@ -14,6 +14,7 @@ import (
 	"runtime/pprof"
 
 	"github.com/markkurossi/riscv/emulator"
+	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/kernel"
 )
 
@@ -22,7 +23,15 @@ func main() {
 	verbose := flag.Bool("v", false, "verbose output")
 	ktrace := flag.Bool("ktrace", false, "kernel trace")
 	fsroot := flag.String("fsroot", "", "filesystem root")
+	objdump := flag.Bool("D", false, "disassemble")
 	flag.Parse()
+
+	log.SetFlags(0)
+
+	if *objdump {
+		disassemble(flag.Args())
+		return
+	}
 
 	if len(*cpuprofile) > 0 {
 		f, err := os.Create(*cpuprofile)
@@ -56,6 +65,15 @@ func main() {
 		if err != nil {
 			fmt.Printf("run: %v\n", err)
 			return
+		}
+	}
+}
+
+func disassemble(files []string) {
+	for _, file := range files {
+		err := isa.DecodeELF(file)
+		if err != nil {
+			log.Fatal(err)
 		}
 	}
 }

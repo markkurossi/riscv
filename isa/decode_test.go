@@ -134,15 +134,9 @@ var decodeTests = []struct {
 
 func TestDecode(t *testing.T) {
 	for _, test := range decodeTests {
-		var buf [4]byte
-
-		bo.PutUint32(buf[:], test.Instr)
-		instr, size, err := Decode(buf[:])
+		instr, err := Decode(test.Instr)
 		if err != nil {
 			t.Fatal(err)
-		}
-		if size != 4 {
-			t.Errorf("invalid size, expected 4, got %v", size)
 		}
 		if instr.Imm != test.Imm {
 			t.Errorf("instr %08x: invalid imm: got %v, expected %v",
@@ -453,18 +447,12 @@ var compressedDecodeTests = []struct {
 
 func TestCompressedDecode(t *testing.T) {
 	for _, test := range compressedDecodeTests {
-		var buf [2]byte
-
-		bo.PutUint16(buf[:], test.Instr)
-		instr, size, err := Decode(buf[:])
+		instr, err := DecodeC(test.Instr)
 		if err != nil {
 			if test.Op != Invalid {
 				t.Fatalf("failed to decode %04x: %v", test.Instr, err)
 			}
 		} else {
-			if size != 2 {
-				t.Errorf("invalid size, expected 2, got %v", size)
-			}
 			if instr.Rd != test.Rd {
 				t.Errorf("instr %04x: invalid rd: got %v, expected %v",
 					test.Instr, instr.Rd, test.Rd)
