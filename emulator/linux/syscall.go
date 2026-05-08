@@ -678,7 +678,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		copy(buf[65:129], []byte("goemu.local"))
 		copy(buf[130:194], []byte("0.0.1"))
 		copy(buf[195:259], []byte("GoEMU Kernel Version 0.0"))
-		copy(buf[260:], []byte("RISC-V RV64"))
+		copy(buf[260:], []byte("riscv"))
 
 		if err := proc.MMU.CopyToUser(a0, buf[:]); err != nil {
 			return Error(ErrnoEFAULT), nil
