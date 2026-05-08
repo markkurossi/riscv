@@ -72,6 +72,8 @@ func (cpu *CPU) Run() error {
 }
 
 func (cpu *CPU) loop() error {
+	var lastDescOp isa.Op
+
 	if cpu.PC%2 == 1 {
 		return isa.NewTrap(isa.CauseInstAddrMisaligned, cpu.PC, nil)
 	}
@@ -118,12 +120,24 @@ func (cpu *CPU) loop() error {
 		}
 		cpu.Instret++
 
-		if false {
+		if true {
+			var line string
 			if instr.Raw&0b11 == 0b11 {
-				fmt.Printf("%8x:    %08x    %v\n", cpu.PC, instr.Raw, instr)
+				line = fmt.Sprintf("%8x:  %08x   %v", cpu.PC, instr.Raw, instr)
 			} else {
-				fmt.Printf("%8x:    %-8x    %v\n", cpu.PC, instr.Raw, instr)
+				line = fmt.Sprintf("%8x:  %04x       %v",
+					cpu.PC, instr.Raw, instr)
 			}
+			op, ok := isa.Operands[instr.Op]
+			if ok && len(op.Desc) > 0 && instr.Op != lastDescOp {
+				lastDescOp = instr.Op
+
+				for len(line) < 47 {
+					line += " "
+				}
+				line += fmt.Sprintf("# %s", op.Desc)
+			}
+			fmt.Println(line)
 		}
 
 		switch instr.Op {

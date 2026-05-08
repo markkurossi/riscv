@@ -321,12 +321,13 @@ type OpInfo struct {
 	Desc  string
 }
 
-var operands = map[Op]OpInfo{
+var Operands = map[Op]OpInfo{
 	Invalid: OpInfo{
 		Name: "invalid",
 	},
 	Add: OpInfo{
 		Name: "add",
+		Desc: "Add",
 	},
 	Sub: OpInfo{
 		Name: "sub",
@@ -351,12 +352,14 @@ var operands = map[Op]OpInfo{
 	},
 	Or: OpInfo{
 		Name: "or",
+		Desc: "OR",
 	},
 	And: OpInfo{
 		Name: "and",
 	},
 	Addi: OpInfo{
 		Name: "addi",
+		Desc: "Add Immediate",
 	},
 	Slti: OpInfo{
 		Name: "slti",
@@ -372,9 +375,11 @@ var operands = map[Op]OpInfo{
 	},
 	Andi: OpInfo{
 		Name: "andi",
+		Desc: "AND Immediate",
 	},
 	Slli: OpInfo{
 		Name: "slli",
+		Desc: "Shift Left Logical Immediate",
 	},
 	Srli: OpInfo{
 		Name: "srli",
@@ -399,6 +404,7 @@ var operands = map[Op]OpInfo{
 	},
 	Addiw: OpInfo{
 		Name: "addiw",
+		Desc: "Add Word Immediate",
 	},
 	Slliw: OpInfo{
 		Name: "slliw",
@@ -456,12 +462,15 @@ var operands = map[Op]OpInfo{
 	},
 	Lw: OpInfo{
 		Name: "lw",
+		Desc: "Load Word",
 	},
 	Ld: OpInfo{
 		Name: "ld",
+		Desc: "Load Doubleword",
 	},
 	Lbu: OpInfo{
 		Name: "lbu",
+		Desc: "Load Byte, Unsigned",
 	},
 	Lhu: OpInfo{
 		Name: "lhu",
@@ -480,15 +489,19 @@ var operands = map[Op]OpInfo{
 	},
 	Sd: OpInfo{
 		Name: "sd",
+		Desc: "Store Doubleword",
 	},
 	Beq: OpInfo{
 		Name: "beq",
+		Desc: "Branch if Equal",
 	},
 	Bne: OpInfo{
 		Name: "bne",
+		Desc: "Branch if Not Equal",
 	},
 	Blt: OpInfo{
 		Name: "blt",
+		Desc: "Branch if Less Than",
 	},
 	Bge: OpInfo{
 		Name: "bge",
@@ -498,18 +511,22 @@ var operands = map[Op]OpInfo{
 	},
 	Bgeu: OpInfo{
 		Name: "bgeu",
+		Desc: "Branch if Greater Than or Equal",
 	},
 	Jal: OpInfo{
 		Name: "jal",
+		Desc: "Jump and Link",
 	},
 	Jalr: OpInfo{
 		Name: "jalr",
+		Desc: "Jump and Link Register",
 	},
 	Lui: OpInfo{
 		Name: "lui",
 	},
 	Auipc: OpInfo{
 		Name: "auipc",
+		Desc: "Add Upper Immediate to PC",
 	},
 	Ecall: OpInfo{
 		Name: "ecall",
@@ -798,8 +815,12 @@ var operands = map[Op]OpInfo{
 	},
 }
 
+const (
+	maxOpNameLen = 9
+)
+
 func (op Op) String() string {
-	info, ok := operands[op]
+	info, ok := Operands[op]
 	if ok {
 		return info.Name
 	}
@@ -896,6 +917,14 @@ type Instr struct {
 	Imm int32
 }
 
+func pad(op Op) string {
+	name := op.String()
+	for len(name) < maxOpNameLen {
+		name += " "
+	}
+	return name
+}
+
 func (instr Instr) String() string {
 	group := Group(instr.Raw & 0b1111111)
 
@@ -904,61 +933,61 @@ func (instr Instr) String() string {
 		case Add, And, Div, Divu, Divw, Mul, Mulhu, Mulw, Or, Rem, Remw,
 			Slt, Sll, Sltu, Srl, Sub, Xor:
 			// GroupOP, GroupOP32
-			return fmt.Sprintf("%v\t%v,%v,%v",
-				instr.op(), instr.Rd, instr.Rs1, instr.Rs2)
+			return fmt.Sprintf("%v %v,%v,%v",
+				pad(instr.Op), instr.Rd, instr.Rs1, instr.Rs2)
 
 		case Addi, Addiw, Andi, Slli, Slliw, Slti, Sltiu, Srai, Sraiw,
 			Srli, Srliw, Ori, Xori:
 			// GroupOPIMM, GroupOPIMM32
-			return fmt.Sprintf("%v\t%v,%v,%d",
-				instr.op(), instr.Rd, instr.Rs1, instr.Imm)
+			return fmt.Sprintf("%v t%v,%v,%d",
+				pad(instr.Op), instr.Rd, instr.Rs1, instr.Imm)
 
 		case Auipc: // GroupAUIPC
-			return fmt.Sprintf("%v\t%v,0x%x",
-				instr.op(), instr.Rd, uint32(instr.Imm)>>12)
+			return fmt.Sprintf("%v %v,0x%x",
+				pad(instr.Op), instr.Rd, uint32(instr.Imm)>>12)
 
 		case Beq, Bge, Bgeu, Blt, Bltu, Bne: // GroupBRANCH
-			return fmt.Sprintf("%v\t%v,%v,%d",
-				instr.Op, instr.Rs1, instr.Rs2, instr.Imm)
+			return fmt.Sprintf("%v %v,%v,%d",
+				pad(instr.Op), instr.Rs1, instr.Rs2, instr.Imm)
 
 		case Ecall: // GroupSYSTEM
-			return "ecall"
+			return pad(Ecall)
 
 		case Jal: // GroupJAL
-			return fmt.Sprintf("%v\t%d", instr.Op, instr.Imm)
+			return fmt.Sprintf("%v %d", pad(instr.Op), instr.Imm)
 
 		case Jalr: // GroupJALR
-			return fmt.Sprintf("%v\t%v,%d(%v)",
-				instr.Op, instr.Rd, instr.Imm, instr.Rs1)
+			return fmt.Sprintf("%v %v,%d(%v)",
+				pad(instr.Op), instr.Rd, instr.Imm, instr.Rs1)
 
 		case Lb, Lbu, Ld, Lhu, Lw, Lwu: // GroupLOAD
-			return fmt.Sprintf("%v\t%v,%d(%v)",
-				instr.op(), instr.Rd, instr.Imm, instr.Rs1)
+			return fmt.Sprintf("%v %v,%d(%v)",
+				pad(instr.Op), instr.Rd, instr.Imm, instr.Rs1)
 
 		case Fld, Flw:
-			return fmt.Sprintf("%v\tF%v,%d(%v)",
-				instr.op(), int(instr.Rd), instr.Imm, instr.Rs1)
+			return fmt.Sprintf("%v F%v,%d(%v)",
+				pad(instr.Op), int(instr.Rd), instr.Imm, instr.Rs1)
 
 		case Lui: // GroupLUI
-			return fmt.Sprintf("%v\t%v,0x%x",
-				instr.op(), instr.Rd, uint32(instr.Imm)>>12)
+			return fmt.Sprintf("%v %v,0x%x",
+				pad(instr.Op), instr.Rd, uint32(instr.Imm)>>12)
 
 		case Sb, Sd, Sh, Sw: // GroupSTORE
-			return fmt.Sprintf("%v\t%v,%d(%v)",
-				instr.op(), instr.Rs2, instr.Imm, instr.Rs1)
+			return fmt.Sprintf("%v %v,%d(%v)",
+				pad(instr.Op), instr.Rs2, instr.Imm, instr.Rs1)
 
 			// GroupAMO
 		case LrD, LrW:
-			return fmt.Sprintf("%v\t%v(%v)",
-				instr.Op, instr.Rd, instr.Rs1)
+			return fmt.Sprintf("%v %v(%v)",
+				pad(instr.Op), instr.Rd, instr.Rs1)
 		case AmoaddD, AmoaddW, AmoandD, AmoandW, AmoorD, AmoorW,
 			AmoswapD, AmoswapW, ScD, ScW:
-			return fmt.Sprintf("%v\t%v,%v(%v)",
-				instr.Op, instr.Rd, instr.Rs2, instr.Rs1)
+			return fmt.Sprintf("%v %v,%v(%v)",
+				pad(instr.Op), instr.Rd, instr.Rs2, instr.Rs1)
 
 			// GroupMISCMEM
 		case Fence:
-			return fmt.Sprintf("%v", instr.Op)
+			return pad(instr.Op)
 		}
 		fmt.Printf("Instr: Op=%v, Group=%v\n", instr.Op, group)
 	}
