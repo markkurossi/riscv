@@ -442,7 +442,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		var i, wrote uint64
 
 		for i = 0; i < length; i++ {
-			b, err := proc.MMU.UserUint8(addr + i)
+			b, err := proc.MMU.Load8(addr + i)
 			if err != nil {
 				return Error(ErrnoEFAULT), nil
 			}
@@ -467,11 +467,11 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		var buf [1024]byte
 
 		for i := 0; i < iovcnt; i++ {
-			base, err := proc.MMU.UserUint64(iov)
+			base, err := proc.MMU.Load64(iov)
 			if err != nil {
 				return Error(ErrnoEFAULT), nil
 			}
-			l, err := proc.MMU.UserUint64(iov + 8)
+			l, err := proc.MMU.Load64(iov + 8)
 			if err != nil {
 				return Error(ErrnoEFAULT), nil
 			}
@@ -602,7 +602,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		ktracef(proc, "    => futex(%x,%v[%v],%v)\n", addr, op, opName, val)
 		switch op & 127 {
 		case 0: // FUTEX_WAIT
-			v, err := proc.MMU.UserUint32(addr)
+			v, err := proc.MMU.Load32(addr)
 			if err != nil {
 				return Error(ErrnoEFAULT), nil
 			}
@@ -631,11 +631,11 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 	case 99: // set_robust_list
 
 	case 101: // nanosleep
-		tvSec, err := proc.MMU.UserUint64(a0)
+		tvSec, err := proc.MMU.Load64(a0)
 		if err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
-		tvNsec, err := proc.MMU.UserUint64(a0 + 8)
+		tvNsec, err := proc.MMU.Load64(a0 + 8)
 		if err != nil {
 			return Error(ErrnoEFAULT), nil
 		}

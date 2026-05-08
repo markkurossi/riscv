@@ -79,7 +79,6 @@ func (cpu *CPU) loop() error {
 	}
 
 	for {
-		var instrbuf [4]byte
 		var instr isa.Instr
 		var size int
 
@@ -89,41 +88,39 @@ func (cpu *CPU) loop() error {
 		if err != nil {
 			return err
 		}
-		err = cpu.Memory.Load(paddr, instrbuf[:2])
+		buf, err := cpu.Memory.Data(paddr)
 		if err != nil {
 			return err
 		}
-		if instrbuf[0]&0b11 == 0b11 {
+		raw := uint32(buf[0]) | uint32(buf[1])<<8
+
+		if buf[0]&0b11 == 0b11 {
 			// 32-bit instruction.
 			if cpu.PC>>12 == (cpu.PC+2)>>12 {
 				// Same page.
-				paddr += 2
+				raw |= uint32(buf[2]) << 16
+				raw |= uint32(buf[3]) << 24
 			} else {
 				// 32-bit instruction crosses page boundary.
 				paddr, err = cpu.MMU.Map(cpu.PC+2, mmu.AccessExec)
 				if err != nil {
 					return err
 				}
-			}
-			err = cpu.Memory.Load(paddr, instrbuf[2:4])
-			if err != nil {
-				return err
+				buf, err = cpu.Memory.Data(paddr)
+				if err != nil {
+					return err
+				}
+				raw |= uint32(buf[0]) << 16
+				raw |= uint32(buf[1]) << 24
 			}
 			size = 4
-			instr, err = isa.Decode(bo.Uint32(instrbuf[:]))
+			instr, err = isa.Decode(raw)
 		} else {
 			size = 2
-			instr, err = isa.DecodeC(bo.Uint16(instrbuf[:2]))
+			instr, err = isa.DecodeC(uint16(raw))
 		}
 		if err != nil {
-			var raw uint64
-			if size == 4 {
-				raw = uint64(bo.Uint32(instrbuf[:]))
-				fmt.Printf("raw: %08x\n", raw)
-			} else {
-				raw = uint64(bo.Uint16(instrbuf[:]))
-			}
-			return isa.NewTrap(isa.CauseIllegalInstr, raw, err)
+			return isa.NewTrap(isa.CauseIllegalInstr, uint64(raw), err)
 		}
 		cpu.Instret++
 
@@ -253,7 +250,7 @@ func (cpu *CPU) loop() error {
 
 		case isa.Fld:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			v, err := cpu.MMU.UserUint64(addr)
+			v, err := cpu.MMU.Load64(addr)
 			if err != nil {
 				return err
 			}
@@ -261,7 +258,7 @@ func (cpu *CPU) loop() error {
 
 		case isa.Flw:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			v32, err := cpu.MMU.UserUint32(addr)
+			v32, err := cpu.MMU.Load32(addr)
 			if err != nil {
 				return err
 			}
@@ -272,14 +269,14 @@ func (cpu *CPU) loop() error {
 		case isa.Fsd:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
 			v := math.Float64bits(cpu.F[instr.Rs2])
-			if err := cpu.MMU.PutUserUint64(addr, v); err != nil {
+			if err := cpu.MMU.Store64(addr, v); err != nil {
 				return err
 			}
 
 		case isa.Fsw:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
 			v := math.Float32bits(float32(cpu.F[instr.Rs2]))
-			if err := cpu.MMU.PutUserUint32(addr, uint64(v)); err != nil {
+			if err := cpu.MMU.Store32(addr, uint64(v)); err != nil {
 				return err
 			}
 
@@ -309,7 +306,7 @@ func (cpu *CPU) loop() error {
 
 		case isa.Lbu:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			v, err := cpu.MMU.UserUint8(addr)
+			v, err := cpu.MMU.Load8(addr)
 			if err != nil {
 				return err
 			}
@@ -317,7 +314,7 @@ func (cpu *CPU) loop() error {
 
 		case isa.Lb:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			v, err := cpu.MMU.UserUint8(addr)
+			v, err := cpu.MMU.Load8(addr)
 			if err != nil {
 				return err
 			}
@@ -325,7 +322,7 @@ func (cpu *CPU) loop() error {
 
 		case isa.Ld:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			v, err := cpu.MMU.UserUint64(addr)
+			v, err := cpu.MMU.Load64(addr)
 			if err != nil {
 				return err
 			}
@@ -333,7 +330,7 @@ func (cpu *CPU) loop() error {
 
 		case isa.Lhu:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			v, err := cpu.MMU.UserUint16(addr)
+			v, err := cpu.MMU.Load16(addr)
 			if err != nil {
 				return err
 			}
@@ -344,7 +341,7 @@ func (cpu *CPU) loop() error {
 
 		case isa.Lw:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			v, err := cpu.MMU.UserUint32(addr)
+			v, err := cpu.MMU.Load32(addr)
 			if err != nil {
 				return err
 			}
@@ -352,7 +349,7 @@ func (cpu *CPU) loop() error {
 
 		case isa.Lwu:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			v, err := cpu.MMU.UserUint32(addr)
+			v, err := cpu.MMU.Load32(addr)
 			if err != nil {
 				return err
 			}
@@ -424,13 +421,13 @@ func (cpu *CPU) loop() error {
 
 		case isa.Sb:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			if err := cpu.MMU.PutUserUint8(addr, cpu.X[instr.Rs2]); err != nil {
+			if err := cpu.MMU.Store8(addr, cpu.X[instr.Rs2]); err != nil {
 				return err
 			}
 
 		case isa.Sd:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			if err := cpu.MMU.PutUserUint64(addr, cpu.X[instr.Rs2]); err != nil {
+			if err := cpu.MMU.Store64(addr, cpu.X[instr.Rs2]); err != nil {
 				return err
 			}
 
@@ -509,13 +506,13 @@ func (cpu *CPU) loop() error {
 
 		case isa.Sh:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			if err := cpu.MMU.PutUserUint16(addr, cpu.X[instr.Rs2]); err != nil {
+			if err := cpu.MMU.Store16(addr, cpu.X[instr.Rs2]); err != nil {
 				return err
 			}
 
 		case isa.Sw:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			if err := cpu.MMU.PutUserUint32(addr, cpu.X[instr.Rs2]); err != nil {
+			if err := cpu.MMU.Store32(addr, cpu.X[instr.Rs2]); err != nil {
 				return err
 			}
 
@@ -542,11 +539,11 @@ func (cpu *CPU) loop() error {
 
 		case isa.AmoswapD:
 			addr := cpu.X[instr.Rs1]
-			v, err := cpu.MMU.UserUint64(addr)
+			v, err := cpu.MMU.Load64(addr)
 			if err != nil {
 				return err
 			}
-			err = cpu.MMU.PutUserUint64(addr, cpu.X[instr.Rs2])
+			err = cpu.MMU.Store64(addr, cpu.X[instr.Rs2])
 			if err != nil {
 				return err
 			}
@@ -554,11 +551,11 @@ func (cpu *CPU) loop() error {
 
 		case isa.AmoswapW:
 			addr := cpu.X[instr.Rs1]
-			v, err := cpu.MMU.UserUint32(addr)
+			v, err := cpu.MMU.Load32(addr)
 			if err != nil {
 				return err
 			}
-			err = cpu.MMU.PutUserUint32(addr, cpu.X[instr.Rs2])
+			err = cpu.MMU.Store32(addr, cpu.X[instr.Rs2])
 			if err != nil {
 				return err
 			}
@@ -566,12 +563,12 @@ func (cpu *CPU) loop() error {
 
 		case isa.AmoaddD:
 			addr := cpu.X[instr.Rs1]
-			v, err := cpu.MMU.UserUint64(addr)
+			v, err := cpu.MMU.Load64(addr)
 			if err != nil {
 				return err
 			}
 			t := v + uint64(cpu.X[instr.Rs2])
-			err = cpu.MMU.PutUserUint64(addr, t)
+			err = cpu.MMU.Store64(addr, t)
 			if err != nil {
 				return err
 			}
@@ -579,12 +576,12 @@ func (cpu *CPU) loop() error {
 
 		case isa.AmoaddW:
 			addr := cpu.X[instr.Rs1]
-			v, err := cpu.MMU.UserUint32(addr)
+			v, err := cpu.MMU.Load32(addr)
 			if err != nil {
 				return err
 			}
 			t := uint64(int64(int32(v) + int32(cpu.X[instr.Rs2])))
-			err = cpu.MMU.PutUserUint32(addr, t)
+			err = cpu.MMU.Store32(addr, t)
 			if err != nil {
 				return err
 			}
@@ -592,12 +589,12 @@ func (cpu *CPU) loop() error {
 
 		case isa.AmoandW:
 			addr := cpu.X[instr.Rs1]
-			v, err := cpu.MMU.UserUint32(addr)
+			v, err := cpu.MMU.Load32(addr)
 			if err != nil {
 				return err
 			}
 			t := uint64(int64(int32(v) & int32(cpu.X[instr.Rs2])))
-			err = cpu.MMU.PutUserUint32(addr, t)
+			err = cpu.MMU.Store32(addr, t)
 			if err != nil {
 				return err
 			}
@@ -605,12 +602,12 @@ func (cpu *CPU) loop() error {
 
 		case isa.AmoorW:
 			addr := cpu.X[instr.Rs1]
-			v, err := cpu.MMU.UserUint32(addr)
+			v, err := cpu.MMU.Load32(addr)
 			if err != nil {
 				return err
 			}
 			t := uint64(int64(int32(v) | int32(cpu.X[instr.Rs2])))
-			err = cpu.MMU.PutUserUint32(addr, t)
+			err = cpu.MMU.Store32(addr, t)
 			if err != nil {
 				return err
 			}
@@ -618,7 +615,7 @@ func (cpu *CPU) loop() error {
 
 		case isa.LrD:
 			addr := cpu.X[instr.Rs1]
-			v, err := cpu.MMU.UserUint64(addr)
+			v, err := cpu.MMU.Load64(addr)
 			if err != nil {
 				return err
 			}
@@ -626,7 +623,7 @@ func (cpu *CPU) loop() error {
 
 		case isa.LrW:
 			addr := cpu.X[instr.Rs1]
-			v, err := cpu.MMU.UserUint32(addr)
+			v, err := cpu.MMU.Load32(addr)
 			if err != nil {
 				return err
 			}
@@ -634,7 +631,7 @@ func (cpu *CPU) loop() error {
 
 		case isa.ScD:
 			addr := cpu.X[instr.Rs1]
-			err := cpu.MMU.PutUserUint64(addr, cpu.X[instr.Rs2])
+			err := cpu.MMU.Store64(addr, cpu.X[instr.Rs2])
 			if err != nil {
 				return err
 			}
@@ -642,7 +639,7 @@ func (cpu *CPU) loop() error {
 
 		case isa.ScW:
 			addr := cpu.X[instr.Rs1]
-			err := cpu.MMU.PutUserUint32(addr, cpu.X[instr.Rs2])
+			err := cpu.MMU.Store32(addr, cpu.X[instr.Rs2])
 			if err != nil {
 				return err
 			}
@@ -696,6 +693,9 @@ func (cpu *CPU) loop() error {
 			// XXX If the value is out of range, fcsr.fflags.NV is set
 			// to 1
 			cpu.X[instr.Rd] = uint64(int64(cpu.F[instr.Rs1]))
+
+		case isa.FcvtWD:
+			cpu.X[instr.Rd] = uint64(int64(int32(cpu.F[instr.Rs1])))
 
 		case isa.FcvtWUD:
 			cpu.X[instr.Rd] = uint64(uint32(cpu.F[instr.Rs1]))

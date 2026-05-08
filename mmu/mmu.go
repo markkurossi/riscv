@@ -386,15 +386,30 @@ func (mmu *MMU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 	return page, pte.Flags(), level, nil
 }
 
-func (mmu *MMU) UserUint8(vaddr uint64) (uint8, error) {
+func (mmu *MMU) Load8(vaddr uint64) (uint8, error) {
 	paddr, err := mmu.Map(vaddr, AccessRead)
 	if err != nil {
 		return 0, err
 	}
-	return mmu.Mem.Load8(paddr)
+	buf, err := mmu.Mem.Data(paddr)
+	if err != nil {
+		return 0, err
+	}
+	return buf[0], nil
 }
 
-func (mmu *MMU) UserUint16(vaddr uint64) (uint16, error) {
+func (mmu *MMU) Load16(vaddr uint64) (uint16, error) {
+	if memory.Avail(vaddr, 2) {
+		paddr, err := mmu.Map(vaddr, AccessRead)
+		if err != nil {
+			return 0, err
+		}
+		buf, err := mmu.Mem.Data(paddr)
+		if err != nil {
+			return 0, err
+		}
+		return bo.Uint16(buf[:]), nil
+	}
 	var buf [2]byte
 
 	err := mmu.CopyFromUser(vaddr, buf[:])
@@ -404,7 +419,18 @@ func (mmu *MMU) UserUint16(vaddr uint64) (uint16, error) {
 	return bo.Uint16(buf[:]), nil
 }
 
-func (mmu *MMU) UserUint32(vaddr uint64) (uint32, error) {
+func (mmu *MMU) Load32(vaddr uint64) (uint32, error) {
+	if memory.Avail(vaddr, 4) {
+		paddr, err := mmu.Map(vaddr, AccessRead)
+		if err != nil {
+			return 0, err
+		}
+		buf, err := mmu.Mem.Data(paddr)
+		if err != nil {
+			return 0, err
+		}
+		return bo.Uint32(buf[:]), nil
+	}
 	var buf [4]byte
 
 	err := mmu.CopyFromUser(vaddr, buf[:])
@@ -414,14 +440,41 @@ func (mmu *MMU) UserUint32(vaddr uint64) (uint32, error) {
 	return bo.Uint32(buf[:]), nil
 }
 
-func (mmu *MMU) UserUint64(vaddr uint64) (uint64, error) {
-	var buf [8]byte
-
-	err := mmu.CopyFromUser(vaddr, buf[:])
-	if err != nil {
-		return 0, err
+func (mmu *MMU) Load64(vaddr uint64) (uint64, error) {
+	if memory.Avail(vaddr, 8) {
+		paddr, err := mmu.Map(vaddr, AccessRead)
+		if err != nil {
+			return 0, err
+		}
+		buf, err := mmu.Mem.Data(paddr)
+		if err != nil {
+			return 0, err
+		}
+		return bo.Uint64(buf[:]), nil
 	}
-	return bo.Uint64(buf[:]), nil
+
+	var page uint64
+	var result uint64
+	var buf []byte
+
+	for i := 0; i < 8; i++ {
+		if memory.Page(vaddr) != page {
+			paddr, err := mmu.Map(vaddr, AccessRead)
+			if err != nil {
+				return 0, err
+			}
+			buf, err = mmu.Mem.Data(paddr)
+			if err != nil {
+				return 0, err
+			}
+			page = memory.Page(vaddr)
+		}
+		result |= uint64(buf[0]) << (i * 8)
+		buf = buf[1:]
+		vaddr++
+	}
+
+	return result, nil
 }
 
 func (mmu *MMU) UserCString(vaddr uint64) (string, error) {
@@ -470,7 +523,7 @@ func (mmu *MMU) CopyFromUser(vaddr uint64, buf []byte) error {
 	return nil
 }
 
-func (mmu *MMU) PutUserUint8(vaddr, v uint64) error {
+func (mmu *MMU) Store8(vaddr, v uint64) error {
 	paddr, err := mmu.Map(vaddr, AccessWrite)
 	if err != nil {
 		return err
@@ -478,7 +531,7 @@ func (mmu *MMU) PutUserUint8(vaddr, v uint64) error {
 	return mmu.Mem.Store8(paddr, v)
 }
 
-func (mmu *MMU) PutUserUint16(vaddr, v uint64) error {
+func (mmu *MMU) Store16(vaddr, v uint64) error {
 	var buf [2]byte
 
 	bo.PutUint16(buf[:], uint16(v))
@@ -486,7 +539,7 @@ func (mmu *MMU) PutUserUint16(vaddr, v uint64) error {
 	return mmu.CopyToUser(vaddr, buf[:])
 }
 
-func (mmu *MMU) PutUserUint32(vaddr, v uint64) error {
+func (mmu *MMU) Store32(vaddr, v uint64) error {
 	var buf [4]byte
 
 	bo.PutUint32(buf[:], uint32(v))
@@ -494,7 +547,19 @@ func (mmu *MMU) PutUserUint32(vaddr, v uint64) error {
 	return mmu.CopyToUser(vaddr, buf[:])
 }
 
-func (mmu *MMU) PutUserUint64(vaddr, v uint64) error {
+func (mmu *MMU) Store64(vaddr, v uint64) error {
+	if vaddr&0xfff+8 <= 0xfff {
+		paddr, err := mmu.Map(vaddr, AccessRead)
+		if err != nil {
+			return err
+		}
+		buf, err := mmu.Mem.Data(paddr)
+		if err != nil {
+			return err
+		}
+		bo.PutUint64(buf[:], v)
+		return nil
+	}
 	var buf [8]byte
 
 	bo.PutUint64(buf[:], v)
