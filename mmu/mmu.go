@@ -24,8 +24,6 @@ const (
 	AccessRead = 1 << iota
 	AccessWrite
 	AccessExec
-
-	checkAccess = false
 )
 
 const (
