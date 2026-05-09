@@ -117,7 +117,7 @@ func (cpu *CPU) loop() error {
 			instr, err = isa.Decode(raw)
 		} else {
 			size = 2
-			instr, err = isa.DecodeC(uint16(raw))
+			instr = isa.DecodeCFast(uint16(raw))
 		}
 		if err != nil {
 			return isa.NewTrap(isa.CauseIllegalInstr, uint64(raw), err)
