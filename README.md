@@ -88,10 +88,11 @@ The same applies to `Divw` (`INT32_MIN / -1`) and `Rem`/`Remw`.
 
 # Benchmarks
 
-| Optimization   | fib 30 | fib 35 | fib 40 | Relative |
-|:---------------|-------:|-------:|-------:|---------:|
-| Base           |  2.969 | 32.510 |        |    1.000 |
-| GC-less decode |  1.803 | 19.726 |        |    0.607 |
+| Optimization      | fib 30 | fib 35 | fib 40 | Relative |
+|:------------------|-------:|-------:|-------:|---------:|
+| Base              |  2.969 | 32.510 |        |    1.000 |
+| GC-less decode    |  1.803 | 19.726 |        |    0.607 |
+| PTE access checks |  1.763 | 19.128 |        |    0.588 |
 
 # Appendix
 

@@ -20,10 +20,10 @@ var (
 )
 
 const (
-	AccessNone = 0
-	AccessRead = 1 << iota
-	AccessWrite
-	AccessExec
+	AccessNone  = 0
+	AccessRead  = int(PteR)
+	AccessWrite = int(PteW)
+	AccessExec  = int(PteX)
 )
 
 const (
@@ -144,8 +144,8 @@ func (flags PTEFlags) Executable() bool {
 }
 
 func (flags PTEFlags) CanAccess(access int) (bool, uint64) {
-	if access&AccessRead != 0 && !flags.Readable() {
-		return false, isa.CauseLoadPageFault
+	if int(flags)&access == access {
+		return true, 0
 	}
 	if access&AccessWrite != 0 && !flags.Writable() {
 		return false, isa.CauseStorePageFault
@@ -153,7 +153,7 @@ func (flags PTEFlags) CanAccess(access int) (bool, uint64) {
 	if access&AccessExec != 0 && !flags.Executable() {
 		return false, isa.CauseInstPageFault
 	}
-	return true, 0
+	return false, isa.CauseLoadPageFault
 }
 
 func MakePTE(ppn uint64, flags PTEFlags) PTE {
