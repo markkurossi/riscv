@@ -95,13 +95,13 @@ numbers below are from running [fibo.c](tests/static/fibo.c) on:
 cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 ```
 
-| Optimization      | fib 30 | fib 35 | fib 40 | Relative |
-|:------------------|-------:|-------:|-------:|---------:|
-| Base              |  2.969 | 32.510 |        |    1.000 |
-| GC-less decode    |  1.803 | 19.726 |        |    0.607 |
-| PTE access checks |  1.763 | 19.128 |        |    0.588 |
-| MMU Map fastpath  |  1.709 | 18.507 |        |    0.569 |
-| DecodeCFast       |  1.280 | 13.848 |        |    0.426 |
+| Optimization      | fib 30 | fib 35 |    fib 40 |  MIPS | Relative |
+|:------------------|-------:|-------:|----------:|------:|---------:|
+| Base              |  2.969 | 32.510 |           | 19.75 |    1.000 |
+| GC-less decode    |  1.803 | 19.726 |           | 32.55 |    0.607 |
+| PTE access checks |  1.763 | 19.128 |           | 33.57 |    0.588 |
+| MMU Map fastpath  |  1.709 | 18.507 |           | 34.70 |    0.569 |
+| DecodeCFast       |  1.280 | 13.848 | 2m33.240s | 45.78 |    0.426 |
 
 # Appendix
 

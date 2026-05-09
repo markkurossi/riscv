@@ -249,7 +249,7 @@ func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
 	vpn := vaddr >> 12
 	tlb := &mmu.TLB[vpn&0xfff]
 
-	if tlb.VPN == vpn && tlb.Flags.Valid() {
+	if tlb.VPN == vpn && tlb.Flags&PteV != 0 {
 		if int(tlb.Flags)&access == access {
 			return tlb.Page | (vaddr & uint64(tlb.OffsetMask)), nil
 		}

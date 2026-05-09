@@ -21,10 +21,20 @@ main(int argc, char *argv[], char *env[])
 {
   unsigned long n;
 
-  if (argc == 2)
-    n = 35;
-  else
-    n = 30;
+  switch (argc)
+    {
+    case 3:
+      n = 40;
+      break;
+
+    case 2:
+      n = 35;
+      break;
+
+    default:
+      n = 30;
+      break;
+    }
 
   printf("fibo(%ld): %ld\n", n, fibo(n));
 
