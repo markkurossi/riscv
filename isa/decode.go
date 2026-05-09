@@ -158,6 +158,21 @@ func DecodeELF(file string) error {
 	return nil
 }
 
+var rvcTable [65536]Instr
+
+func init() {
+	for i := 0; i < 65536; i++ {
+		instr, err := DecodeC(uint16(i))
+		if err == nil {
+			rvcTable[i] = instr
+		}
+	}
+}
+
+func DecodeCFast(raw uint16) Instr {
+	return rvcTable[raw]
+}
+
 var compressedRegisters = [8]Register{
 	S0, S1, A0, A1, A2, A3, A4, A5,
 }
