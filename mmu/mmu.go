@@ -235,59 +235,53 @@ func index(va uint64, level int) uint64 {
 }
 
 type TLBEntry struct {
-	VPN   uint64
-	Page  uint64
-	Flags PTEFlags
-	Level uint8
+	VPN        uint64
+	Page       uint64
+	Flags      PTEFlags
+	OffsetMask uint32
 }
 
 func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
-	switch mmu.Satp.Mode() {
-	case SatpModeBare:
+	if mmu.Satp.Mode() == SatpModeBare {
 		return vaddr, nil
-
-	case SatpModeSv39:
-
-	default:
-		return 0, fmt.Errorf("unsupported memory model %v", mmu.Satp.Mode())
 	}
 
 	vpn := vaddr >> 12
+	tlb := &mmu.TLB[vpn&0xfff]
 
-	var err error
-	var page uint64
-	var flags PTEFlags
-	var level int
-
-	tlb := &mmu.TLB[vpn%uint64(len(mmu.TLB))]
 	if tlb.VPN == vpn && tlb.Flags.Valid() {
-		ok, cause := tlb.Flags.CanAccess(access)
-		if !ok {
-			return 0, isa.NewTrap(cause, vaddr, nil)
+		if int(tlb.Flags)&access == access {
+			return tlb.Page | (vaddr & uint64(tlb.OffsetMask)), nil
 		}
-		page = tlb.Page
-		level = int(tlb.Level)
-	} else {
-		page, flags, level, err = mmu.MapSv39(mmu.Satp.PPN(), vaddr, access)
-		if err != nil {
-			return 0, err
-		}
-		tlb.VPN = vpn
-		tlb.Page = page
-		tlb.Flags = flags
-		tlb.Level = uint8(level)
 	}
+
+	return mmu.mapSlow(vaddr, vpn, access)
+}
+
+func (mmu *MMU) mapSlow(vaddr, vpn uint64, access int) (uint64, error) {
+	page, flags, level, err := mmu.MapSv39(mmu.Satp.PPN(), vaddr, access)
+	if err != nil {
+		return 0, err
+	}
+
+	tlb := &mmu.TLB[vpn&0xfff]
+
+	tlb.VPN = vpn
+	tlb.Page = page
+	tlb.Flags = flags
 
 	switch level {
 	case 2:
-		return page | (vaddr & (1<<30 - 1)), nil
+		tlb.OffsetMask = (1<<30 - 1)
 	case 1:
-		return page | (vaddr & (1<<21 - 1)), nil
+		tlb.OffsetMask = (1<<21 - 1)
 	case 0:
-		return page | (vaddr & (1<<12 - 1)), nil
+		tlb.OffsetMask = (1<<12 - 1)
 	default:
 		panic("invalid level")
 	}
+
+	return page | (vaddr & uint64(tlb.OffsetMask)), nil
 }
 
 func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
@@ -536,7 +530,7 @@ func (mmu *MMU) Store32(vaddr, v uint64) error {
 }
 
 func (mmu *MMU) Store64(vaddr, v uint64) error {
-	if vaddr&0xfff+8 <= 0xfff {
+	if (vaddr&0xfff)+8 <= 0xfff {
 		paddr, err := mmu.Map(vaddr, AccessRead)
 		if err != nil {
 			return err
