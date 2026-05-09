@@ -476,52 +476,6 @@ func (mmu *MMU) Load64(vaddr uint64) (uint64, error) {
 	return result, nil
 }
 
-func (mmu *MMU) UserCString(vaddr uint64) (string, error) {
-	var data []byte
-
-	for {
-		paddr, err := mmu.Map(vaddr, AccessRead)
-		if err != nil {
-			return "", err
-		}
-
-		l := memory.PageSize - paddr%memory.PageSize
-		for i := uint64(0); i < l; i++ {
-			b, err := mmu.Mem.Load8(paddr + i)
-			if err != nil {
-				return "", err
-			}
-			if b == 0 {
-				return string(data), nil
-			}
-			data = append(data, b)
-		}
-
-		vaddr += l
-	}
-}
-
-func (mmu *MMU) CopyFromUser(vaddr uint64, buf []byte) error {
-	for len(buf) > 0 {
-		l := memory.PageSize - vaddr%memory.PageSize
-		if l > uint64(len(buf)) {
-			l = uint64(len(buf))
-		}
-		paddr, err := mmu.Map(vaddr, AccessRead)
-		if err != nil {
-			return err
-		}
-		b, err := mmu.Mem.Data(paddr)
-		if err != nil {
-			return err
-		}
-		copy(buf[:l], b)
-		buf = buf[l:]
-		vaddr += l
-	}
-	return nil
-}
-
 func (mmu *MMU) Store8(vaddr, v uint64) error {
 	paddr, err := mmu.Map(vaddr, AccessWrite)
 	if err != nil {
@@ -569,28 +523,6 @@ func (mmu *MMU) Store64(vaddr, v uint64) error {
 	bo.PutUint64(buf[:], v)
 
 	return mmu.CopyToUser(vaddr, buf[:])
-}
-
-func (mmu *MMU) CopyToUser(vaddr uint64, data []byte) error {
-	for len(data) > 0 {
-		l := memory.PageSize - vaddr%memory.PageSize
-		if l > uint64(len(data)) {
-			l = uint64(len(data))
-		}
-
-		paddr, err := mmu.Map(vaddr, AccessWrite)
-		if err != nil {
-			return err
-		}
-		buf, err := mmu.Mem.Data(paddr)
-		if err != nil {
-			return err
-		}
-		copy(buf, data[:l])
-		data = data[l:]
-		vaddr += l
-	}
-	return nil
 }
 
 func SetMapSv39(mem memory.Memory, satp Satp, vpage, ppage uint64,
