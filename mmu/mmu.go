@@ -407,13 +407,29 @@ func (mmu *MMU) Load16(vaddr uint64) (uint16, error) {
 		}
 		return bo.Uint16(buf[:]), nil
 	}
-	var buf [2]byte
 
-	err := mmu.CopyFromUser(vaddr, buf[:])
-	if err != nil {
-		return 0, err
+	var page uint64
+	var result uint16
+	var buf []byte
+
+	for i := 0; i < 2; i++ {
+		if memory.Page(vaddr) != page {
+			paddr, err := mmu.Map(vaddr, AccessRead)
+			if err != nil {
+				return 0, err
+			}
+			buf, err = mmu.Mem.Data(paddr)
+			if err != nil {
+				return 0, err
+			}
+			page = memory.Page(vaddr)
+		}
+		result |= uint16(buf[0]) << (i * 8)
+		buf = buf[1:]
+		vaddr++
 	}
-	return bo.Uint16(buf[:]), nil
+
+	return result, nil
 }
 
 func (mmu *MMU) Load32(vaddr uint64) (uint32, error) {
@@ -428,13 +444,29 @@ func (mmu *MMU) Load32(vaddr uint64) (uint32, error) {
 		}
 		return bo.Uint32(buf[:]), nil
 	}
-	var buf [4]byte
 
-	err := mmu.CopyFromUser(vaddr, buf[:])
-	if err != nil {
-		return 0, err
+	var page uint64
+	var result uint32
+	var buf []byte
+
+	for i := 0; i < 4; i++ {
+		if memory.Page(vaddr) != page {
+			paddr, err := mmu.Map(vaddr, AccessRead)
+			if err != nil {
+				return 0, err
+			}
+			buf, err = mmu.Mem.Data(paddr)
+			if err != nil {
+				return 0, err
+			}
+			page = memory.Page(vaddr)
+		}
+		result |= uint32(buf[0]) << (i * 8)
+		buf = buf[1:]
+		vaddr++
 	}
-	return bo.Uint32(buf[:]), nil
+
+	return result, nil
 }
 
 func (mmu *MMU) Load64(vaddr uint64) (uint64, error) {
