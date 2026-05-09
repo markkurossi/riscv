@@ -30,6 +30,10 @@ func Page(addr uint64) uint64 {
 	return addr >> 12
 }
 
+func PageOffset(addr uint64) int {
+	return int(addr & 0xfff)
+}
+
 // XXX should we remove {Load,Store}{16,64} from here and only provide
 // byte-order neutral access to memory? Yes.
 type Memory interface {

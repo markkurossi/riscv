@@ -78,40 +78,49 @@ func (cpu *CPU) loop() error {
 		return isa.NewTrap(isa.CauseInstAddrMisaligned, cpu.PC, nil)
 	}
 
+	var codePagenum uint64
+	var codePage []byte
+
 	for {
 		var instr isa.Instr
+		var err error
 		var size int
 
 		cpu.X[isa.Zero] = 0
 
-		paddr, err := cpu.MMU.Map(cpu.PC, mmu.AccessExec)
-		if err != nil {
-			return err
+		if memory.Page(cpu.PC) != codePagenum {
+			paddr, err := cpu.MMU.Map(cpu.PC, mmu.AccessExec)
+			if err != nil {
+				return err
+			}
+			codePage, err = cpu.Memory.Page(memory.Page(paddr))
+			if err != nil {
+				return err
+			}
+			codePagenum = memory.Page(cpu.PC)
 		}
-		buf, err := cpu.Memory.Data(paddr)
-		if err != nil {
-			return err
-		}
-		raw := uint32(buf[0]) | uint32(buf[1])<<8
+		ofs := memory.PageOffset(cpu.PC)
+		raw := uint32(codePage[ofs]) | uint32(codePage[ofs+1])<<8
 
-		if buf[0]&0b11 == 0b11 {
+		if raw&0b11 == 0b11 {
 			// 32-bit instruction.
 			if cpu.PC>>12 == (cpu.PC+2)>>12 {
 				// Same page.
-				raw |= uint32(buf[2]) << 16
-				raw |= uint32(buf[3]) << 24
+				raw |= uint32(codePage[ofs+2]) << 16
+				raw |= uint32(codePage[ofs+3]) << 24
 			} else {
 				// 32-bit instruction crosses page boundary.
-				paddr, err = cpu.MMU.Map(cpu.PC+2, mmu.AccessExec)
+				paddr, err := cpu.MMU.Map(cpu.PC+2, mmu.AccessExec)
 				if err != nil {
 					return err
 				}
-				buf, err = cpu.Memory.Data(paddr)
+				codePage, err = cpu.Memory.Page(memory.Page(paddr))
 				if err != nil {
 					return err
 				}
-				raw |= uint32(buf[0]) << 16
-				raw |= uint32(buf[1]) << 24
+				ofs = memory.PageOffset(paddr)
+				raw |= uint32(codePage[ofs+0]) << 16
+				raw |= uint32(codePage[ofs+1]) << 24
 			}
 			size = 4
 			instr, err = isa.Decode(raw)

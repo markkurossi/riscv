@@ -102,6 +102,7 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 | PTE access checks |  1.763 | 19.128 |           | 33.57 |    0.588 |
 | MMU Map fastpath  |  1.709 | 18.507 |           | 34.70 |    0.569 |
 | DecodeCFast       |  1.280 | 13.848 | 2m33.240s | 45.78 |    0.426 |
+| Cached code page  |  0.977 | 10.582 | 1m57.654s | 60.68 |    0.325 |
 
 # Appendix
 
