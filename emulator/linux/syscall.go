@@ -556,6 +556,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		if proc.Kernel.Profile {
 			return Error(ErrnoEINTR), ErrProfile
 		}
+		ktracef(proc, "     val=%v, instret=%v\n", a0, proc.CPU.Instret)
 		os.Exit(int(a0))
 
 	case 96: // set_tid_address
