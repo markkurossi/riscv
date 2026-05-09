@@ -9,13 +9,13 @@ Linux applications and, eventually, the Linux operating system.
 ## MMU Refactoring
 
  - [x] Fix page table MMU code to run the existing samples
- - [ ] Refactor the whole emulator chain:
+ - [ ] Refactor the entire emulator stack
    - [ ] CPU -> Kernel -> Process -> Emulator
    - [ ] Kernel creates processes 1-n
    - [ ] Virtual memory handled per process
    - [ ] CPU has only {Load,Store}Uint{8,16,32,64}()
    - [ ] Process has {Put,}Uint{8,16,32,64,String,Data}() functions
- - [ ] sfence.vma must clearn MMU's TLB entries
+ - [ ] sfence.vma must clear MMU's TLB entries
 
 ## Step 1 - Basics
 
@@ -88,11 +88,20 @@ The same applies to `Divw` (`INT32_MIN / -1`) and `Rem`/`Remw`.
 
 # Benchmarks
 
+These benchmarks are a work-in-progress performance tracker. The
+numbers below are from running [fibo.c](tests/static/fibo.c) on:
+
+``` text
+cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
+```
+
 | Optimization      | fib 30 | fib 35 | fib 40 | Relative |
 |:------------------|-------:|-------:|-------:|---------:|
 | Base              |  2.969 | 32.510 |        |    1.000 |
 | GC-less decode    |  1.803 | 19.726 |        |    0.607 |
 | PTE access checks |  1.763 | 19.128 |        |    0.588 |
+| MMU Map fastpath  |  1.709 | 18.507 |        |    0.569 |
+| DecodeCFast       |  1.280 | 13.848 |        |    0.426 |
 
 # Appendix
 
