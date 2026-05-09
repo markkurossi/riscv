@@ -500,7 +500,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 	case 78: // readlinkat
 		arg0 := int64(a0)
 		if arg0 == AtFdcwd {
-			fmt.Printf("     - AT_FDCWD\n")
+			ktracef(proc, "     - AT_FDCWD\n")
 		}
 		return Error(ErrnoENOENT), nil
 
