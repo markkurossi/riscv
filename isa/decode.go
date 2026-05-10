@@ -43,18 +43,29 @@ func DecodeELF(file string) error {
 		fmt.Printf(" - Memsz: %x\n", prog.Memsz)
 		fmt.Printf(" - Align: %x\n", prog.Align)
 
-		data := make([]byte, prog.Memsz)
-		n, err := prog.ReadAt(data, 0)
-		if err != nil {
-			return err
+		if prog.Type == elf.PT_LOAD {
+			vaddr := prog.Vaddr
+			end := vaddr + prog.Memsz + 4095
+			end &= ^uint64(0xfff)
+
+			headPad := vaddr & 0xfff
+			vaddr &= ^uint64(0xfff)
+
+			data := make([]byte, end-vaddr)
+			n, err := prog.ReadAt(data[headPad:headPad+prog.Filesz], 0)
+			if err != nil {
+				return err
+			}
+
+			limit := 256
+			suffix := ""
+			if n > limit {
+				suffix = fmt.Sprintf("...%d bytes omitted...\n", n-limit)
+				n = limit
+			}
+			fmt.Printf("%s%s", hex.Dump(data[headPad:headPad+uint64(n)]),
+				suffix)
 		}
-		limit := 256
-		suffix := ""
-		if n > limit {
-			suffix = fmt.Sprintf("...%d bytes omitted...\n", n-limit)
-			n = limit
-		}
-		fmt.Printf("%s%s", hex.Dump(data[:n]), suffix)
 	}
 
 	var text *elf.Section
@@ -120,25 +131,28 @@ func DecodeELF(file string) error {
 	for len(data) > 0 {
 		var instr Instr
 		var size uint64
+		var raw uint32
 
 		if data[0]&0b11 == 0b11 {
 			if len(data) < 4 {
 				return fmt.Errorf("truncated .text")
 			}
-			instr, err = Decode(bo.Uint32(data[:4]))
+			raw = bo.Uint32(data[:4])
+			instr, err = Decode(raw)
 			size = 4
 		} else {
 			if len(data) < 2 {
 				return fmt.Errorf("truncated .text")
 			}
-			instr, err = DecodeC(bo.Uint16(data[:2]))
+			raw = uint32(bo.Uint16(data[:2]))
+			instr, err = DecodeC(uint16(raw))
 			size = 2
 		}
 		var line string
-		if instr.Raw&0b11 == 0b11 {
-			line = fmt.Sprintf("%8x:  %08x   %v", pc, instr.Raw, instr)
+		if size == 4 {
+			line = fmt.Sprintf("%8x:  %08x   %v", pc, raw, instr)
 		} else {
-			line = fmt.Sprintf("%8x:  %04x       %v", pc, instr.Raw, instr)
+			line = fmt.Sprintf("%8x:  %04x       %v", pc, raw, instr)
 		}
 		op, ok := Operands[instr.Op]
 		if ok && len(op.Desc) > 0 && instr.Op != lastDescOp {
@@ -187,8 +201,6 @@ func DecodeC(raw uint16) (Instr, error) {
 	rds1 := Register(raw >> 7 & 0b11111)
 	rs2 := Register(raw >> 2 & 0b11111)
 	funct3 := raw >> 13 & 0b111
-
-	instr.Raw = uint32(raw)
 
 	// Switch by quadrants.
 	switch raw & 0b11 {
@@ -532,7 +544,6 @@ func Decode(raw uint32) (Instr, error) {
 	opcode := uint8(raw)
 	group := Group(opcode & 0b1111111)
 
-	instr.Raw = raw
 	instr.Rd = Register(raw >> 7 & 0b0011111)
 	instr.Rs1 = Register(raw >> 15 & 0b0011111)
 	instr.Rs2 = Register(raw >> 20 & 0b0011111)
@@ -542,15 +553,15 @@ func Decode(raw uint32) (Instr, error) {
 
 	switch group {
 	case GroupAUIPC:
-		instr.typeU()
+		instr.typeU(raw)
 		instr.Op = Auipc
 
 	case GroupLUI:
-		instr.typeU()
+		instr.typeU(raw)
 		instr.Op = Lui
 
 	case GroupSTORE:
-		instr.typeS()
+		instr.typeS(raw)
 		switch funct3 {
 		case 0:
 			instr.Op = Sb
@@ -561,11 +572,11 @@ func Decode(raw uint32) (Instr, error) {
 		case 3:
 			instr.Op = Sd
 		default:
-			return instr, fmt.Errorf("invalid STORE instr %x", instr.Raw)
+			return instr, fmt.Errorf("invalid STORE instr %x", raw)
 		}
 
 	case GroupLOAD:
-		instr.typeI()
+		instr.typeI(raw)
 		switch funct3 {
 		case 0:
 			instr.Op = Lb
@@ -582,11 +593,11 @@ func Decode(raw uint32) (Instr, error) {
 		case 6:
 			instr.Op = Lwu
 		default:
-			return instr, fmt.Errorf("invalid LOAD instr %x", instr.Raw)
+			return instr, fmt.Errorf("invalid LOAD instr %x", raw)
 		}
 
 	case GroupOPIMM:
-		instr.typeI()
+		instr.typeI(raw)
 		switch funct3 {
 		case 0:
 			instr.Op = Addi
@@ -612,7 +623,7 @@ func Decode(raw uint32) (Instr, error) {
 		}
 
 	case GroupOPIMM32:
-		instr.typeI()
+		instr.typeI(raw)
 		switch funct3 {
 		case 0:
 			instr.Op = Addiw
@@ -631,7 +642,7 @@ func Decode(raw uint32) (Instr, error) {
 		}
 
 	case GroupSYSTEM:
-		instr.typeI()
+		instr.typeI(raw)
 		switch funct3 {
 		case 0:
 			// Trap/return.
@@ -670,15 +681,15 @@ func Decode(raw uint32) (Instr, error) {
 		}
 
 	case GroupJAL:
-		instr.typeJ()
+		instr.typeJ(raw)
 		instr.Op = Jal
 
 	case GroupJALR:
-		instr.typeI()
+		instr.typeI(raw)
 		instr.Op = Jalr
 
 	case GroupBRANCH:
-		instr.typeB()
+		instr.typeB(raw)
 		switch funct3 {
 		case 0:
 			instr.Op = Beq
@@ -956,7 +967,7 @@ func Decode(raw uint32) (Instr, error) {
 			instr.Op = FeqD
 
 		case 0b1100001:
-			funct5 := instr.Raw >> 20 & 0b11111
+			funct5 := raw >> 20 & 0b11111
 			switch funct5 {
 			case 0b00000:
 				instr.Op = FcvtWD
@@ -970,7 +981,7 @@ func Decode(raw uint32) (Instr, error) {
 			}
 
 		case 0b1101001:
-			funct5 := instr.Raw >> 20 & 0b11111
+			funct5 := raw >> 20 & 0b11111
 			switch funct5 {
 			case 0b00000:
 				instr.Op = FcvtDW

@@ -151,11 +151,10 @@ func (cpu *CPU) loop() error {
 
 		if false {
 			var line string
-			if instr.Raw&0b11 == 0b11 {
-				line = fmt.Sprintf("%8x:  %08x   %v", cpu.PC, instr.Raw, instr)
+			if size == 4 {
+				line = fmt.Sprintf("%8x:  %08x   %v", cpu.PC, raw, instr)
 			} else {
-				line = fmt.Sprintf("%8x:  %04x       %v",
-					cpu.PC, instr.Raw, instr)
+				line = fmt.Sprintf("%8x:  %04x       %v", cpu.PC, raw, instr)
 			}
 			op, ok := isa.Operands[instr.Op]
 			if ok && len(op.Desc) > 0 && instr.Op != lastDescOp {
@@ -573,7 +572,7 @@ func (cpu *CPU) loop() error {
 
 			// Control and Status Registers (CSRs).
 		case isa.Csrrs:
-			csr := instr.Raw >> 20
+			csr := raw >> 20
 			switch csr {
 			case 0xc01: // time - RDCYCLE instruction
 				v := time.Now().UnixNano()
@@ -751,7 +750,7 @@ func (cpu *CPU) loop() error {
 
 		default:
 			return fmt.Errorf("instruction %v[0x%x] not implemented yet",
-				instr, instr.Raw)
+				instr, raw)
 		}
 		cpu.PC += uint64(size)
 	}
