@@ -16,6 +16,7 @@ Linux applications and, eventually, the Linux operating system.
    - [ ] CPU has only {Load,Store}Uint{8,16,32,64}()
    - [ ] Process has {Put,}Uint{8,16,32,64,String,Data}() functions
  - [ ] sfence.vma must clear MMU's TLB entries
+ - [ ] Can we remove `Raw uint32` from `Instr`?
 
 ## Step 1 - Basics
 
