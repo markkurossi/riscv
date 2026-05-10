@@ -275,11 +275,8 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 					return nil, err
 				}
 				idx := addr - vaddr
-				err = emu.Memory.Store(page*memory.PageSize,
+				copy(emu.Memory.RAM[page*memory.PageSize:],
 					data[idx:idx+memory.PageSize])
-				if err != nil {
-					return nil, err
-				}
 
 				if false {
 					fmt.Printf("Page %v => %v:\n%s", addr>>12, page,
@@ -555,10 +552,7 @@ func (emu *Emulator) TrapHandler(acpu *cpu.CPU, trap *isa.Trap) (bool, error) {
 					if n == 0 && err != nil {
 						return false, err
 					}
-					err = emu.Memory.Store(page<<12, buf)
-					if err != nil {
-						return false, err
-					}
+					copy(emu.Memory.RAM[page<<12:], buf)
 				}
 
 				err = mmu.SetMapSv39(emu.Memory, emu.CPU.MMU.Satp, vpage, page,
