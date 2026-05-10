@@ -909,7 +909,6 @@ func (r Register) String() string {
 
 // Instr defines RISC-V instructions.
 type Instr struct {
-	// Raw uint32
 	Op  Op
 	Rd  Register
 	Rs1 Register

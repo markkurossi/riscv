@@ -54,17 +54,18 @@ numbers below are from running [fibo.c](tests/static/fibo.c) on:
 cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 ```
 
-| Optimization        | fib 30 | fib 35 |    fib 40 |   MIPS | Relative |
-|:--------------------|-------:|-------:|----------:|-------:|---------:|
-| Base                |  2.969 | 32.510 |           |  19.75 |    1.000 |
-| GC-less decode      |  1.803 | 19.726 |           |  32.55 |    0.607 |
-| PTE access checks   |  1.763 | 19.128 |           |  33.57 |    0.588 |
-| MMU Map fastpath    |  1.709 | 18.507 |           |  34.70 |    0.569 |
-| DecodeCFast         |  1.280 | 13.848 | 2m33.240s |  45.78 |    0.426 |
-| Cached code page    |  0.977 | 10.582 | 1m57.654s |  60.68 |    0.325 |
-| Concrete memory     |  0.915 |  9.835 | 1m48.920s |  65.29 |    0.303 |
-| 32-bit decode cache |  0.684 |  7.327 | 1m20.509s |  87.64 |    0.225 |
-| Ld/Sd TLB fastpath  |  0.603 |  6.327 | 1m10.533s | 101.49 |    0.195 |
+| Optimization           | fib 30 | fib 35 |    fib 40 |   MIPS | Relative |
+|:-----------------------|-------:|-------:|----------:|-------:|---------:|
+| Base                   |  2.969 | 32.510 |           |  19.75 |    1.000 |
+| GC-less decode         |  1.803 | 19.726 |           |  32.55 |    0.607 |
+| PTE access checks      |  1.763 | 19.128 |           |  33.57 |    0.588 |
+| MMU Map fastpath       |  1.709 | 18.507 |           |  34.70 |    0.569 |
+| DecodeCFast            |  1.280 | 13.848 | 2m33.240s |  45.78 |    0.426 |
+| Cached code page       |  0.977 | 10.582 | 1m57.654s |  60.68 |    0.325 |
+| Concrete memory        |  0.915 |  9.835 | 1m48.920s |  65.29 |    0.303 |
+| 32-bit decode cache    |  0.684 |  7.327 | 1m20.509s |  87.64 |    0.225 |
+| Ld/Sd TLB fastpath     |  0.603 |  6.327 | 1m10.533s | 101.49 |    0.195 |
+| Optimized Instr struct |  0.452 |  4.635 | 0m52.004s | 138.54 |    0.143 |
 
 # Appendix
 
