@@ -114,13 +114,13 @@ func (cpu *CPU) loop() error {
 				if err != nil {
 					return err
 				}
-				codePage, err = cpu.Memory.Page(memory.Page(paddr))
+				nextPage, err := cpu.Memory.Page(memory.Page(paddr))
 				if err != nil {
 					return err
 				}
-				ofs = memory.PageOffset(paddr)
-				raw |= uint32(codePage[ofs+0]) << 16
-				raw |= uint32(codePage[ofs+1]) << 24
+				nextOfs := memory.PageOffset(paddr)
+				raw |= uint32(nextPage[nextOfs+0]) << 16
+				raw |= uint32(nextPage[nextOfs+1]) << 24
 			}
 			size = 4
 			instr, err = isa.Decode(raw)
