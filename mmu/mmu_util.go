@@ -21,10 +21,7 @@ func (mmu *MMU) UserCString(vaddr uint64) (string, error) {
 
 		l := memory.PageSize - paddr%memory.PageSize
 		for i := uint64(0); i < l; i++ {
-			b, err := mmu.Mem.Load8(paddr + i)
-			if err != nil {
-				return "", err
-			}
+			b := mmu.Mem.RAM[paddr+i]
 			if b == 0 {
 				return string(data), nil
 			}

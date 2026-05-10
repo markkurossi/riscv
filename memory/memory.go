@@ -74,13 +74,6 @@ func (mem *Memory) Page(num uint64) ([]byte, error) {
 	return mem.RAM[addr : addr+PageSize], nil
 }
 
-func (mem *Memory) Load8(addr uint64) (uint8, error) {
-	if addr+1 > uint64(len(mem.RAM)) {
-		return 0, ErrInvalidAddr
-	}
-	return mem.RAM[addr], nil
-}
-
 func (mem *Memory) Store(addr uint64, Data []byte) error {
 	if addr+uint64(len(Data)) > uint64(len(mem.RAM)) {
 		return ErrInvalidAddr
