@@ -70,7 +70,12 @@ func (vma *VMA) String() string {
 		prot += "."
 	}
 
-	return fmt.Sprintf("%10x:%10x %s", vma.Start, vma.End, prot)
+	result := fmt.Sprintf("%10x:%10x %s", vma.Start, vma.End, prot)
+	if vma.Source != nil {
+		result += fmt.Sprintf(" <- %p @ %v", vma.Source, vma.Offset)
+	}
+
+	return result
 }
 
 func (vma *VMA) Contains(addr uint64) bool {
