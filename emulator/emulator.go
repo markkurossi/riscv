@@ -42,7 +42,7 @@ type Emulator struct {
 }
 
 func New(params kernel.Params) (*Emulator, error) {
-	mem := memory.NewMemory(2048) // 8 MB
+	mem := memory.NewMemory(2048 * memory.PageSize) // 8 MB
 
 	// Skip page 0.
 	_, err := mem.AllocPage()

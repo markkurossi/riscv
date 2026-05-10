@@ -355,7 +355,7 @@ func (cpu *CPU) loop() error {
 			if tlb.VPN == vpn && tlb.Flags.Readable() {
 				// Fast path: TLB hit.
 				paddr := tlb.Page | (addr & uint64(tlb.OffsetMask))
-				cpu.X[instr.Rd] = bo.Uint64(cpu.MMU.Mem.Data[paddr:])
+				cpu.X[instr.Rd] = bo.Uint64(cpu.MMU.Mem.RAM[paddr:])
 			} else {
 				// Slow path fallback.
 				v, err := cpu.MMU.Load64(addr)
@@ -472,7 +472,7 @@ func (cpu *CPU) loop() error {
 			if tlb.VPN == vpn && tlb.Flags.Writable() {
 				// Fast path: TLB hit.
 				paddr := tlb.Page | (addr & uint64(tlb.OffsetMask))
-				bo.PutUint64(cpu.MMU.Mem.Data[paddr:], cpu.X[instr.Rs2])
+				bo.PutUint64(cpu.MMU.Mem.RAM[paddr:], cpu.X[instr.Rs2])
 			} else {
 				// Slow path fallback.
 				if err := cpu.MMU.Store64(addr, cpu.X[instr.Rs2]); err != nil {

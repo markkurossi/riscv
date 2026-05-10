@@ -45,7 +45,7 @@ func (mmu *MMU) CopyFromUser(vaddr uint64, buf []byte) error {
 		if err != nil {
 			return err
 		}
-		copy(buf[:l], mmu.Mem.Data[paddr:])
+		copy(buf[:l], mmu.Mem.RAM[paddr:])
 		buf = buf[l:]
 		vaddr += l
 	}
@@ -62,7 +62,7 @@ func (mmu *MMU) CopyToUser(vaddr uint64, data []byte) error {
 		if err != nil {
 			return err
 		}
-		copy(mmu.Mem.Data[paddr:], data[:l])
+		copy(mmu.Mem.RAM[paddr:], data[:l])
 		data = data[l:]
 		vaddr += l
 	}
