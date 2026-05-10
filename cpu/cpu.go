@@ -347,11 +347,23 @@ func (cpu *CPU) loop() error {
 
 		case isa.Ld:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			v, err := cpu.MMU.Load64(addr)
-			if err != nil {
-				return err
+
+			// Direct TLB check.
+			vpn := addr >> 12
+			tlb := &cpu.MMU.TLB[vpn&0xfff]
+
+			if tlb.VPN == vpn && tlb.Flags.Readable() {
+				// Fast path: TLB hit.
+				paddr := tlb.Page | (addr & uint64(tlb.OffsetMask))
+				cpu.X[instr.Rd] = bo.Uint64(cpu.MMU.Mem.Data[paddr:])
+			} else {
+				// Slow path fallback.
+				v, err := cpu.MMU.Load64(addr)
+				if err != nil {
+					return err
+				}
+				cpu.X[instr.Rd] = v
 			}
-			cpu.X[instr.Rd] = v
 
 		case isa.Lhu:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
@@ -452,8 +464,20 @@ func (cpu *CPU) loop() error {
 
 		case isa.Sd:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			if err := cpu.MMU.Store64(addr, cpu.X[instr.Rs2]); err != nil {
-				return err
+
+			// Direct TLB check.
+			vpn := addr >> 12
+			tlb := &cpu.MMU.TLB[vpn&0xfff]
+
+			if tlb.VPN == vpn && tlb.Flags.Writable() {
+				// Fast path: TLB hit.
+				paddr := tlb.Page | (addr & uint64(tlb.OffsetMask))
+				bo.PutUint64(cpu.MMU.Mem.Data[paddr:], cpu.X[instr.Rs2])
+			} else {
+				// Slow path fallback.
+				if err := cpu.MMU.Store64(addr, cpu.X[instr.Rs2]); err != nil {
+					return err
+				}
 			}
 
 		case isa.Sll:
