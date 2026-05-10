@@ -50,7 +50,7 @@ var SyscallInfo = map[uint64]SyscallI{
 	14:  {-1, "", "removexattr"},            // 14 	| removexattr
 	15:  {-1, "", "lremovexattr"},           // 15 	| lremovexattr
 	16:  {-1, "", "fremovexattr"},           // 16 	| fremovexattr
-	17:  {-1, "", "getcwd"},                 // 17 	| getcwd
+	17:  {2, "pu", "getcwd"},                // 17 	| getcwd
 	18:  {-1, "", "lookup_dcookie"},         // 18 	| lookup_dcookie
 	19:  {-1, "", "eventfd2"},               // 19 	| eventfd2
 	20:  {-1, "", "epoll_create1"},          // 20 	| epoll_create1
@@ -361,6 +361,19 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 	uint64, error) {
 
 	switch id {
+	case 17: // getcwd
+		cwd := "/"
+
+		data := []byte(cwd)
+		if uint64(len(data)+1) > a1 {
+			data = data[:a1-1]
+		}
+		data = append(data, 0)
+		if err := proc.MMU.CopyToUser(a0, data); err != nil {
+			return Error(ErrnoEFAULT), nil
+		}
+		return 0, nil
+
 	case 48: // faccessat
 		dirfd := int64(a0)
 		addr := a1
