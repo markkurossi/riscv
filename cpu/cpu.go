@@ -45,6 +45,11 @@ type CPU struct {
 
 	PC uint64
 
+	decodeCache [4096]struct {
+		Raw   uint32
+		Instr isa.Instr
+	}
+
 	// Instruction count
 	Instret uint64
 
@@ -123,7 +128,18 @@ func (cpu *CPU) loop() error {
 				raw |= uint32(nextPage[nextOfs+1]) << 24
 			}
 			size = 4
-			instr, err = isa.Decode(raw)
+
+			idx := (raw >> 2) & 0xfff
+			if cpu.decodeCache[idx].Raw == raw {
+				instr = cpu.decodeCache[idx].Instr
+			} else {
+				instr, err = isa.Decode(raw)
+				if err != nil {
+					return err
+				}
+				cpu.decodeCache[idx].Raw = raw
+				cpu.decodeCache[idx].Instr = instr
+			}
 		} else {
 			size = 2
 			instr = isa.DecodeCFast(uint16(raw))
