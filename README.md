@@ -15,6 +15,8 @@ Linux applications and, eventually, the Linux operating system.
    - [ ] Virtual memory handled per process
    - [ ] CPU has only {Load,Store}Uint{8,16,32,64}()
    - [ ] Process has {Put,}Uint{8,16,32,64,String,Data}() functions
+   - [ ] Syscall can cause page fault on mmap'ed files. Syscall's
+         traps should fill page table.
  - [ ] sfence.vma must clear MMU's TLB entries
  - [ ] Can we remove `Raw uint32` from `Instr`?
 
