@@ -13,8 +13,8 @@ import (
 	"github.com/markkurossi/riscv/memory"
 )
 
-func makeMem() (memory.Memory, Satp, uint64) {
-	mem := memory.NewArrayMemory(10)
+func makeMem() (*memory.Memory, Satp, uint64) {
+	mem := memory.NewMemory(10)
 
 	// Skip 0 page.
 	_, err := mem.AllocPage()

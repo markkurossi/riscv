@@ -36,7 +36,7 @@ const (
 
 type MMU struct {
 	Satp Satp
-	Mem  memory.Memory
+	Mem  *memory.Memory
 
 	TLB [4096]TLBEntry
 }
@@ -293,11 +293,7 @@ func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 		idx := index(vaddr, level)
 		pteAddr := base + idx*8
 
-		buf, err := mmu.Mem.Data(pteAddr)
-		if err != nil {
-			return 0, 0, 0, isa.NewTrap(isa.CauseLoadPageFault, pteAddr, err)
-		}
-		pte := PTE(bo.Uint64(buf))
+		pte := PTE(bo.Uint64(mmu.Mem.Data[pteAddr:]))
 
 		if !pte.Valid() {
 			var err error
@@ -382,11 +378,7 @@ func (mmu *MMU) Load8(vaddr uint64) (uint8, error) {
 	if err != nil {
 		return 0, err
 	}
-	buf, err := mmu.Mem.Data(paddr)
-	if err != nil {
-		return 0, err
-	}
-	return buf[0], nil
+	return mmu.Mem.Data[paddr], nil
 }
 
 func (mmu *MMU) Load16(vaddr uint64) (uint16, error) {
@@ -395,11 +387,7 @@ func (mmu *MMU) Load16(vaddr uint64) (uint16, error) {
 		if err != nil {
 			return 0, err
 		}
-		buf, err := mmu.Mem.Data(paddr)
-		if err != nil {
-			return 0, err
-		}
-		return bo.Uint16(buf[:]), nil
+		return bo.Uint16(mmu.Mem.Data[paddr:]), nil
 	}
 
 	var page uint64
@@ -412,10 +400,7 @@ func (mmu *MMU) Load16(vaddr uint64) (uint16, error) {
 			if err != nil {
 				return 0, err
 			}
-			buf, err = mmu.Mem.Data(paddr)
-			if err != nil {
-				return 0, err
-			}
+			buf = mmu.Mem.Data[paddr:]
 			page = memory.Page(vaddr)
 		}
 		result |= uint16(buf[0]) << (i * 8)
@@ -432,11 +417,7 @@ func (mmu *MMU) Load32(vaddr uint64) (uint32, error) {
 		if err != nil {
 			return 0, err
 		}
-		buf, err := mmu.Mem.Data(paddr)
-		if err != nil {
-			return 0, err
-		}
-		return bo.Uint32(buf[:]), nil
+		return bo.Uint32(mmu.Mem.Data[paddr:]), nil
 	}
 
 	var page uint64
@@ -449,10 +430,7 @@ func (mmu *MMU) Load32(vaddr uint64) (uint32, error) {
 			if err != nil {
 				return 0, err
 			}
-			buf, err = mmu.Mem.Data(paddr)
-			if err != nil {
-				return 0, err
-			}
+			buf = mmu.Mem.Data[paddr:]
 			page = memory.Page(vaddr)
 		}
 		result |= uint32(buf[0]) << (i * 8)
@@ -469,11 +447,7 @@ func (mmu *MMU) Load64(vaddr uint64) (uint64, error) {
 		if err != nil {
 			return 0, err
 		}
-		buf, err := mmu.Mem.Data(paddr)
-		if err != nil {
-			return 0, err
-		}
-		return bo.Uint64(buf[:]), nil
+		return bo.Uint64(mmu.Mem.Data[paddr:]), nil
 	}
 
 	var page uint64
@@ -486,10 +460,7 @@ func (mmu *MMU) Load64(vaddr uint64) (uint64, error) {
 			if err != nil {
 				return 0, err
 			}
-			buf, err = mmu.Mem.Data(paddr)
-			if err != nil {
-				return 0, err
-			}
+			buf = mmu.Mem.Data[paddr:]
 			page = memory.Page(vaddr)
 		}
 		result |= uint64(buf[0]) << (i * 8)
@@ -505,11 +476,7 @@ func (mmu *MMU) Store8(vaddr, v uint64) error {
 	if err != nil {
 		return err
 	}
-	buf, err := mmu.Mem.Data(paddr)
-	if err != nil {
-		return err
-	}
-	buf[0] = byte(v)
+	mmu.Mem.Data[paddr] = byte(v)
 	return nil
 }
 
@@ -535,11 +502,7 @@ func (mmu *MMU) Store64(vaddr, v uint64) error {
 		if err != nil {
 			return err
 		}
-		buf, err := mmu.Mem.Data(paddr)
-		if err != nil {
-			return err
-		}
-		bo.PutUint64(buf[:], v)
+		bo.PutUint64(mmu.Mem.Data[paddr:], v)
 		return nil
 	}
 	var buf [8]byte
@@ -549,7 +512,7 @@ func (mmu *MMU) Store64(vaddr, v uint64) error {
 	return mmu.CopyToUser(vaddr, buf[:])
 }
 
-func SetMapSv39(mem memory.Memory, satp Satp, vpage, ppage uint64,
+func SetMapSv39(mem *memory.Memory, satp Satp, vpage, ppage uint64,
 	flags PTEFlags) error {
 
 	if satp.Mode() != SatpModeSv39 {
@@ -566,11 +529,7 @@ func SetMapSv39(mem memory.Memory, satp Satp, vpage, ppage uint64,
 		idx := (vpage >> uint64(9*level)) & 0b111111111
 		pteAddr := base + idx*8
 
-		pteEntry, err := mem.Data(pteAddr)
-		if err != nil {
-			return err
-		}
-		pte := PTE(bo.Uint64(pteEntry))
+		pte := PTE(bo.Uint64(mem.Data[pteAddr:]))
 
 		if pte.Valid() {
 			if pte.Leaf() {
@@ -593,7 +552,7 @@ func SetMapSv39(mem memory.Memory, satp Satp, vpage, ppage uint64,
 			}
 			clear(page)
 
-			bo.PutUint64(pteEntry, uint64(MakePTE(newPage, PteV)))
+			bo.PutUint64(mem.Data[pteAddr:], uint64(MakePTE(newPage, PteV)))
 
 			base = newPageAddr
 		}
@@ -604,16 +563,12 @@ func SetMapSv39(mem memory.Memory, satp Satp, vpage, ppage uint64,
 	idx := vpage & 0b111111111
 	pteAddr := base + idx*8
 
-	buf, err := mem.Data(pteAddr)
-	if err != nil {
-		return err
-	}
-	pte := PTE(bo.Uint64(buf))
+	pte := PTE(bo.Uint64(mem.Data[pteAddr:]))
 	if pte.Valid() {
 		return fmt.Errorf("mapping already exists: %v", pte)
 	}
 
-	bo.PutUint64(buf, uint64(MakePTE(ppage, flags)))
+	bo.PutUint64(mem.Data[pteAddr:], uint64(MakePTE(ppage, flags)))
 
 	return nil
 }

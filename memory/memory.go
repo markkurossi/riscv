@@ -9,10 +9,14 @@ package memory
 
 import (
 	"encoding/binary"
+	"errors"
 )
 
 var (
 	bo = binary.LittleEndian
+
+	ErrInvalidAddr = errors.New("invalid address")
+	ErrOutOfMemory = errors.New("out of memory")
 )
 
 const (
@@ -23,7 +27,7 @@ const (
 // starting from the address (i.e. addr and addr+n are on the same
 // page).
 func Avail(addr, n uint64) bool {
-	return addr&0xfff+n <= 0xfff
+	return (addr&0xfff)+n <= 0xfff
 }
 
 func Page(addr uint64) uint64 {
@@ -34,18 +38,88 @@ func PageOffset(addr uint64) int {
 	return int(addr & 0xfff)
 }
 
-// XXX should we remove {Load,Store}{16,64} from here and only provide
-// byte-order neutral access to memory? Yes.
-type Memory interface {
-	AllocPage() (uint64, error)
-	Page(num uint64) ([]byte, error)
-	Data(addr uint64) ([]byte, error)
+type Memory struct {
+	Data     []byte
+	numPages int
+	nextPage int
+}
 
-	Load(addr uint64, buf []byte) error
-	Load8(addr uint64) (uint8, error)
-	Load16(addr uint64) (uint16, error)
-	Load64(addr uint64) (uint64, error)
-	Store(addr uint64, data []byte) error
-	Store8(addr, val uint64) error
-	Store64(addr, val uint64) error
+func NewMemory(numPages int) *Memory {
+	return &Memory{
+		Data:     make([]byte, numPages*PageSize),
+		numPages: numPages,
+	}
+}
+
+func (mem *Memory) AllocPage() (uint64, error) {
+	if mem.nextPage >= mem.numPages {
+		return 0, ErrOutOfMemory
+	}
+	mem.nextPage++
+	return uint64(mem.nextPage - 1), nil
+}
+
+func (mem *Memory) Page(num uint64) ([]byte, error) {
+	if num >= uint64(mem.numPages) {
+		return nil, ErrInvalidAddr
+	}
+	addr := num * PageSize
+	return mem.Data[addr : addr+PageSize], nil
+}
+
+func (mem *Memory) Load(addr uint64, buf []byte) error {
+	if addr+uint64(len(buf)) > uint64(len(mem.Data)) {
+		return ErrInvalidAddr
+	}
+	copy(buf, mem.Data[addr:])
+
+	return nil
+}
+
+func (mem *Memory) Load8(addr uint64) (uint8, error) {
+	if addr+1 > uint64(len(mem.Data)) {
+		return 0, ErrInvalidAddr
+	}
+	return mem.Data[addr], nil
+}
+
+func (mem *Memory) Load16(addr uint64) (uint16, error) {
+	if addr+2 > uint64(len(mem.Data)) {
+		return 0, ErrInvalidAddr
+	}
+	return bo.Uint16(mem.Data[addr:]), nil
+}
+
+func (mem *Memory) Load64(addr uint64) (uint64, error) {
+	if addr+8 > uint64(len(mem.Data)) {
+		return 0, ErrInvalidAddr
+	}
+	return bo.Uint64(mem.Data[addr:]), nil
+}
+
+func (mem *Memory) Store(addr uint64, Data []byte) error {
+	if addr+uint64(len(Data)) > uint64(len(mem.Data)) {
+		return ErrInvalidAddr
+	}
+	copy(mem.Data[addr:], Data)
+
+	return nil
+}
+
+func (mem *Memory) Store8(addr, val uint64) error {
+	if addr+1 > uint64(len(mem.Data)) {
+		return ErrInvalidAddr
+	}
+	mem.Data[addr] = uint8(val)
+
+	return nil
+}
+
+func (mem *Memory) Store64(addr, val uint64) error {
+	if addr+8 > uint64(len(mem.Data)) {
+		return ErrInvalidAddr
+	}
+	bo.PutUint64(mem.Data[addr:], val)
+
+	return nil
 }

@@ -49,7 +49,7 @@ type CPU struct {
 	Instret uint64
 
 	MMU    *mmu.MMU
-	Memory memory.Memory
+	Memory *memory.Memory
 
 	Syscall     Syscall
 	TrapHandler TrapHandler

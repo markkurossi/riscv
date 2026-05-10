@@ -45,32 +45,24 @@ func (mmu *MMU) CopyFromUser(vaddr uint64, buf []byte) error {
 		if err != nil {
 			return err
 		}
-		b, err := mmu.Mem.Data(paddr)
-		if err != nil {
-			return err
-		}
-		copy(buf[:l], b)
+		copy(buf[:l], mmu.Mem.Data[paddr:])
 		buf = buf[l:]
 		vaddr += l
 	}
 	return nil
 }
+
 func (mmu *MMU) CopyToUser(vaddr uint64, data []byte) error {
 	for len(data) > 0 {
 		l := memory.PageSize - vaddr%memory.PageSize
 		if l > uint64(len(data)) {
 			l = uint64(len(data))
 		}
-
 		paddr, err := mmu.Map(vaddr, AccessWrite)
 		if err != nil {
 			return err
 		}
-		buf, err := mmu.Mem.Data(paddr)
-		if err != nil {
-			return err
-		}
-		copy(buf, data[:l])
+		copy(mmu.Mem.Data[paddr:], data[:l])
 		data = data[l:]
 		vaddr += l
 	}

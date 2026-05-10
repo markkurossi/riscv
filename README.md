@@ -103,6 +103,7 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 | MMU Map fastpath  |  1.709 | 18.507 |           | 34.70 |    0.569 |
 | DecodeCFast       |  1.280 | 13.848 | 2m33.240s | 45.78 |    0.426 |
 | Cached code page  |  0.977 | 10.582 | 1m57.654s | 60.68 |    0.325 |
+| Concrete memory   |  0.915 |  9.835 | 1m48.920s | 65.29 |    0.303 |
 
 # Appendix
 

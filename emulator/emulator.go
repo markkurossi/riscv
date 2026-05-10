@@ -29,7 +29,7 @@ var (
 
 type Emulator struct {
 	CPU    *cpu.CPU
-	Memory memory.Memory
+	Memory *memory.Memory
 
 	ProgBase    uint64
 	ProgBaseEnd uint64
@@ -42,7 +42,7 @@ type Emulator struct {
 }
 
 func New(params kernel.Params) (*Emulator, error) {
-	mem := memory.NewArrayMemory(2048) // 8 MB
+	mem := memory.NewMemory(2048) // 8 MB
 
 	// Skip page 0.
 	_, err := mem.AllocPage()
