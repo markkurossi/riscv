@@ -65,7 +65,7 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 | Concrete memory        |  0.915 |  9.835 | 1m48.920s |  65.29 |    0.303 |
 | 32-bit decode cache    |  0.684 |  7.327 | 1m20.509s |  87.64 |    0.225 |
 | Ld/Sd TLB fastpath     |  0.603 |  6.327 | 1m10.533s | 101.49 |    0.195 |
-| Optimized Instr struct |  0.452 |  4.635 | 0m52.004s | 138.54 |    0.143 |
+| Optimized Instr struct |  0.424 |  4.324 | 0m48.490s | 148.50 |    0.133 |
 
 # Appendix
 

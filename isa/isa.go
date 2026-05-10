@@ -85,7 +85,7 @@ func (g Group) String() string {
 }
 
 // Op defines instruction opcodes.
-type Op int
+type Op uint16
 
 // Known RISC-V opcodes.
 const (
