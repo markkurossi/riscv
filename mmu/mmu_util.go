@@ -21,7 +21,7 @@ func (mmu *MMU) UserCString(vaddr uint64) (string, error) {
 
 		l := memory.PageSize - paddr%memory.PageSize
 		for i := uint64(0); i < l; i++ {
-			b := mmu.Mem.RAM[paddr+i]
+			b := mmu.Mem.RAM[mmu.Mem.Offset(paddr+i)]
 			if b == 0 {
 				return string(data), nil
 			}
@@ -42,7 +42,7 @@ func (mmu *MMU) CopyFromUser(vaddr uint64, buf []byte) error {
 		if err != nil {
 			return err
 		}
-		copy(buf[:l], mmu.Mem.RAM[paddr:])
+		copy(buf[:l], mmu.Mem.RAM[mmu.Mem.Offset(paddr):])
 		buf = buf[l:]
 		vaddr += l
 	}
@@ -59,7 +59,7 @@ func (mmu *MMU) CopyToUser(vaddr uint64, data []byte) error {
 		if err != nil {
 			return err
 		}
-		copy(mmu.Mem.RAM[paddr:], data[:l])
+		copy(mmu.Mem.RAM[mmu.Mem.Offset(paddr):], data[:l])
 		data = data[l:]
 		vaddr += l
 	}

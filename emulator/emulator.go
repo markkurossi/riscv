@@ -28,8 +28,8 @@ var (
 )
 
 type Emulator struct {
-	CPU    *cpu.CPU
-	Memory *memory.Memory
+	CPU *cpu.CPU
+	Mem *memory.Memory
 
 	ProgBase    uint64
 	ProgBaseEnd uint64
@@ -101,7 +101,7 @@ func New(params kernel.Params) (*Emulator, error) {
 
 	emu := &Emulator{
 		CPU:         cpu,
-		Memory:      mem,
+		Mem:         mem,
 		ProgBase:    0x400000,
 		ProgBaseEnd: 0x400000,
 
@@ -266,16 +266,16 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 			// Load data into memory.
 			satp := emu.CPU.MMU.Satp
 			for addr := vaddr; addr < end; addr += memory.PageSize {
-				page, err := emu.Memory.AllocPage()
+				page, err := emu.Mem.AllocPage()
 				if err != nil {
 					return nil, err
 				}
-				err = mmu.SetMapSv39(emu.Memory, satp, addr>>12, page, flags)
+				err = mmu.SetMapSv39(emu.Mem, satp, addr>>12, page, flags)
 				if err != nil {
 					return nil, err
 				}
 				idx := addr - vaddr
-				copy(emu.Memory.RAM[page*memory.PageSize:],
+				copy(emu.Mem.RAM[emu.Mem.Offset(page*memory.PageSize):],
 					data[idx:idx+memory.PageSize])
 
 				if false {
@@ -531,7 +531,7 @@ func (emu *Emulator) TrapHandler(acpu *cpu.CPU, trap *isa.Trap) (bool, error) {
 					return false, nil
 				}
 				// Allocate page.
-				page, err := emu.Memory.AllocPage()
+				page, err := emu.Mem.AllocPage()
 				if err != nil {
 					return false, err
 				}
@@ -552,10 +552,10 @@ func (emu *Emulator) TrapHandler(acpu *cpu.CPU, trap *isa.Trap) (bool, error) {
 					if n == 0 && err != nil {
 						return false, err
 					}
-					copy(emu.Memory.RAM[page<<12:], buf)
+					copy(emu.Mem.RAM[emu.Mem.Offset(page<<12):], buf)
 				}
 
-				err = mmu.SetMapSv39(emu.Memory, emu.CPU.MMU.Satp, vpage, page,
+				err = mmu.SetMapSv39(emu.Mem, emu.CPU.MMU.Satp, vpage, page,
 					vma.PageTableFlags())
 				if err != nil {
 					return false, err

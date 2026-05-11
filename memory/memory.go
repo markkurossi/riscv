@@ -58,18 +58,24 @@ func NewMemory(ramSize int) *Memory {
 	}
 }
 
+func (mem *Memory) Offset(paddr uint64) uint64 {
+	return paddr - mem.RAMBase
+}
+
 func (mem *Memory) AllocPage() (uint64, error) {
 	if mem.nextPage >= mem.numPages {
 		return 0, ErrOutOfMemory
 	}
 	mem.nextPage++
-	return uint64(mem.nextPage - 1), nil
+	return mem.RAMBase/PageSize + uint64(mem.nextPage-1), nil
 }
 
 func (mem *Memory) Page(num uint64) ([]byte, error) {
-	if num >= uint64(mem.numPages) {
+	RAMBasePage := mem.RAMBase / PageSize
+
+	if num < RAMBasePage || num >= RAMBasePage+uint64(mem.numPages) {
 		return nil, ErrInvalidAddr
 	}
-	addr := num * PageSize
+	addr := (num - RAMBasePage) * PageSize
 	return mem.RAM[addr : addr+PageSize], nil
 }
