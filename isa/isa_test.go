@@ -28,3 +28,9 @@ func TestOpNameLen(t *testing.T) {
 		t.Errorf("maxOpNameLen=%v but len(%v)=%v", maxOpNameLen, max, maxLen)
 	}
 }
+
+func TestOpCount(t *testing.T) {
+	if Rorw != 157 {
+		t.Errorf("max op Rorw = %d", int(Rorw))
+	}
+}

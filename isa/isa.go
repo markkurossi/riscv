@@ -84,8 +84,12 @@ func (g Group) String() string {
 	return fmt.Sprintf("{Group %x}", int(g))
 }
 
-// Op defines instruction opcodes.
-type Op uint16
+// Op defines instruction opcodes. The standard RISC-V Base Integer
+// ISA (RV32I/RV64I) has about 40–50 instructions. The M (Multiply), A
+// (Atomic), F/D (Floating Point), and C (Compressed) extensions,
+// bring us around 120–150 unique opcodes. The current maximum value
+// Rorw is 157 so we have 98 opcodes left.
+type Op uint8
 
 // Known RISC-V opcodes.
 const (
