@@ -507,12 +507,21 @@ func Decode(raw uint32) (Instr, error) {
 			// CSR mappings.
 		case 1:
 			instr.Op = Csrrw
+			// Imm is csr.
+			instr.Imm = int32(raw >> 20 & 0b1111_11111111)
 		case 2:
 			instr.Op = Csrrs
+			// Imm is csr.
+			instr.Imm = int32(raw >> 20 & 0b1111_11111111)
 		case 3:
 			instr.Op = Csrrc
+			// Imm is csr.
+			instr.Imm = int32(raw >> 20 & 0b1111_11111111)
 		case 5:
 			instr.Op = Csrrwi
+			// Rs1 is zimm
+			// Imm is csr
+			instr.Imm = int32(raw >> 20 & 0b1111_11111111)
 		case 6:
 			instr.Op = Csrrsi
 		case 7:

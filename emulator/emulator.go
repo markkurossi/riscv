@@ -42,9 +42,9 @@ type Emulator struct {
 }
 
 func New(params kernel.Params) (*Emulator, error) {
-	mem := memory.NewMemory(2048 * memory.PageSize) // 8 MB
+	mem := memory.New(2048 * memory.PageSize) // 8 MB
 
-	// Skip page 0.
+	// Skip page 0. XXX remove this
 	_, err := mem.AllocPage()
 	if err != nil {
 		return nil, err
@@ -95,7 +95,6 @@ func New(params kernel.Params) (*Emulator, error) {
 			Satp: satp,
 			Mem:  mem,
 		},
-		Memory: mem,
 	}
 	cpu.X[isa.Sp] = stackTop
 

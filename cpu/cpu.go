@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
-	"time"
 
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/memory"
@@ -29,19 +28,25 @@ type Syscall func(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (
 
 type TrapHandler func(cpu *CPU, trap *isa.Trap) (bool, error)
 
+type CSR struct {
+	status  uint64
+	tvec    uint64
+	scratch uint64
+	epc     uint64 // Exception PC.
+	cause   uint64 // Exception cause.
+	tval    uint64 // Trap value e.g. virtual address causing page fault.
+	ip      uint64
+	ie      uint64
+}
+
 type CPU struct {
 	PID uint64 // XXX how is this set?
 	X   [32]uint64
 	F   [32]float64
 
-	// Exception PC.
-	Sepc uint64
-
-	// Exception cause.
-	Scause uint64
-
-	// Trap Value - e.g. which virtual address caused page fault.
-	Stval uint64
+	// S-Mode CSRs (Direct Access)
+	S CSR
+	M CSR
 
 	PC uint64
 
@@ -53,8 +58,7 @@ type CPU struct {
 	// Instruction count
 	Instret uint64
 
-	MMU    *mmu.MMU
-	Memory *memory.Memory
+	MMU *mmu.MMU
 
 	Syscall     Syscall
 	TrapHandler TrapHandler
@@ -98,7 +102,7 @@ func (cpu *CPU) loop() error {
 			if err != nil {
 				return err
 			}
-			codePage, err = cpu.Memory.Page(memory.Page(paddr))
+			codePage, err = cpu.MMU.Mem.Page(memory.Page(paddr))
 			if err != nil {
 				return err
 			}
@@ -119,7 +123,7 @@ func (cpu *CPU) loop() error {
 				if err != nil {
 					return err
 				}
-				nextPage, err := cpu.Memory.Page(memory.Page(paddr))
+				nextPage, err := cpu.MMU.Mem.Page(memory.Page(paddr))
 				if err != nil {
 					return err
 				}
@@ -574,13 +578,73 @@ func (cpu *CPU) loop() error {
 
 			// Control and Status Registers (CSRs).
 		case isa.Csrrs:
-			csr := raw >> 20
-			switch csr {
-			case 0xc01: // time - RDCYCLE instruction
-				v := time.Now().UnixNano()
-				cpu.X[instr.Rd] = uint64(v)
-				// XX check what to do with R[Rs1]
+			switch instr.Imm {
+			case 0x301: // misa - Machine Instruction Set Architecture
+				// RV64IMAFDC
+				var misaValue uint64 = (2 << 62) | // MXLEN = 64
+					(1 << 0) | // A (Atomic)
+					(1 << 2) | // C (Compressed)
+					(1 << 3) | // D (Double)
+					(1 << 5) | // F (Float)
+					(1 << 8) | // I (Integer)
+					(1 << 12) // M (Multiply)
+				cpu.X[instr.Rd] = misaValue
 
+			case 0x340: // Mscratch
+				t := cpu.M.scratch
+				if instr.Rs1 != isa.Zero {
+					cpu.M.scratch = t | cpu.X[instr.Rs1]
+				}
+				cpu.X[instr.Rd] = t
+
+			case 0xc01: // time - RDCYCLE instruction
+				cpu.X[instr.Rd] = cpu.Instret
+
+			case 0xf14: // hartid
+				cpu.X[instr.Rd] = 0
+
+			default:
+				return isa.NewTrap(isa.CauseIllegalInstr, cpu.PC, nil)
+			}
+
+		case isa.Csrrc:
+			switch instr.Imm {
+			case 0x300:
+				t := cpu.M.status
+				if instr.Rs1 != isa.Zero {
+					cpu.M.status = t & ^cpu.X[instr.Rs1]
+				}
+				cpu.X[instr.Rd] = t
+			default:
+				return isa.NewTrap(isa.CauseIllegalInstr, cpu.PC, nil)
+			}
+
+		case isa.Csrrw:
+			switch instr.Imm {
+			case 0x304:
+				t := cpu.M.ie
+				cpu.M.ie = cpu.X[instr.Rs1]
+				cpu.X[instr.Rd] = t
+
+			case 0x305:
+				t := cpu.M.tvec
+				cpu.M.tvec = cpu.X[instr.Rs1]
+				cpu.X[instr.Rd] = t
+
+			case 0x340:
+				t := cpu.M.scratch
+				cpu.M.scratch = cpu.X[instr.Rs1]
+				cpu.X[instr.Rd] = t
+
+			default:
+				return isa.NewTrap(isa.CauseIllegalInstr, cpu.PC, nil)
+			}
+
+		case isa.Csrrwi:
+			switch instr.Imm {
+			case 0x340:
+				cpu.X[instr.Rd] = cpu.M.scratch
+				cpu.M.scratch = uint64(instr.Rs1)
 			default:
 				return isa.NewTrap(isa.CauseIllegalInstr, cpu.PC, nil)
 			}
@@ -601,6 +665,11 @@ func (cpu *CPU) loop() error {
 
 		case isa.AmoswapW:
 			addr := cpu.X[instr.Rs1]
+
+			if addr%4 != 0 {
+				return isa.NewTrap(isa.CauseStoreAddrMisaligned, addr, nil)
+			}
+
 			v, err := cpu.MMU.Load32(addr)
 			if err != nil {
 				return err
@@ -751,8 +820,9 @@ func (cpu *CPU) loop() error {
 			cpu.X[instr.Rd] = uint64(uint32(cpu.F[instr.Rs1]))
 
 		default:
-			return fmt.Errorf("instruction %v[0x%x] not implemented yet",
-				instr, raw)
+			return isa.NewTrap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("instruction %v[0x%x] not implemented yet",
+					instr, raw))
 		}
 		cpu.PC += uint64(size)
 	}

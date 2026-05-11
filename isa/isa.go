@@ -989,6 +989,14 @@ func (instr Instr) String() string {
 			// GroupMISCMEM
 		case Fence:
 			return pad(instr.Op)
+
+			// CSR mappings.
+		case Csrrs, Csrrc, Csrrw:
+			return fmt.Sprintf("%v %v,%x,%v",
+				pad(instr.Op), instr.Rd, instr.Imm, instr.Rs1)
+		case Csrrwi:
+			return fmt.Sprintf("%v %v,%x,%d",
+				pad(instr.Op), instr.Rd, instr.Imm, uint32(instr.Rs1))
 		}
 	}
 

@@ -24,9 +24,26 @@ func main() {
 	ktrace := flag.Bool("ktrace", false, "kernel trace")
 	fsroot := flag.String("fsroot", "", "filesystem root")
 	objdump := flag.Bool("D", false, "disassemble")
+	bios := flag.String("bios", "", "the firmwire; enables system emulation")
+	kern := flag.String("kernel", "", "the kernel; enables system emulation")
 	flag.Parse()
 
 	log.SetFlags(0)
+
+	params := kernel.Params{
+		Verbose: *verbose,
+		Ktrace:  *ktrace,
+		Profile: len(*cpuprofile) > 0,
+		FSRoot:  *fsroot,
+	}
+
+	if len(*bios) > 0 || len(*kern) > 0 {
+		err := systemEmulation(params, *bios, *kern)
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 
 	if *objdump {
 		disassemble(flag.Args())
@@ -43,13 +60,6 @@ func main() {
 			log.Fatal("could not start CPU profile: ", err)
 		}
 		defer pprof.StopCPUProfile()
-	}
-
-	params := kernel.Params{
-		Verbose: *verbose,
-		Ktrace:  *ktrace,
-		Profile: len(*cpuprofile) > 0,
-		FSRoot:  *fsroot,
 	}
 
 	for _, arg := range flag.Args() {

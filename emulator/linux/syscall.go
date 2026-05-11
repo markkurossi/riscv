@@ -740,7 +740,6 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 			PID:         child.PID,
 			PC:          proc.CPU.PC + 4,
 			MMU:         proc.CPU.MMU,
-			Memory:      proc.CPU.Memory,
 			Syscall:     proc.CPU.Syscall,
 			TrapHandler: proc.CPU.TrapHandler,
 		}

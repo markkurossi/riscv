@@ -46,7 +46,7 @@ type Memory struct {
 	nextPage int
 }
 
-func NewMemory(ramSize int) *Memory {
+func New(ramSize int) *Memory {
 	if ramSize&0xfff != 0 {
 		panic("memory size is not multiple of page size")
 	}
