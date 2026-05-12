@@ -951,8 +951,9 @@ func (instr Instr) String() string {
 			return fmt.Sprintf("%v %v,%v,%d",
 				pad(instr.Op), instr.Rs1, instr.Rs2, instr.Imm)
 
-		case Ecall: // GroupSYSTEM
-			return pad(Ecall)
+			// GroupSYSTEM
+		case Ebreak, Ecall, Sret, Mret, Wfi:
+			return pad(instr.Op)
 
 		case Jal: // GroupJAL
 			return fmt.Sprintf("%v %d", pad(instr.Op), instr.Imm)

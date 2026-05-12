@@ -267,6 +267,10 @@ func (cpu *CPU) loop() error {
 					int32(cpu.X[instr.Rs2])))
 			}
 
+		case isa.Ebreak:
+			return isa.NewTrap(isa.CauseBreakpoint, cpu.PC,
+				fmt.Errorf("Mtvec=%x, Stvec=%x", cpu.M.tvec, cpu.S.tvec))
+
 		case isa.Ecall:
 			v, err := cpu.Syscall(cpu, cpu.X[isa.A7],
 				cpu.X[isa.A0], cpu.X[isa.A1], cpu.X[isa.A2],
