@@ -34,9 +34,21 @@ const (
 	SatpModeSv64 = 11
 )
 
+type ROM interface {
+	Load8(padr uint64) (uint8, error)
+	Load16(padr uint64) (uint16, error)
+	Load32(padr uint64) (uint32, error)
+	Load64(padr uint64) (uint64, error)
+	Store8(padr, v uint64) error
+	Store16(padr, v uint64) error
+	Store32(padr, v uint64) error
+	Store64(padr, v uint64) error
+}
+
 type MMU struct {
 	Satp Satp
 	Mem  *memory.Memory
+	ROM  ROM
 
 	TLB [4096]TLBEntry
 }
@@ -302,14 +314,16 @@ func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 			}
 
 			if access&AccessWrite != 0 {
-				return 0, 0, 0, isa.NewTrap(isa.CauseStorePageFault, vaddr, err)
+				return 0, 0, 0,
+					isa.NewTrap(0, isa.CauseStorePageFault, vaddr, err)
 			}
 			if access&AccessExec != 0 {
-				return 0, 0, 0, isa.NewTrap(isa.CauseInstPageFault, vaddr, err)
+				return 0, 0, 0,
+					isa.NewTrap(0, isa.CauseInstPageFault, vaddr, err)
 			}
 
 			// Default to load page fault.
-			return 0, 0, 0, isa.NewTrap(isa.CauseLoadPageFault, vaddr, err)
+			return 0, 0, 0, isa.NewTrap(0, isa.CauseLoadPageFault, vaddr, err)
 		}
 		if pte.Leaf() {
 			return mmu.mapLeaf(pte, vaddr, level, access)
@@ -319,7 +333,7 @@ func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 		base = pte.PPN() << 12
 	}
 
-	return 0, 0, 0, isa.NewTrap(isa.CauseLoadPageFault, vaddr,
+	return 0, 0, 0, isa.NewTrap(0, isa.CauseLoadPageFault, vaddr,
 		fmt.Errorf("no leaf page found"))
 }
 
@@ -328,13 +342,13 @@ func (mmu *MMU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 
 	// Check permissions.
 	if access&AccessRead != 0 && !pte.Readable() {
-		return 0, 0, 0, isa.NewTrap(isa.CauseLoadPageFault, vaddr, nil)
+		return 0, 0, 0, isa.NewTrap(0, isa.CauseLoadPageFault, vaddr, nil)
 	}
 	if access&AccessWrite != 0 && !pte.Writable() {
-		return 0, 0, 0, isa.NewTrap(isa.CauseStorePageFault, vaddr, nil)
+		return 0, 0, 0, isa.NewTrap(0, isa.CauseStorePageFault, vaddr, nil)
 	}
 	if access&AccessExec != 0 && !pte.Executable() {
-		return 0, 0, 0, isa.NewTrap(isa.CauseInstPageFault, vaddr, nil)
+		return 0, 0, 0, isa.NewTrap(0, isa.CauseInstPageFault, vaddr, nil)
 	}
 
 	// Enforce superpage alignment rules.
@@ -348,14 +362,15 @@ func (mmu *MMU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 	}
 	if misaligned {
 		if access&AccessWrite != 0 {
-			return 0, 0, 0, isa.NewTrap(isa.CauseStoreAddrMisaligned, vaddr,
-				nil)
+			return 0, 0, 0,
+				isa.NewTrap(0, isa.CauseStoreAddrMisaligned, vaddr, nil)
 		}
 		if access&AccessExec != 0 {
-			return 0, 0, 0, isa.NewTrap(isa.CauseInstAddrMisaligned, vaddr, nil)
+			return 0, 0, 0,
+				isa.NewTrap(0, isa.CauseInstAddrMisaligned, vaddr, nil)
 		}
 		// Default to load fault.
-		return 0, 0, 0, isa.NewTrap(isa.CauseLoadAddrMisaligned, vaddr, nil)
+		return 0, 0, 0, isa.NewTrap(0, isa.CauseLoadAddrMisaligned, vaddr, nil)
 	}
 
 	var page uint64
@@ -377,6 +392,19 @@ func (mmu *MMU) Load8(vaddr uint64) (uint8, error) {
 	paddr, err := mmu.Map(vaddr, AccessRead)
 	if err != nil {
 		return 0, err
+	}
+	if paddr < memory.RAMBase {
+		var val uint8
+		switch paddr {
+		case 0x10000005:
+			// Return 0x20 (Transmitter Empty) + 0x40 (Transmitter Idle)
+			// This tells OpenSBI: "I'm ready for the next character!"
+			val = 0x60
+
+		default:
+			fmt.Printf("load8:  %x\n", vaddr)
+		}
+		return val, nil
 	}
 	return mmu.Mem.RAM[mmu.Mem.Offset(paddr)], nil
 }
@@ -476,6 +504,16 @@ func (mmu *MMU) Store8(vaddr, v uint64) error {
 	if err != nil {
 		return err
 	}
+	if paddr < memory.RAMBase {
+		switch paddr {
+		case 0x10000000:
+			fmt.Printf("%c", byte(v))
+
+		default:
+			fmt.Printf("store8: %x <= %v\n", paddr, v)
+		}
+		return nil
+	}
 	mmu.Mem.RAM[mmu.Mem.Offset(paddr)] = byte(v)
 	return nil
 }
@@ -501,6 +539,9 @@ func (mmu *MMU) Store64(vaddr, v uint64) error {
 		paddr, err := mmu.Map(vaddr, AccessRead)
 		if err != nil {
 			return err
+		}
+		if paddr < mmu.Mem.RAMBase {
+			return mmu.ROM.Store64(paddr, v)
 		}
 		bo.PutUint64(mmu.Mem.RAM[mmu.Mem.Offset(paddr):], v)
 		return nil

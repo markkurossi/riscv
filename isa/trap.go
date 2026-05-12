@@ -56,13 +56,17 @@ type Trap struct {
 	Err   error
 }
 
-func NewTrap(cause, tval uint64, err error) error {
+func NewTrap(pc, cause, tval uint64, err error) error {
 	if false {
-		fmt.Printf("Trap: tval=%x, err=%v\n", tval, err)
-		debug.PrintStack()
-		os.Exit(1)
+		fmt.Printf("Trap: pc=%x, cause=%v, tval=%x, err=%v\n",
+			pc, cause, tval, err)
+		if false {
+			debug.PrintStack()
+			os.Exit(1)
+		}
 	}
 	return &Trap{
+		PC:    pc,
 		Tval:  tval,
 		Cause: cause,
 		Err:   err,

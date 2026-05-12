@@ -484,24 +484,27 @@ func Decode(raw uint32) (Instr, error) {
 		}
 
 	case GroupSYSTEM:
-		instr.typeI(raw)
 		switch funct3 {
 		case 0:
-			// Trap/return.
-			switch instr.Imm {
-			case 0x0:
-				instr.Op = Ecall
-			case 0x1:
-				instr.Op = Ebreak
-			case 0x102:
-				instr.Op = Sret
-			case 0x105:
-				instr.Op = Wfi
-			case 0x302:
-				instr.Op = Mret
-			default:
-				return instr,
-					fmt.Errorf("invalid SYSTEM trap/return: raw=%08x", raw)
+			if raw>>25 == 0b1001 {
+				instr.Op = SfenceVMA
+			} else {
+				// Trap/return.
+				switch raw >> 20 {
+				case 0x0:
+					instr.Op = Ecall
+				case 0x1:
+					instr.Op = Ebreak
+				case 0x102:
+					instr.Op = Sret
+				case 0x105:
+					instr.Op = Wfi
+				case 0x302:
+					instr.Op = Mret
+				default:
+					return instr,
+						fmt.Errorf("invalid SYSTEM trap/return: raw=%08x", raw)
+				}
 			}
 
 			// CSR mappings.
@@ -524,6 +527,9 @@ func Decode(raw uint32) (Instr, error) {
 			instr.Imm = int32(raw >> 20 & 0b1111_11111111)
 		case 6:
 			instr.Op = Csrrsi
+			// Rs1 is zimm
+			// Imm is csr
+			instr.Imm = int32(raw >> 20 & 0b1111_11111111)
 		case 7:
 			instr.Op = Csrrci
 

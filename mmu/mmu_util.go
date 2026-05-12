@@ -59,7 +59,16 @@ func (mmu *MMU) CopyToUser(vaddr uint64, data []byte) error {
 		if err != nil {
 			return err
 		}
-		copy(mmu.Mem.RAM[mmu.Mem.Offset(paddr):], data[:l])
+		if paddr < mmu.Mem.RAMBase {
+			for i := uint64(0); i < l; i++ {
+				err := mmu.ROM.Store8(paddr+i, uint64(data[i]))
+				if err != nil {
+					return err
+				}
+			}
+		} else {
+			copy(mmu.Mem.RAM[mmu.Mem.Offset(paddr):], data[:l])
+		}
 		data = data[l:]
 		vaddr += l
 	}

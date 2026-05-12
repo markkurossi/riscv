@@ -27,11 +27,13 @@ const (
 
 func systemEmulation(params kernel.Params, bios, kernel string) error {
 	mem := memory.New(0x20000000)
+	rom := new(ROM)
 
-	cpu := &cpu.CPU{
+	core := &cpu.CPU{
 		MMU: &mmu.MMU{
 			Satp: mmu.SatpModeBare,
 			Mem:  mem,
+			ROM:  rom,
 		},
 	}
 	data, err := os.ReadFile(bios)
@@ -49,11 +51,71 @@ func systemEmulation(params kernel.Params, bios, kernel string) error {
 	dtb := makeDTB()
 	copy(mem.RAM[mem.Offset(OfsDTB):], dtb)
 
-	cpu.X[isa.A0] = 0
-	cpu.X[isa.A1] = OfsDTB
-	cpu.PC = OfsBIOS
+	core.X[isa.A0] = 0
+	core.X[isa.A1] = OfsDTB
+	core.PC = OfsBIOS
 
-	return cpu.Run()
+	core.TrapHandler = func(core *cpu.CPU, trap *isa.Trap) (bool, error) {
+		return handleTrap(core, trap, mem)
+	}
+
+	return core.Run()
+}
+
+var (
+	_ mmu.ROM = &ROM{}
+)
+
+type ROM struct {
+}
+
+func (rom *ROM) Load8(paddr uint64) (uint8, error) {
+	return 0, nil
+}
+
+func (rom *ROM) Load16(paddr uint64) (uint16, error) {
+	return 0, nil
+}
+
+func (rom *ROM) Load32(paddr uint64) (uint32, error) {
+	return 0, nil
+}
+
+func (rom *ROM) Load64(paddr uint64) (uint64, error) {
+	return 0, nil
+}
+
+func (rom *ROM) Store8(paddr, v uint64) error {
+	fmt.Printf("ROM.store8: %x = %v\n", paddr, v)
+	return nil
+}
+
+func (rom *ROM) Store16(paddr, v uint64) error {
+	fmt.Printf("ROM.store16: %x = %v\n", paddr, v)
+	return nil
+}
+
+func (rom *ROM) Store32(paddr, v uint64) error {
+	fmt.Printf("ROM.store32: %x = %v\n", paddr, v)
+	return nil
+}
+
+func (rom *ROM) Store64(paddr, v uint64) error {
+	fmt.Printf("ROM.store64: %x = %v\n", paddr, v)
+	return nil
+}
+
+func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
+	bool, error) {
+
+	fmt.Printf("goemu: %v\n", trap)
+	switch trap.Cause {
+	case isa.CauseBreakpoint:
+		core.PC = core.M.Tvec
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func makeDTB() []byte {
@@ -107,7 +169,24 @@ func makeDTB() []byte {
 	fdt.PropTabU32("reg", &tab[0], 4)
 	fdt.EndNode()
 
-	// 5. Peripherals (UART 16550A)
+	// 5. CLINT (Timer and IPI)
+	// Standard address for QEMU virt is 0x2000000
+	fdt.BeginNode("clint@2000000")
+	fdt.PropStr("compatible", "riscv,clint0")
+	tab = [4]uint32{
+		0x0, 0x02000000,
+		0x0, 0x00010000,
+	}
+	fdt.PropTabU32("reg", &tab[0], 4)
+	// Link it to the CPUs
+	tab = [4]uint32{
+		1, 3, // Hart 0 M-Software
+		1, 7, // Hart 0 M-Timer
+	}
+	fdt.PropTabU32("interrupts-extended", &tab[0], 4)
+	fdt.EndNode()
+
+	// 6. Peripherals (UART 16550A)
 	fdt.BeginNode("uart@10000000")
 	fdt.PropStr("compatible", "ns16550a")
 	tab = [4]uint32{
@@ -119,7 +198,7 @@ func makeDTB() []byte {
 	fdt.PropU32("interrupts", 10)
 	fdt.EndNode()
 
-	// 6. Chosen node (Boot arguments)
+	// 7. Chosen node (Boot arguments)
 	fdt.BeginNode("chosen")
 	// Tells Linux to use the UART for its console
 	fdt.PropStr("bootargs", "console=ttyS0 earlycon=uart8250,mmio,0x10000000")

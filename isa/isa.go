@@ -203,6 +203,7 @@ const (
 
 	Fence
 	FenceI
+	SfenceVMA
 
 	// Atomic (A extension).
 
@@ -570,6 +571,9 @@ var Operands = map[Op]OpInfo{
 	},
 	FenceI: OpInfo{
 		Name: "fence.i",
+	},
+	SfenceVMA: OpInfo{
+		Name: "sfence.vma",
 	},
 	LrW: OpInfo{
 		Name: "lr.w",
@@ -995,7 +999,7 @@ func (instr Instr) String() string {
 		case Csrrs, Csrrc, Csrrw:
 			return fmt.Sprintf("%v %v,%x,%v",
 				pad(instr.Op), instr.Rd, instr.Imm, instr.Rs1)
-		case Csrrwi:
+		case Csrrwi, Csrrsi:
 			return fmt.Sprintf("%v %v,%x,%d",
 				pad(instr.Op), instr.Rd, instr.Imm, uint32(instr.Rs1))
 		}
