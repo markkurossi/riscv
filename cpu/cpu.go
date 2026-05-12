@@ -587,7 +587,9 @@ func (cpu *CPU) loop() error {
 					(1 << 3) | // D (Double)
 					(1 << 5) | // F (Float)
 					(1 << 8) | // I (Integer)
-					(1 << 12) // M (Multiply)
+					(1 << 12) | // M (Multiply)
+					(1 << 18) | // S (Supervisor)
+					(1 << 20) // U (User mode)
 				cpu.X[instr.Rd] = misaValue
 
 			case 0x340: // Mscratch
