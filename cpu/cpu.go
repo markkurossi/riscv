@@ -23,9 +23,6 @@ var (
 	bo = binary.LittleEndian
 )
 
-type Syscall func(cpu *CPU, id, a0, a1, a2, a3, a4, a5 uint64) (
-	uint64, error)
-
 type TrapHandler func(cpu *CPU, trap *isa.Trap) (bool, error)
 
 type CSR struct {
@@ -70,7 +67,6 @@ type CPU struct {
 
 	MMU *mmu.MMU
 
-	Syscall     Syscall
 	TrapHandler TrapHandler
 }
 
@@ -309,17 +305,8 @@ func (cpu *CPU) loop() error {
 			continue
 
 		case isa.Ecall:
-			if true {
-				// XXX Track CPU mode
-				return isa.NewTrap(cpu.PC, isa.CauseEcallS, 0, nil)
-			}
-			v, err := cpu.Syscall(cpu, cpu.X[isa.A7],
-				cpu.X[isa.A0], cpu.X[isa.A1], cpu.X[isa.A2],
-				cpu.X[isa.A3], cpu.X[isa.A4], cpu.X[isa.A5])
-			if err != nil {
-				return err
-			}
-			cpu.X[isa.A0] = v
+			// XXX Track CPU mode
+			return isa.NewTrap(cpu.PC, isa.CauseEcallS, 0, nil)
 
 		case isa.Fld:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))

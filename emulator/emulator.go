@@ -107,7 +107,6 @@ func New(params kernel.Params) (*Emulator, error) {
 		Kernel: kernel,
 	}
 
-	cpu.Syscall = emu.Syscall
 	cpu.TrapHandler = emu.TrapHandler
 
 	return emu, nil
@@ -578,10 +577,20 @@ func (emu *Emulator) TrapHandler(acpu *cpu.CPU, trap *isa.Trap) (bool, error) {
 		fmt.Printf("trap: %v\n", trap)
 		return false, nil
 
-	case isa.CauseBreakpoint, isa.CauseEcallU, isa.CauseEcallS,
-		isa.CauseEcallVS, isa.CauseEcallM:
+	case isa.CauseBreakpoint:
 		fmt.Printf("trap: %v\n", trap)
 		return false, nil
+
+	case isa.CauseEcallU, isa.CauseEcallS, isa.CauseEcallVS, isa.CauseEcallM:
+		v, err := emu.Syscall(acpu, acpu.X[isa.A7],
+			acpu.X[isa.A0], acpu.X[isa.A1], acpu.X[isa.A2],
+			acpu.X[isa.A3], acpu.X[isa.A4], acpu.X[isa.A5])
+		if err != nil {
+			return false, err
+		}
+		acpu.X[isa.A0] = v
+		acpu.PC += 4
+		return true, nil
 	}
 
 	fmt.Printf("unknown trap: %v\n", trap)
