@@ -35,6 +35,7 @@ const (
 )
 
 type ROM interface {
+	Contains(paddr uint64) bool
 	Load8(padr uint64) (uint8, error)
 	Load16(padr uint64) (uint16, error)
 	Load32(padr uint64) (uint32, error)
@@ -394,17 +395,7 @@ func (mmu *MMU) Load8(vaddr uint64) (uint8, error) {
 		return 0, err
 	}
 	if paddr < memory.RAMBase {
-		var val uint8
-		switch paddr {
-		case 0x10000005:
-			// Return 0x20 (Transmitter Empty) + 0x40 (Transmitter Idle)
-			// This tells OpenSBI: "I'm ready for the next character!"
-			val = 0x60
-
-		default:
-			fmt.Printf("load8:  %x\n", vaddr)
-		}
-		return val, nil
+		return mmu.ROM.Load8(paddr)
 	}
 	return mmu.Mem.RAM[mmu.Mem.Offset(paddr)], nil
 }
@@ -505,14 +496,7 @@ func (mmu *MMU) Store8(vaddr, v uint64) error {
 		return err
 	}
 	if paddr < memory.RAMBase {
-		switch paddr {
-		case 0x10000000:
-			fmt.Printf("%c", byte(v))
-
-		default:
-			fmt.Printf("store8: %x <= %v\n", paddr, v)
-		}
-		return nil
+		return mmu.ROM.Store8(vaddr, v)
 	}
 	mmu.Mem.RAM[mmu.Mem.Offset(paddr)] = byte(v)
 	return nil

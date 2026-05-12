@@ -23,11 +23,28 @@ const (
 	OfsKernel = 0x8020_0000
 	OfsDTB    = 0x8400_0000
 	OfsInitrd = 0x8800_0000
+
+	UARTBase = 0x10000000
+	UARTSize = 256
+
+	CLINTBase = 0x2000000
+	CLINTSize = 0x10000
 )
 
 func systemEmulation(params kernel.Params, bios, kernel string) error {
 	mem := memory.New(0x20000000)
-	rom := new(ROM)
+	rom := &ROM{
+		Segments: []mmu.ROM{
+			&UART{
+				Start: UARTBase,
+				End:   UARTBase + UARTSize,
+			},
+			&CLINT{
+				Start: CLINTBase,
+				End:   CLINTBase + CLINTSize,
+			},
+		},
+	}
 
 	core := &cpu.CPU{
 		MMU: &mmu.MMU{
@@ -64,13 +81,30 @@ func systemEmulation(params kernel.Params, bios, kernel string) error {
 
 var (
 	_ mmu.ROM = &ROM{}
+	_ mmu.ROM = &UART{}
+	_ mmu.ROM = &CLINT{}
 )
 
 type ROM struct {
+	Segments []mmu.ROM
+}
+
+func (rom *ROM) Contains(paddr uint64) bool {
+	for _, seg := range rom.Segments {
+		if seg.Contains(paddr) {
+			return true
+		}
+	}
+	return false
 }
 
 func (rom *ROM) Load8(paddr uint64) (uint8, error) {
-	return 0, nil
+	for _, seg := range rom.Segments {
+		if seg.Contains(paddr) {
+			return seg.Load8(paddr)
+		}
+	}
+	return 0, isa.NewTrap(0, isa.CauseLoadPageFault, paddr, nil)
 }
 
 func (rom *ROM) Load16(paddr uint64) (uint16, error) {
@@ -86,23 +120,39 @@ func (rom *ROM) Load64(paddr uint64) (uint64, error) {
 }
 
 func (rom *ROM) Store8(paddr, v uint64) error {
-	fmt.Printf("ROM.store8: %x = %v\n", paddr, v)
-	return nil
+	for _, seg := range rom.Segments {
+		if seg.Contains(paddr) {
+			return seg.Store8(paddr, v)
+		}
+	}
+	return isa.NewTrap(0, isa.CauseStorePageFault, paddr, nil)
 }
 
 func (rom *ROM) Store16(paddr, v uint64) error {
-	fmt.Printf("ROM.store16: %x = %v\n", paddr, v)
-	return nil
+	for _, seg := range rom.Segments {
+		if seg.Contains(paddr) {
+			return seg.Store16(paddr, v)
+		}
+	}
+	return isa.NewTrap(0, isa.CauseStorePageFault, paddr, nil)
 }
 
 func (rom *ROM) Store32(paddr, v uint64) error {
-	fmt.Printf("ROM.store32: %x = %v\n", paddr, v)
-	return nil
+	for _, seg := range rom.Segments {
+		if seg.Contains(paddr) {
+			return seg.Store32(paddr, v)
+		}
+	}
+	return isa.NewTrap(0, isa.CauseStorePageFault, paddr, nil)
 }
 
 func (rom *ROM) Store64(paddr, v uint64) error {
-	fmt.Printf("ROM.store64: %x = %v\n", paddr, v)
-	return nil
+	for _, seg := range rom.Segments {
+		if seg.Contains(paddr) {
+			return seg.Store64(paddr, v)
+		}
+	}
+	return isa.NewTrap(0, isa.CauseStorePageFault, paddr, nil)
 }
 
 func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
@@ -157,25 +207,23 @@ func makeDTB() []byte {
 
 	// 4. System Memory (RAM)
 	// Assuming RAM starts at 0x80000000 and is 512MB
-	fdt.BeginNodeNum("memory", 0x80000000)
+	fdt.BeginNodeNum("memory", memory.RAMBase)
 	fdt.PropStr("device_type", "memory")
 	// reg is [address_high, address_low, size_high, size_low]
 	tab := [4]uint32{
-		0x0,
-		0x80000000,
-		0x0,
-		0x20000000,
+		uint32(memory.RAMBase) >> 32, uint32(memory.RAMBase),
+		0x0, 0x20000000,
 	}
 	fdt.PropTabU32("reg", &tab[0], 4)
 	fdt.EndNode()
 
 	// 5. CLINT (Timer and IPI)
 	// Standard address for QEMU virt is 0x2000000
-	fdt.BeginNode("clint@2000000")
+	fdt.BeginNodeNum("clint", CLINTBase)
 	fdt.PropStr("compatible", "riscv,clint0")
 	tab = [4]uint32{
-		0x0, 0x02000000,
-		0x0, 0x00010000,
+		uint32(CLINTBase) >> 32, uint32(CLINTBase),
+		uint32(CLINTSize) >> 32, uint32(CLINTSize),
 	}
 	fdt.PropTabU32("reg", &tab[0], 4)
 	// Link it to the CPUs
@@ -187,10 +235,11 @@ func makeDTB() []byte {
 	fdt.EndNode()
 
 	// 6. Peripherals (UART 16550A)
-	fdt.BeginNode("uart@10000000")
+	fdt.BeginNodeNum("uart", UARTBase)
 	fdt.PropStr("compatible", "ns16550a")
 	tab = [4]uint32{
-		0x0, 0x10000000, 0x0, 0x100,
+		uint32(UARTBase) >> 32, uint32(UARTBase),
+		uint32(UARTSize) >> 32, uint32(UARTSize),
 	}
 	fdt.PropTabU32("reg", &tab[0], 4)
 	fdt.PropU32("clock-frequency", 3686400)
