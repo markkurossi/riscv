@@ -406,6 +406,9 @@ func (mmu *MMU) Load16(vaddr uint64) (uint16, error) {
 		if err != nil {
 			return 0, err
 		}
+		if paddr < mmu.Mem.RAMBase {
+			return mmu.ROM.Load16(paddr)
+		}
 		return bo.Uint16(mmu.Mem.RAM[mmu.Mem.Offset(paddr):]), nil
 	}
 
@@ -418,6 +421,9 @@ func (mmu *MMU) Load16(vaddr uint64) (uint16, error) {
 			paddr, err := mmu.Map(vaddr, AccessRead)
 			if err != nil {
 				return 0, err
+			}
+			if paddr < mmu.Mem.RAMBase {
+				return mmu.ROM.Load16(paddr)
 			}
 			buf = mmu.Mem.RAM[mmu.Mem.Offset(paddr):]
 			page = memory.Page(vaddr)
@@ -436,6 +442,9 @@ func (mmu *MMU) Load32(vaddr uint64) (uint32, error) {
 		if err != nil {
 			return 0, err
 		}
+		if paddr < mmu.Mem.RAMBase {
+			return mmu.ROM.Load32(paddr)
+		}
 		return bo.Uint32(mmu.Mem.RAM[mmu.Mem.Offset(paddr):]), nil
 	}
 
@@ -448,6 +457,9 @@ func (mmu *MMU) Load32(vaddr uint64) (uint32, error) {
 			paddr, err := mmu.Map(vaddr, AccessRead)
 			if err != nil {
 				return 0, err
+			}
+			if paddr < mmu.Mem.RAMBase {
+				return mmu.ROM.Load32(paddr)
 			}
 			buf = mmu.Mem.RAM[mmu.Mem.Offset(paddr):]
 			page = memory.Page(vaddr)
@@ -466,6 +478,9 @@ func (mmu *MMU) Load64(vaddr uint64) (uint64, error) {
 		if err != nil {
 			return 0, err
 		}
+		if paddr < mmu.Mem.RAMBase {
+			return mmu.ROM.Load64(paddr)
+		}
 		return bo.Uint64(mmu.Mem.RAM[mmu.Mem.Offset(paddr):]), nil
 	}
 
@@ -478,6 +493,9 @@ func (mmu *MMU) Load64(vaddr uint64) (uint64, error) {
 			paddr, err := mmu.Map(vaddr, AccessRead)
 			if err != nil {
 				return 0, err
+			}
+			if paddr < mmu.Mem.RAMBase {
+				return mmu.ROM.Load64(paddr)
 			}
 			buf = mmu.Mem.RAM[mmu.Mem.Offset(paddr):]
 			page = memory.Page(vaddr)
@@ -503,6 +521,18 @@ func (mmu *MMU) Store8(vaddr, v uint64) error {
 }
 
 func (mmu *MMU) Store16(vaddr, v uint64) error {
+	if memory.Avail(vaddr, 2) {
+		paddr, err := mmu.Map(vaddr, AccessRead)
+		if err != nil {
+			return err
+		}
+		if paddr < mmu.Mem.RAMBase {
+			return mmu.ROM.Store16(paddr, v)
+		}
+		bo.PutUint16(mmu.Mem.RAM[mmu.Mem.Offset(paddr):], uint16(v))
+		return nil
+
+	}
 	var buf [2]byte
 
 	bo.PutUint16(buf[:], uint16(v))
@@ -511,6 +541,17 @@ func (mmu *MMU) Store16(vaddr, v uint64) error {
 }
 
 func (mmu *MMU) Store32(vaddr, v uint64) error {
+	if memory.Avail(vaddr, 4) {
+		paddr, err := mmu.Map(vaddr, AccessRead)
+		if err != nil {
+			return err
+		}
+		if paddr < mmu.Mem.RAMBase {
+			return mmu.ROM.Store32(paddr, v)
+		}
+		bo.PutUint32(mmu.Mem.RAM[mmu.Mem.Offset(paddr):], uint32(v))
+		return nil
+	}
 	var buf [4]byte
 
 	bo.PutUint32(buf[:], uint32(v))
