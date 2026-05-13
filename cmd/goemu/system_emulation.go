@@ -29,6 +29,9 @@ const (
 
 	CLINTBase = 0x2000000
 	CLINTSize = 0x10000
+
+	PLICBase = 0x0c000000
+	PLICSize = 0x04000000
 )
 
 func systemEmulation(params kernel.Params, bios, kernel string) error {
@@ -43,6 +46,10 @@ func systemEmulation(params kernel.Params, bios, kernel string) error {
 			&CLINT{
 				Start: CLINTBase,
 				End:   CLINTBase + CLINTSize,
+			},
+			&PLIC{
+				Start: PLICBase,
+				End:   PLICBase + PLICSize,
 			},
 		},
 	}
@@ -236,7 +243,7 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 	return false, nil
 }
 
-func makeDTB() []byte {
+func makeDTBOld() []byte {
 	// 1. Initialize the FDT builder with a buffer
 	buf := make([]byte, 4096)
 	fdt := gofdt.NewFDT(buf)
@@ -270,8 +277,9 @@ func makeDTB() []byte {
 	fdt.PropStr("compatible", "riscv,cpu-intc")
 	fdt.PropU32("phandle", 1) // Reference handle for PLIC
 	fdt.EndNode()
-	fdt.EndNode()
-	fdt.EndNode()
+
+	fdt.EndNode() // cpu@0
+	fdt.EndNode() // cpus
 
 	// 4. System Memory (RAM)
 	// Assuming RAM starts at 0x80000000 and is 512MB
@@ -283,7 +291,7 @@ func makeDTB() []byte {
 		0x0, 0x20000000,
 	}
 	fdt.PropTabU32("reg", &tab[0], 4)
-	fdt.EndNode()
+	fdt.EndNode() // memory
 
 	// 5. CLINT (Timer and IPI)
 	// Standard address for QEMU virt is 0x2000000
@@ -300,7 +308,7 @@ func makeDTB() []byte {
 		1, 7, // Hart 0 M-Timer
 	}
 	fdt.PropTabU32("interrupts-extended", &tab[0], 4)
-	fdt.EndNode()
+	fdt.EndNode() // clint
 
 	// 6. Peripherals (UART 16550A)
 	fdt.BeginNodeNum("uart", UARTBase)
@@ -313,18 +321,237 @@ func makeDTB() []byte {
 	fdt.PropU32("clock-frequency", 3686400)
 	fdt.PropU32("interrupt-parent", 1) // Link to CPU INTC phandle
 	fdt.PropU32("interrupts", 10)
-	fdt.EndNode()
+	fdt.EndNode() // uart
 
 	// 7. Chosen node (Boot arguments)
 	fdt.BeginNode("chosen")
 	// Tells Linux to use the UART for its console
 	fdt.PropStr("bootargs", "console=ttyS0 earlycon=uart8250,mmio,0x10000000")
 	fdt.PropStr("stdout-path", "/uart@10000000")
-	fdt.EndNode()
+	fdt.EndNode() // chosen
 
 	fdt.EndNode() // End Root
 
 	// 7. Finish and get binary blob
+	size := fdt.Output()
+
+	return buf[:size]
+}
+
+func makeDTB() []byte {
+	// Initialize FDT buffer
+	buf := make([]byte, 4096)
+	fdt := gofdt.NewFDT(buf)
+
+	// ---------------------------------------------------------------------
+	// Root node
+	// ---------------------------------------------------------------------
+
+	fdt.BeginNode("")
+
+	fdt.PropStr("model", "goemu,riscv-emulator")
+	fdt.PropStr("compatible", "riscv-virtio")
+
+	// 64-bit addresses/sizes
+	fdt.PropU32("#address-cells", 2)
+	fdt.PropU32("#size-cells", 2)
+
+	var tab [8]uint32
+
+	// ---------------------------------------------------------------------
+	// CPUs
+	// ---------------------------------------------------------------------
+
+	fdt.BeginNode("cpus")
+
+	fdt.PropU32("#address-cells", 1)
+	fdt.PropU32("#size-cells", 0)
+	fdt.PropU32("timebase-frequency", 10000000)
+
+	// -----------------------------------------------------------------
+	// CPU0
+	// -----------------------------------------------------------------
+
+	fdt.BeginNode("cpu@0")
+
+	fdt.PropStr("device_type", "cpu")
+	fdt.PropStr("status", "okay")
+
+	fdt.PropU32("reg", 0)
+
+	// Linux-compatible CPU description
+	fdt.PropStr("compatible", "riscv,rv64")
+
+	fdt.PropStr("riscv,isa", "rv64imafdc")
+	fdt.PropStr("mmu-type", "riscv,sv39")
+
+	// -------------------------------------------------------------
+	// CPU local interrupt controller
+	// -------------------------------------------------------------
+
+	fdt.BeginNode("interrupt-controller")
+
+	fdt.PropU32("#interrupt-cells", 1)
+	fdt.Prop("interrupt-controller", nil, 0)
+
+	fdt.PropStr("compatible", "riscv,cpu-intc")
+
+	// phandle used by CLINT and PLIC
+	fdt.PropU32("phandle", 1)
+
+	fdt.EndNode() // interrupt-controller
+
+	fdt.EndNode() // cpu@0
+
+	fdt.EndNode() // cpus
+
+	// ---------------------------------------------------------------------
+	// RAM
+	// ---------------------------------------------------------------------
+
+	fdt.BeginNodeNum("memory", memory.RAMBase)
+
+	fdt.PropStr("device_type", "memory")
+
+	tab = [8]uint32{
+		uint32(memory.RAMBase >> 32),
+		uint32(memory.RAMBase),
+
+		0x0,
+		0x20000000, // 512 MB
+	}
+
+	fdt.PropTabU32("reg", &tab[0], 4)
+
+	fdt.EndNode() // memory
+
+	// ---------------------------------------------------------------------
+	// CLINT
+	// ---------------------------------------------------------------------
+
+	fdt.BeginNodeNum("clint", CLINTBase)
+
+	fdt.PropStr("compatible", "riscv,clint0")
+
+	tab = [8]uint32{
+		uint32(CLINTBase >> 32),
+		uint32(CLINTBase),
+
+		uint32(CLINTSize >> 32),
+		uint32(CLINTSize),
+	}
+
+	fdt.PropTabU32("reg", &tab[0], 4)
+
+	// interrupts-extended:
+	//   <phandle interrupt-id>
+	//
+	// 3 = machine software interrupt
+	// 7 = machine timer interrupt
+	//
+	tab = [8]uint32{
+		1, 3,
+		1, 7,
+	}
+
+	fdt.PropTabU32("interrupts-extended", &tab[0], 4)
+
+	fdt.EndNode() // clint
+
+	// ---------------------------------------------------------------------
+	// PLIC
+	// ---------------------------------------------------------------------
+
+	fdt.BeginNodeNum("plic", PLICBase)
+
+	fdt.PropStr("compatible", "sifive,plic-1.0.0")
+
+	tab = [8]uint32{
+		uint32(PLICBase >> 32),
+		uint32(PLICBase),
+
+		uint32(PLICSize >> 32),
+		uint32(PLICSize),
+	}
+
+	fdt.PropTabU32("reg", &tab[0], 4)
+
+	fdt.PropU32("#interrupt-cells", 1)
+	fdt.Prop("interrupt-controller", nil, 0)
+
+	// Number of interrupt sources supported
+	fdt.PropU32("riscv,ndev", 32)
+
+	// PLIC phandle
+	fdt.PropU32("phandle", 2)
+
+	// interrupts-extended:
+	//
+	// 11 = machine external interrupt
+	//  9 = supervisor external interrupt
+	//
+	tab = [8]uint32{
+		1, 11,
+		1, 9,
+	}
+
+	fdt.PropTabU32("interrupts-extended", &tab[0], 4)
+
+	fdt.EndNode() // plic
+
+	// ---------------------------------------------------------------------
+	// UART (16550A)
+	// ---------------------------------------------------------------------
+
+	fdt.BeginNodeNum("uart", UARTBase)
+
+	fdt.PropStr("compatible", "ns16550a")
+
+	tab = [8]uint32{
+		uint32(UARTBase >> 32),
+		uint32(UARTBase),
+
+		uint32(UARTSize >> 32),
+		uint32(UARTSize),
+	}
+
+	fdt.PropTabU32("reg", &tab[0], 4)
+
+	fdt.PropU32("clock-frequency", 3686400)
+
+	// UART interrupt comes from PLIC
+	fdt.PropU32("interrupt-parent", 2)
+
+	// PLIC interrupt source ID
+	fdt.PropU32("interrupts", 10)
+
+	fdt.EndNode() // uart
+
+	// ---------------------------------------------------------------------
+	// chosen
+	// ---------------------------------------------------------------------
+
+	fdt.BeginNode("chosen")
+
+	fdt.PropStr(
+		"bootargs",
+		"console=ttyS0 earlycon=sbi",
+	)
+
+	fdt.PropStr(
+		"stdout-path",
+		"/uart@10000000",
+	)
+
+	fdt.EndNode() // chosen
+
+	// ---------------------------------------------------------------------
+	// End root node
+	// ---------------------------------------------------------------------
+
+	fdt.EndNode()
+
+	// Generate final DTB
 	size := fdt.Output()
 
 	return buf[:size]
