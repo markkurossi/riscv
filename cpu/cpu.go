@@ -52,6 +52,8 @@ type TrapHandler func(cpu *CPU, trap *isa.Trap) (bool, error)
 type CPU struct {
 	PID uint64 // XXX how is this set? This is an usermode emulator field.
 
+	Trace bool
+
 	X [32]uint64
 	F [32]float64
 
@@ -72,6 +74,8 @@ type CPU struct {
 	MMU *mmu.MMU
 
 	TrapHandler TrapHandler
+
+	lastDescOp isa.Op
 }
 
 func (cpu *CPU) Run() error {
@@ -80,6 +84,21 @@ func (cpu *CPU) Run() error {
 		if err != nil {
 			if trap, ok := errors.AsType[*isa.Trap](err); ok {
 				trap.PC = cpu.PC
+
+				// XXX: rethink the CSR storing:
+				// - create CPU.Trap() that saves things accordingly
+				// - fix ecall/ebreak to change state as needed so
+				// that CPU.Trap() does the right thing
+				// - if we are here with trap.PC == nil, store state
+				// so that it matches MMU's page faults - MMU does not
+				// have PC so save it here.
+				//
+				// - Save Mode: The current mode (1 for S) is saved
+				// into mstatus.MPP (Machine Previous Privilege).
+				//
+				// - Save Interrupt State: The current mstatus.MIE
+				// (Interrupt Enable) is saved into mstatus.MPIE, and
+				// then MIE is set to 0 (disabling interrupts).
 
 				switch cpu.Mode {
 				case ModeS, ModeU:
@@ -107,8 +126,6 @@ func (cpu *CPU) Run() error {
 }
 
 func (cpu *CPU) loop() error {
-	var lastDescOp isa.Op
-
 	if cpu.PC%2 == 1 {
 		return isa.NewTrap(cpu.PC, isa.CauseInstAddrMisaligned, cpu.PC, nil)
 	}
@@ -180,22 +197,7 @@ func (cpu *CPU) loop() error {
 		cpu.Instret++
 
 		if false {
-			var line string
-			if size == 4 {
-				line = fmt.Sprintf("%8x:  %08x   %v", cpu.PC, raw, instr)
-			} else {
-				line = fmt.Sprintf("%8x:  %04x       %v", cpu.PC, raw, instr)
-			}
-			op, ok := isa.Operands[instr.Op]
-			if ok && len(op.Desc) > 0 && instr.Op != lastDescOp {
-				lastDescOp = instr.Op
-
-				for len(line) < 47 {
-					line += " "
-				}
-				line += fmt.Sprintf("# %s", op.Desc)
-			}
-			fmt.Println(line)
+			cpu.trace(raw, instr, "")
 		}
 
 		switch instr.Op {
@@ -303,6 +305,10 @@ func (cpu *CPU) loop() error {
 				tval = cpu.LoadCSR(CsrMtvec)
 			}
 
+			if cpu.Trace {
+				cpu.tracef(raw, instr, "tval=%x", tval)
+			}
+
 			return isa.NewTrap(cpu.PC, isa.CauseBreakpoint, tval, nil)
 
 		case isa.Sret:
@@ -314,6 +320,9 @@ func (cpu *CPU) loop() error {
 			// 	 sstatus.SPIE ← 1
 			// 	 sstatus.SPP  ← U (0)
 
+			if cpu.Trace {
+				cpu.tracef(raw, instr, "sepc=%x", cpu.LoadCSR(CsrSepc))
+			}
 			cpu.PC = cpu.LoadCSR(CsrSepc)
 
 		case isa.Mret:
@@ -325,11 +334,15 @@ func (cpu *CPU) loop() error {
 			// 	 mstatus.MPIE ← 1
 			// 	 mstatus.MPP  ← U (0)
 
-			if false {
-				fmt.Printf("%v: M.Epc=%x\n", instr, cpu.LoadCSR(CsrMepc))
+			if cpu.Trace {
+				cpu.tracef(raw, instr, "mepc=%x", cpu.LoadCSR(CsrMepc))
 			}
+			cpu.Mode = ModeS
 
 			cpu.PC = cpu.LoadCSR(CsrMepc)
+			if cpu.PC == 0 && false {
+				cpu.PC = 0x8021cbd0 + 4
+			}
 			continue
 
 		case isa.Ecall:
@@ -861,4 +874,34 @@ func (cpu *CPU) loop() error {
 		}
 		cpu.PC += uint64(size)
 	}
+}
+
+func (cpu *CPU) tracef(raw uint32, instr isa.Instr,
+	format string, args ...interface{}) {
+
+	cpu.trace(raw, instr, fmt.Sprintf(format, args...))
+}
+
+func (cpu *CPU) trace(raw uint32, instr isa.Instr, msg string) {
+	var line string
+	if raw&0b11 == 0b11 {
+		line = fmt.Sprintf("%8x:  %08x   %v", cpu.PC, raw, instr)
+	} else {
+		line = fmt.Sprintf("%8x:  %04x       %v", cpu.PC, raw, instr)
+	}
+	if len(msg) == 0 {
+		op, ok := isa.Operands[instr.Op]
+		if ok && len(op.Desc) > 0 && instr.Op != cpu.lastDescOp {
+			cpu.lastDescOp = instr.Op
+			msg = op.Desc
+		}
+	}
+	if len(msg) > 0 {
+		for len(line) < 47 {
+			line += " "
+		}
+		line += fmt.Sprintf("# %s", msg)
+	}
+	fmt.Println(line)
+
 }

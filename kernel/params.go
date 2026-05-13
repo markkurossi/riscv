@@ -11,10 +11,12 @@ import (
 )
 
 type Params struct {
-	Verbose bool
-	Ktrace  bool
-	Profile bool
-	FSRoot  string
+	Verbose  bool
+	Ktrace   bool
+	CPUtrace bool
+	Profile  bool
+	Color    bool
+	FSRoot   string
 }
 
 func (params Params) MakePath(pathname string) string {

@@ -15,6 +15,7 @@ import (
 type UART struct {
 	Start uint64
 	End   uint64
+	Color bool
 
 	// Interrupt Enable Register
 	EIR uint8
@@ -63,7 +64,11 @@ func (uart *UART) Store8(paddr, v uint64) error {
 	}
 	switch paddr - uart.Start {
 	case 0:
-		fmt.Printf("%c", byte(v))
+		if uart.Color {
+			fmt.Printf("\x1b[106;30m%c\x1b[0m", byte(v))
+		} else {
+			fmt.Printf("%c", byte(v))
+		}
 
 	case 1:
 		uart.EIR = byte(v)

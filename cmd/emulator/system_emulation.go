@@ -38,6 +38,7 @@ func systemEmulation(params kernel.Params, bios, kernel string) error {
 			&UART{
 				Start: UARTBase,
 				End:   UARTBase + UARTSize,
+				Color: params.Color,
 			},
 			&CLINT{
 				Start: CLINTBase,
@@ -47,7 +48,8 @@ func systemEmulation(params kernel.Params, bios, kernel string) error {
 	}
 
 	core := &cpu.CPU{
-		Mode: cpu.ModeM,
+		Trace: params.CPUtrace,
+		Mode:  cpu.ModeM,
 		MMU: &mmu.MMU{
 			Satp: mmu.SatpModeBare,
 			Mem:  mem,
@@ -159,7 +161,7 @@ func (rom *ROM) Store64(paddr, v uint64) error {
 func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 	bool, error) {
 
-	fmt.Printf("goemu: %v\n", trap)
+	fmt.Printf("goemu: mode: %v, trap: %v\n", core.Mode, trap)
 	switch trap.Cause {
 	case isa.CauseBreakpoint:
 		var tvec uint64
@@ -175,6 +177,57 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 			return false, fmt.Errorf("unhandled %v mode trap %w",
 				core.Mode, trap)
 		}
+		core.PC = tvec
+
+		return true, nil
+
+	case isa.CauseEcallM:
+		var tvec uint64
+
+		fmt.Printf("goemu: stvec=%x, mtvec=%x\n",
+			core.LoadCSR(cpu.CsrStvec),
+			core.LoadCSR(cpu.CsrMtvec))
+
+		// Call higher mode, XXX check delegation
+		switch core.Mode {
+		case cpu.ModeS, cpu.ModeM:
+			tvec = core.LoadCSR(cpu.CsrStvec)
+		default:
+		}
+		if tvec == 0 {
+			return false, fmt.Errorf("unhandled %v mode trap %w",
+				core.Mode, trap)
+		}
+		core.PC = tvec
+
+		return true, nil
+
+	case isa.CauseEcallS:
+		var tvec uint64
+
+		fmt.Printf("goemu: stvec=%x, mtvec=%x\n",
+			core.LoadCSR(cpu.CsrStvec),
+			core.LoadCSR(cpu.CsrMtvec))
+
+		core.Mode = cpu.ModeM
+
+		// Call higher mode, XXX check delegation
+		switch core.Mode {
+		case cpu.ModeS:
+			tvec = core.LoadCSR(cpu.CsrStvec)
+		case cpu.ModeM:
+			tvec = core.LoadCSR(cpu.CsrMtvec)
+		default:
+		}
+		if tvec == 0 {
+			return false, fmt.Errorf("unhandled %v mode trap %w",
+				core.Mode, trap)
+		}
+
+		// XXX kludge, need to rethink ecall CSR storing
+		core.StoreCSR(cpu.CsrMepc, trap.PC)
+		fmt.Printf("kludge: %x\n", trap.PC)
+
 		core.PC = tvec
 
 		return true, nil

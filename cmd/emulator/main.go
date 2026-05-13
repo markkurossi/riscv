@@ -22,6 +22,8 @@ func main() {
 	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to `file`")
 	verbose := flag.Bool("v", false, "verbose output")
 	ktrace := flag.Bool("ktrace", false, "kernel trace")
+	cputrace := flag.Bool("cputrace", false, "CPU trace")
+	color := flag.Bool("color", false, "turn on color output")
 	fsroot := flag.String("fsroot", "", "filesystem root")
 	objdump := flag.Bool("D", false, "disassemble")
 	bios := flag.String("bios", "", "the firmwire; enables system emulation")
@@ -31,10 +33,12 @@ func main() {
 	log.SetFlags(0)
 
 	params := kernel.Params{
-		Verbose: *verbose,
-		Ktrace:  *ktrace,
-		Profile: len(*cpuprofile) > 0,
-		FSRoot:  *fsroot,
+		Verbose:  *verbose,
+		Ktrace:   *ktrace,
+		CPUtrace: *cputrace,
+		Profile:  len(*cpuprofile) > 0,
+		Color:    *color,
+		FSRoot:   *fsroot,
 	}
 
 	if len(*bios) > 0 || len(*kern) > 0 {
