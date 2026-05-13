@@ -18,7 +18,7 @@ Linux applications and, eventually, the Linux operating system.
    - [ ] Syscall can cause page fault on mmap'ed files. Syscall's
          traps should fill page table.
  - [ ] sfence.vma must clear MMU's TLB entries
- - [ ] Can we remove `Raw uint32` from `Instr`?
+ - [x] Remove `Raw uint32` from `Instr`?
 
 ## Step 1 - Basics
 
