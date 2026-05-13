@@ -72,10 +72,10 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 ## Emulator Example
 
 ``` shell
-$ cd cmd/emulator/
+$ cd cmd/goemu/
 $ file examples/hello
 examples/hello: ELF 64-bit LSB executable, UCB RISC-V, soft-float ABI, version 1 (SYSV), statically linked, not stripped
-$ ./emulator -ktrace examples/hello
+$ ./goemu -ktrace examples/hello
     0     0 CALL write(1,10050,15)
 Hello, RISC-V!
     0     0 RET  write 15
