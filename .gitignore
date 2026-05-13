@@ -33,8 +33,6 @@ go.work.sum
 
 cmd/riscv-objdump/riscv-objdump
 cmd/riscv-objdump/elf
-cmd/emulator/emulator
-cmd/gofdt/gofdt
-cmd/gofdt/*.dtb
+cmd/goemu/goemu
 
 ,cpu
