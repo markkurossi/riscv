@@ -23,37 +23,41 @@ var (
 	bo = binary.LittleEndian
 )
 
-type TrapHandler func(cpu *CPU, trap *isa.Trap) (bool, error)
+type Mode uint8
 
-type CSR struct {
-	Status       uint64
-	Tvec         uint64
-	Scratch      uint64
-	Epc          uint64 // Exception PC.
-	Cause        uint64 // Exception cause.
-	Tval         uint64 // Trap value e.g. virtual address causing page fault.
-	Ip           uint64
-	Ie           uint64
-	Pmpcfg       [8]uint64
-	Pmpaddr      [16]uint64
-	Counteren    uint64
-	Countinhibit uint64
-	Envcfg       uint64
-	Stateen      [4]uint64
-	Ideleg       uint64
-	Edeleg       uint64
-	Tselect      uint64
-	Tdata1       uint64
+const (
+	ModeU Mode = iota
+	ModeS
+	ModeH
+	ModeM
+)
+
+var modes = map[Mode]string{
+	ModeU: "U",
+	ModeS: "S",
+	ModeH: "H",
+	ModeM: "M",
 }
 
-type CPU struct {
-	PID uint64 // XXX how is this set?
-	X   [32]uint64
-	F   [32]float64
+func (m Mode) String() string {
+	name, ok := modes[m]
+	if ok {
+		return name
+	}
+	return fmt.Sprintf("{Mode %d}", int(m))
+}
 
-	// S-Mode CSRs (Direct Access)
-	S CSR
-	M CSR
+type TrapHandler func(cpu *CPU, trap *isa.Trap) (bool, error)
+
+type CPU struct {
+	PID uint64 // XXX how is this set? This is an usermode emulator field.
+
+	X [32]uint64
+	F [32]float64
+
+	Mode Mode
+
+	CSR [4096]uint64
 
 	PC uint64
 
@@ -77,10 +81,21 @@ func (cpu *CPU) Run() error {
 			if trap, ok := errors.AsType[*isa.Trap](err); ok {
 				trap.PC = cpu.PC
 
-				// XXX check mode.
-				cpu.M.Epc = trap.PC
-				cpu.M.Tval = trap.Tval
-				cpu.M.Cause = trap.Cause
+				switch cpu.Mode {
+				case ModeS, ModeU:
+					cpu.StoreCSR(CsrSepc, trap.PC)
+					cpu.StoreCSR(CsrScause, trap.Cause)
+					cpu.StoreCSR(CsrStvec, trap.Tval)
+
+				case ModeM:
+					cpu.StoreCSR(CsrMepc, trap.PC)
+					cpu.StoreCSR(CsrMcause, trap.Cause)
+					cpu.StoreCSR(CsrMtvec, trap.Tval)
+
+				default:
+					return fmt.Errorf("unhandled %v mode trap %w",
+						cpu.Mode, err)
+				}
 				err = cpu.HandleTrap(trap)
 			}
 			if err != nil {
@@ -280,33 +295,57 @@ func (cpu *CPU) loop() error {
 
 		case isa.Ebreak:
 			// XXX mie, mpie, mpp
-			return isa.NewTrap(cpu.PC, isa.CauseBreakpoint, cpu.PC,
-				fmt.Errorf("Mtvec=%x, Stvec=%x", cpu.M.Tvec, cpu.S.Tvec))
-
-		case isa.Mret:
-			// XXX mie, mpie, mpp
-
-			// Using mepc directly as the return PC without checking
-			// it was correctly written — confirm mepc = 0x80012bd4
-			// (the ebreak address, not +4) going in, and that the
-			// handler's csrw mepc, a5 (with a5 = 0x80012bd8) updated
-			// it before mret reads it.
-
-			// Not updating mstatus fields — MPP must be cleared to 0
-			// (U-mode) and MPIE set to 1 after mret, even if the
-			// return mode is M-mode. Failing to clear MPP can corrupt
-			// later trap handling.
-
-			if false {
-				fmt.Printf("%v: M.Epc=%x\n", instr, cpu.M.Epc)
+			var tval uint64
+			switch cpu.Mode {
+			case ModeS:
+				tval = cpu.LoadCSR(CsrStvec)
+			case ModeM:
+				tval = cpu.LoadCSR(CsrMtvec)
 			}
 
-			cpu.PC = cpu.M.Epc
+			return isa.NewTrap(cpu.PC, isa.CauseBreakpoint, tval, nil)
+
+		case isa.Sret:
+			// The sret semantics:
+			//
+			// 	 PC           ← sepc
+			// 	 privilege    ← sstatus.SPP
+			// 	 sstatus.SIE  ← sstatus.SPIE
+			// 	 sstatus.SPIE ← 1
+			// 	 sstatus.SPP  ← U (0)
+
+			cpu.PC = cpu.LoadCSR(CsrSepc)
+
+		case isa.Mret:
+			// The mret semantics:
+			//
+			// 	 PC           ← mepc
+			// 	 privilege    ← mstatus.MPP
+			// 	 mstatus.MIE  ← mstatus.MPIE
+			// 	 mstatus.MPIE ← 1
+			// 	 mstatus.MPP  ← U (0)
+
+			if false {
+				fmt.Printf("%v: M.Epc=%x\n", instr, cpu.LoadCSR(CsrMepc))
+			}
+
+			cpu.PC = cpu.LoadCSR(CsrMepc)
 			continue
 
 		case isa.Ecall:
-			// XXX Track CPU mode
-			return isa.NewTrap(cpu.PC, isa.CauseEcallS, 0, nil)
+			var cause uint64
+			switch cpu.Mode {
+			case ModeU:
+				cause = isa.CauseEcallU
+			case ModeS:
+				cause = isa.CauseEcallS
+			case ModeM:
+				cause = isa.CauseEcallM
+			default:
+				return isa.NewTrap(cpu.PC, isa.CauseIllegalInstr, 0,
+					fmt.Errorf("ecall in %v-mode", cpu.Mode))
+			}
+			return isa.NewTrap(cpu.PC, cause, 0, nil)
 
 		case isa.Fld:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
@@ -613,328 +652,36 @@ func (cpu *CPU) loop() error {
 
 			// Control and Status Registers (CSRs).
 		case isa.Csrrs:
-			switch instr.Imm {
-			case 0x14d: // scontext
-				cpu.X[instr.Rd] = 0
-
-			case 0x300:
-				t := cpu.M.Status
-				if instr.Rs1 != isa.Zero {
-					// Standard bit-setting logic
-					cpu.M.Status = t | cpu.X[instr.Rs1]
-				}
-				cpu.X[instr.Rd] = t
-
-			case 0x301: // misa - Machine Instruction Set Architecture
-				// RV64IMAFDC
-				var misaValue uint64 = (2 << 62) | // MXLEN = 64
-					(1 << 0) | // A (Atomic)
-					(1 << 2) | // C (Compressed)
-					(1 << 3) | // D (Double)
-					(1 << 5) | // F (Float)
-					(1 << 8) | // I (Integer)
-					(1 << 12) | // M (Multiply)
-					(1 << 18) | // S (Supervisor)
-					(1 << 20) // U (User mode)
-				cpu.X[instr.Rd] = misaValue
-
-			case 0x302:
-				cpu.X[instr.Rd] = cpu.M.Edeleg
-
-			case 0x303:
-				cpu.X[instr.Rd] = cpu.M.Ideleg
-
-			case 0x306: // Mcounteren
-				t := cpu.M.Counteren
-				if instr.Rs1 != isa.Zero {
-					// Standard bit-setting logic
-					cpu.M.Counteren = t | cpu.X[instr.Rs1]
-				}
-				cpu.X[instr.Rd] = t
-
-			case 0x30a: // Menvcfg
-				t := cpu.M.Envcfg
-				if instr.Rs1 != isa.Zero {
-					cpu.M.Envcfg = t | cpu.X[instr.Rs1]
-				}
-				cpu.X[instr.Rd] = t
-
-			case 0x30c: // mstateen0
-				cpu.X[instr.Rd] = 0
-
-			case 0x320: // Mcountinhibit
-				t := cpu.M.Countinhibit
-				if instr.Rs1 != isa.Zero {
-					// Update the inhibit mask
-					cpu.M.Countinhibit = t | cpu.X[instr.Rs1]
-				}
-				cpu.X[instr.Rd] = t
-
-			case 0x321: // mhpmevent3
-				cpu.X[instr.Rd] = 0
-
-			case 0x340: // Mscratch
-				t := cpu.M.Scratch
-				if instr.Rs1 != isa.Zero {
-					cpu.M.Scratch = t | cpu.X[instr.Rs1]
-				}
-				cpu.X[instr.Rd] = t
-
-			case 0x341: // Mepc
-				t := cpu.M.Epc
-				if instr.Rs1 != isa.Zero {
-					cpu.M.Epc = t | cpu.X[instr.Rs1]
-				}
-				cpu.X[instr.Rd] = t
-
-			case 0x3a0: // Pmpcfg0
-				t := cpu.M.Pmpcfg[0]
-				if instr.Rs1 != isa.Zero {
-					cpu.M.Pmpcfg[0] = t | cpu.X[instr.Rs1]
-				}
-				cpu.X[instr.Rd] = t
-
-			case 0x3b0: // Pmpcfg2
-				t := cpu.M.Pmpcfg[2]
-				if instr.Rs1 != isa.Zero {
-					cpu.M.Pmpcfg[2] = t | cpu.X[instr.Rs1]
-				}
-				cpu.X[instr.Rd] = t
-
-			case 0x3b1: // Pmpaddr8
-				t := cpu.M.Pmpaddr[8]
-				if instr.Rs1 != isa.Zero {
-					cpu.M.Pmpaddr[8] = t | cpu.X[instr.Rs1]
-				}
-				cpu.X[instr.Rd] = t
-
-			case 0x7a0, 0x7a1, 0x7a2, 0x7a3, 0x7a4: // Debug Triggers
-				// Return 0 to tell OpenSBI "I have 0 hardware triggers"
-				cpu.X[instr.Rd] = 0
-
-			case 0xc01: // time - RDCYCLE instruction
-				cpu.X[instr.Rd] = cpu.Instret
-
-			case 0xda0: // Senvcfg
-				t := cpu.S.Envcfg // Or however you store S-mode state
-				if instr.Rs1 != isa.Zero {
-					cpu.S.Envcfg = t | cpu.X[instr.Rs1]
-				}
-				cpu.X[instr.Rd] = t
-
-			case 0xf11: // mvendorid
-				cpu.X[instr.Rd] = 0
-
-			case 0xf12: // marchid
-				cpu.X[instr.Rd] = 0 // Architecture ID
-
-			case 0xf13: // mimpid
-				cpu.X[instr.Rd] = 0 // Implementation ID
-
-			case 0xf14: // mhartid
-				cpu.X[instr.Rd] = 0 // Hardware Thread ID
-
-			case 0xfb0: // scountinhibit
-				cpu.X[instr.Rd] = 0
-
-			default:
-				if instr.Imm >= 0xb03 && instr.Imm <= 0xb1f {
-					// Mhpmcounters
-					cpu.X[instr.Rd] = 0 // Counters return 0
-				} else {
-					return isa.NewTrap(cpu.PC, isa.CauseIllegalInstr,
-						uint64(raw), fmt.Errorf("%v", instr))
-				}
+			csr := CSR(instr.Imm)
+			t := cpu.LoadCSR(csr)
+			if instr.Rs1 != isa.Zero {
+				cpu.StoreCSR(csr, t|cpu.X[instr.Rs1])
 			}
+			cpu.X[instr.Rd] = t
 
 		case isa.Csrrc:
-			switch instr.Imm {
-			case 0x100:
-				t := cpu.S.Status
-				if instr.Rs1 != isa.Zero {
-					cpu.S.Status = t & ^cpu.X[instr.Rs1]
-				}
-				cpu.X[instr.Rd] = t
-
-			case 0x300:
-				t := cpu.M.Status
-				if instr.Rs1 != isa.Zero {
-					cpu.M.Status = t & ^cpu.X[instr.Rs1]
-				}
-				cpu.X[instr.Rd] = t
-			default:
-				return isa.NewTrap(cpu.PC, isa.CauseIllegalInstr, uint64(raw),
-					fmt.Errorf("%v", instr))
+			csr := CSR(instr.Imm)
+			t := cpu.LoadCSR(csr)
+			if instr.Rs1 != isa.Zero {
+				cpu.StoreCSR(csr, t & ^cpu.X[instr.Rs1])
 			}
+			cpu.X[instr.Rd] = t
 
 		case isa.Csrrsi:
-			switch instr.Imm {
-			case 0x304:
-				t := cpu.M.Ie
-				cpu.M.Ie = t | uint64(instr.Imm)
-				cpu.X[instr.Rd] = t
-
-			default:
-				return isa.NewTrap(cpu.PC, isa.CauseIllegalInstr,
-					uint64(raw), fmt.Errorf("%v", instr))
-			}
+			csr := CSR(instr.Imm)
+			t := cpu.LoadCSR(csr)
+			cpu.StoreCSR(csr, t|uint64(instr.Rs1))
+			cpu.X[instr.Rd] = t
 
 		case isa.Csrrw:
-			switch instr.Imm {
-			case 0x104:
-				t := cpu.S.Ie
-				cpu.S.Ie = cpu.X[instr.Rs1]
-				cpu.X[instr.Rd] = t
-
-			case 0x105:
-				t := cpu.S.Tvec
-				cpu.S.Tvec = cpu.X[instr.Rs1]
-				cpu.X[instr.Rd] = t
-
-			case 0x106:
-				t := cpu.S.Counteren
-				cpu.S.Counteren = cpu.X[instr.Rs1]
-				cpu.X[instr.Rd] = t
-
-			case 0x144:
-				t := cpu.S.Ip
-				cpu.S.Ip = cpu.X[instr.Rs1]
-				cpu.X[instr.Rd] = t
-
-			case 0x300:
-				t := cpu.M.Status
-				cpu.M.Status = cpu.X[instr.Rs1]
-				cpu.X[instr.Rd] = t
-
-			case 0x302:
-				t := cpu.M.Edeleg
-				cpu.M.Edeleg = cpu.X[instr.Rs1]
-				cpu.X[instr.Rd] = t
-
-				// func (cpu *CPU) trap(exceptionCode uint64) {
-				//     // If we are in S or U mode, and the bit is set in medeleg...
-				//     if cpu.Mode <= ModeS && (cpu.M.edeleg & (1 << exceptionCode)) != 0 {
-				//         // Jump to stvec (Supervisor Trap Vector)
-				//         cpu.transferToSMode(exceptionCode)
-				//     } else {
-				//         // Jump to mtvec (Machine Trap Vector)
-				//         cpu.transferToMMode(exceptionCode)
-				//     }
-				// }
-
-			case 0x303:
-				t := cpu.M.Ideleg
-				cpu.M.Ideleg = cpu.X[instr.Rs1]
-				cpu.X[instr.Rd] = t
-
-				// // Simplified interrupt logic
-				// if cpu.Mode < ModeM && (cpu.M.ideleg & (1 << interruptID)) != 0 {
-				//     // Jump to stvec (Supervisor Trap Vector)
-				//     cpu.TrapToSMode(interruptID)
-				// } else {
-				//     // Jump to mtvec (Machine Trap Vector)
-				//     cpu.TrapToMMode(interruptID)
-				// }
-
-			case 0x304:
-				t := cpu.M.Ie
-				cpu.M.Ie = cpu.X[instr.Rs1]
-				cpu.X[instr.Rd] = t
-
-			case 0x305:
-				t := cpu.M.Tvec
-				cpu.M.Tvec = cpu.X[instr.Rs1]
-				cpu.X[instr.Rd] = t
-
-			case 0x306: // mcounteren
-				cpu.M.Counteren = cpu.X[instr.Rs1]
-
-			case 0x30a: // menvcfg
-				cpu.M.Envcfg = cpu.X[instr.Rs1]
-
-			case 0x30c: // mstateen0
-				// Store the enable mask
-				cpu.M.Stateen[0] = cpu.X[instr.Rs1]
-
-			case 0x320: // mcountinhibit
-				cpu.M.Countinhibit = cpu.X[instr.Rs1]
-
-			case 0x340:
-				t := cpu.M.Scratch
-				cpu.M.Scratch = cpu.X[instr.Rs1]
-				cpu.X[instr.Rd] = t
-
-			case 0x341:
-				t := cpu.M.Epc
-				cpu.M.Epc = cpu.X[instr.Rs1]
-				cpu.X[instr.Rd] = t
-
-			case 0x3a0: // pmpcfg0
-				cpu.M.Pmpcfg[0] = cpu.X[instr.Rs1]
-			case 0x3b0: // pmpcfg2
-				cpu.M.Pmpcfg[2] = cpu.X[instr.Rs1]
-
-			case 0x3b1: // pmpaddr8
-				// Store the boundary address
-				cpu.M.Pmpaddr[8] = cpu.X[instr.Rs1]
-
-			case 0x7a0: // tselect
-				cpu.M.Tselect = cpu.X[instr.Rs1]
-			case 0x7a1: // tdata1
-				cpu.M.Tdata1 = cpu.X[instr.Rs1]
-
-			case 0x7a4: // tinfo Returning 0 indicates no trigger
-				// types are supported for the selected tselect.
-				cpu.X[instr.Rd] = 0
-
-			default:
-				if instr.Imm >= 0xb03 && instr.Imm <= 0xb1f {
-					// Mhpmcounters
-				} else {
-					return isa.NewTrap(cpu.PC, isa.CauseIllegalInstr,
-						uint64(raw), fmt.Errorf("%v", instr))
-				}
-			}
+			csr := CSR(instr.Imm)
+			t := cpu.LoadCSR(csr)
+			cpu.StoreCSR(csr, cpu.X[instr.Rs1])
+			cpu.X[instr.Rd] = t
 
 		case isa.Csrrwi:
-			switch instr.Imm {
-			case 0x003: // fcsr
-				// OpenSBI is writing 0. Store it so it can be read back.
-				// XXX cpu.F.fcsr = uint32(instr.Imm)
-
-			case 0x104: // S.Ie
-				cpu.S.Ie = uint64(instr.Imm)
-
-			case 0x106: // scounteren
-				// OpenSBI is writing 7 here.
-				cpu.S.Counteren = uint64(instr.Imm)
-
-			case 0x140: // S.Scratch
-				cpu.S.Scratch = uint64(instr.Imm)
-
-			case 0x180: // satp
-				// For now, OpenSBI is writing 0.
-				// This just ensures translation remains 'Bare'.
-				cpu.MMU.Satp = mmu.Satp(cpu.X[instr.Rs1])
-
-			case 0x304:
-				t := cpu.M.Ie
-				cpu.M.Ie = uint64(instr.Rs1)
-				cpu.X[instr.Rd] = t
-
-			case 0x340:
-				cpu.X[instr.Rd] = cpu.M.Scratch
-				cpu.M.Scratch = uint64(instr.Rs1)
-
-			case 0x344:
-				t := cpu.M.Ip
-				cpu.M.Ip = uint64(instr.Imm)
-				cpu.X[instr.Rd] = t
-
-			default:
-				return isa.NewTrap(cpu.PC, isa.CauseIllegalInstr, uint64(raw),
-					fmt.Errorf("%v", instr))
-			}
+			csr := CSR(instr.Imm)
+			cpu.StoreCSR(csr, uint64(instr.Rs1))
 
 			// Atomic (A extension).
 

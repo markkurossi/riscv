@@ -91,6 +91,7 @@ func New(params kernel.Params) (*Emulator, error) {
 	}
 
 	cpu := &cpu.CPU{
+		Mode: cpu.ModeU,
 		MMU: &mmu.MMU{
 			Satp: satp,
 			Mem:  mem,

@@ -47,6 +47,7 @@ func systemEmulation(params kernel.Params, bios, kernel string) error {
 	}
 
 	core := &cpu.CPU{
+		Mode: cpu.ModeM,
 		MMU: &mmu.MMU{
 			Satp: mmu.SatpModeBare,
 			Mem:  mem,
@@ -161,7 +162,21 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 	fmt.Printf("goemu: %v\n", trap)
 	switch trap.Cause {
 	case isa.CauseBreakpoint:
-		core.PC = core.M.Tvec
+		var tvec uint64
+
+		switch core.Mode {
+		case cpu.ModeS:
+			tvec = core.LoadCSR(cpu.CsrStvec)
+		case cpu.ModeM:
+			tvec = core.LoadCSR(cpu.CsrMtvec)
+		}
+
+		if tvec == 0 {
+			return false, fmt.Errorf("unhandled %v mode trap %w",
+				core.Mode, trap)
+		}
+		core.PC = tvec
+
 		return true, nil
 	}
 
