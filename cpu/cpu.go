@@ -456,6 +456,14 @@ func (cpu *CPU) loop() error {
 				cpu.X[instr.Rd] = v
 			}
 
+		case isa.Lh:
+			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+			v, err := cpu.MMU.Load16(addr)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = uint64(int64(int16(v)))
+
 		case isa.Lhu:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
 			v, err := cpu.MMU.Load16(addr)
