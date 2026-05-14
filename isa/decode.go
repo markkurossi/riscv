@@ -532,6 +532,9 @@ func Decode(raw uint32) (Instr, error) {
 			instr.Imm = int32(raw >> 20 & 0b1111_11111111)
 		case 7:
 			instr.Op = Csrrci
+			// Rs1 is zimm
+			// Imm is csr
+			instr.Imm = int32(raw >> 20 & 0b1111_11111111)
 
 		default:
 			return instr, fmt.Errorf("invalid SYSTEM: raw=%08x", raw)

@@ -7,6 +7,11 @@
 package cpu
 
 import (
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/mmu"
 )
 
@@ -80,7 +85,9 @@ const (
 //      cpu.TrapToMMode(interruptID)
 //  }
 
-func (cpu *CPU) LoadCSR(csr CSR) uint64 {
+var count int
+
+func (cpu *CPU) GetCSR(csr CSR) uint64 {
 	// Handle read-only CSRs here by returning the fixed or computed
 	// value.
 	switch csr {
@@ -101,7 +108,43 @@ func (cpu *CPU) LoadCSR(csr CSR) uint64 {
 		return 0
 
 	case CsrTime:
-		return cpu.Instret
+		now := cpu.Instret
+
+		// 1. Get the comparison value set by OpenSBI/Linux CLINT
+		// mtimecmp is typically at CLINTBase + 0x4000
+		// mtimecmp := cpu.GetMtimecmp() XXX
+		mtimecmp := cpu.LastTimer + 100
+		if mtimecmp < 100000000 {
+			mtimecmp = 100000000
+		}
+
+		if cpu.Mode == isa.ModeS && now >= mtimecmp &&
+			time.Now().Sub(cpu.StartTime) > time.Second*1 {
+
+			fmt.Printf("***** CsrTime: a0=%v, time=%v\n", cpu.X[isa.A0], now)
+			// cpu.DebugTrace = true
+			count++
+			if count > 5 {
+				os.Exit(1)
+			}
+			fmt.Printf("mip=%064b\nmie=%064b\n",
+				cpu.GetCSR(CsrMip),
+				cpu.GetCSR(CsrMie))
+
+			// 2. Set the "Timer Interrupt Pending" bit in mip
+			// Bit 7 is MTIP (Machine Timer Interrupt Pending)
+			// Bit 5 is STIP (Supervisor Timer Interrupt Pending)
+			mip := cpu.GetCSR(CsrMip)
+			cpu.SetCSR(CsrMip, mip|(1<<7)|(1<<5))
+
+			// 3. Optional: If you want to force an immediate trap you
+			// can trigger your handleTrap logic here if (status.MIE
+			// && mip.MTIP)
+			cpu.InterruptsPending = true
+			cpu.LastTimer = now
+		}
+
+		return now
 
 	case CsrMvendorid, CsrMarchid, CsrMimpid:
 		return 0
@@ -112,6 +155,18 @@ func (cpu *CPU) LoadCSR(csr CSR) uint64 {
 	case CsrScountinhibit:
 		return 0
 
+	case CsrSstatus:
+		mask := uint64(0x000de762)
+		return cpu.CSR[CsrMstatus] & mask
+
+	case CsrSie:
+		mask := uint64((1 << 1) | (1 << 5) | (1 << 9))
+		return cpu.CSR[CsrMie] & mask
+
+	case CsrSip:
+		mask := uint64((1 << 1) | (1 << 5) | (1 << 9))
+		return cpu.CSR[CsrMip] & mask
+
 	default:
 		if csr >= 0xb03 && csr <= 0xb1f {
 			// Mhpmcounters
@@ -121,15 +176,38 @@ func (cpu *CPU) LoadCSR(csr CSR) uint64 {
 	}
 }
 
-func (cpu *CPU) StoreCSR(csr CSR, v uint64) {
+func (cpu *CPU) SetCSR(csr CSR, v uint64) {
+	cpu.SetCSRX(csr, v, 0, isa.Instr{})
+}
+
+func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) {
 	// Handle read-only and functional CSRs here by ignoring update or
 	// by updating CPU state accordingly.
 	switch csr {
 	case CsrMisa:
 
+	case CsrSstatus:
+		mask := uint64(0x000de762) // S-mode visible bits of mstatus
+		cpu.CSR[CsrMstatus] = (cpu.CSR[CsrMstatus] & ^mask) | (v & mask)
+
+	case CsrSie:
+		// sie is a masked view of mie — only S-mode bits
+		mask := uint64((1 << 1) | (1 << 5) | (1 << 9))
+		mie := cpu.CSR[CsrMie]
+		cpu.CSR[CsrMie] = (mie & ^mask) | (v & mask)
+
+	case CsrSip:
+		// sip is a masked view of mip — only SSIP (bit 1) is writable by S-mode
+		mask := uint64(1 << 1)
+		mip := cpu.CSR[CsrMip]
+		cpu.CSR[CsrMip] = (mip & ^mask) | (v & mask)
+
 	case CsrSatp:
-		// XXX flush TLB?
-		cpu.MMU.Satp = mmu.Satp(v)
+		satp := mmu.Satp(v)
+		cpu.MMU.SetSatp(satp)
+		if cpu.Trace {
+			cpu.tracef(raw, instr, "Satp: %v", satp)
+		}
 
 	default:
 		cpu.CSR[csr] = v

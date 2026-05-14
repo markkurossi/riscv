@@ -50,13 +50,14 @@ var causes = map[uint64]string{
 }
 
 type Trap struct {
-	PC    uint64
-	Tval  uint64
-	Cause uint64
-	Err   error
+	Target PrivilegeMode
+	PC     uint64
+	Tval   uint64
+	Cause  uint64
+	Err    error
 }
 
-func NewTrap(pc, cause, tval uint64, err error) error {
+func NewTrap(target PrivilegeMode, pc, cause, tval uint64, err error) *Trap {
 	if false {
 		fmt.Printf("Trap: pc=%x, cause=%v, tval=%x, err=%v\n",
 			pc, cause, tval, err)
@@ -66,10 +67,11 @@ func NewTrap(pc, cause, tval uint64, err error) error {
 		}
 	}
 	return &Trap{
-		PC:    pc,
-		Tval:  tval,
-		Cause: cause,
-		Err:   err,
+		Target: target,
+		PC:     pc,
+		Tval:   tval,
+		Cause:  cause,
+		Err:    err,
 	}
 }
 

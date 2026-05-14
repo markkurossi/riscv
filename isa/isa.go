@@ -12,6 +12,30 @@ import (
 	"fmt"
 )
 
+type PrivilegeMode uint8
+
+const (
+	ModeU PrivilegeMode = iota
+	ModeS
+	ModeH
+	ModeM
+)
+
+var modes = map[PrivilegeMode]string{
+	ModeU: "U",
+	ModeS: "S",
+	ModeH: "H",
+	ModeM: "M",
+}
+
+func (m PrivilegeMode) String() string {
+	name, ok := modes[m]
+	if ok {
+		return name
+	}
+	return fmt.Sprintf("{PrivilegeMode %d}", int(m))
+}
+
 // Group defines instruction groups.
 type Group uint8
 

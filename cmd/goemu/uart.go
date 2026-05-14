@@ -36,7 +36,7 @@ func (uart *UART) Contains(paddr uint64) bool {
 
 func (uart *UART) Load8(paddr uint64) (uint8, error) {
 	if paddr < uart.Start {
-		return 0, isa.NewTrap(0, isa.CauseStorePageFault, paddr, nil)
+		return 0, isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
 	}
 	switch paddr - uart.Start {
 	case 5:
@@ -60,7 +60,7 @@ func (uart *UART) Load64(paddr uint64) (uint64, error) {
 
 func (uart *UART) Store8(paddr, v uint64) error {
 	if paddr < uart.Start {
-		return isa.NewTrap(0, isa.CauseStorePageFault, paddr, nil)
+		return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
 	}
 	switch paddr - uart.Start {
 	case 0:

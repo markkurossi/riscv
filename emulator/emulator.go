@@ -91,12 +91,12 @@ func New(params kernel.Params) (*Emulator, error) {
 	}
 
 	cpu := &cpu.CPU{
-		Mode: cpu.ModeU,
+		Mode: isa.ModeU,
 		MMU: &mmu.MMU{
-			Satp: satp,
-			Mem:  mem,
+			Mem: mem,
 		},
 	}
+	cpu.MMU.SetSatp(satp)
 	cpu.X[isa.Sp] = stackTop
 
 	emu := &Emulator{
@@ -263,7 +263,7 @@ func (emu *Emulator) load(file string) (*fileInfo, error) {
 			emu.Kernel.AddVMA(vaddr, end, prot, nil, 0)
 
 			// Load data into memory.
-			satp := emu.CPU.MMU.Satp
+			satp := emu.CPU.MMU.Satp()
 			for addr := vaddr; addr < end; addr += memory.PageSize {
 				page, err := emu.Mem.AllocPage()
 				if err != nil {
@@ -554,7 +554,7 @@ func (emu *Emulator) TrapHandler(acpu *cpu.CPU, trap *isa.Trap) (bool, error) {
 					copy(emu.Mem.RAM[emu.Mem.Offset(page<<12):], buf)
 				}
 
-				err = mmu.SetMapSv39(emu.Mem, emu.CPU.MMU.Satp, vpage, page,
+				err = mmu.SetMapSv39(emu.Mem, emu.CPU.MMU.Satp(), vpage, page,
 					vma.PageTableFlags())
 				if err != nil {
 					return false, err

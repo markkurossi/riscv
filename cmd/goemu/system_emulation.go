@@ -21,7 +21,7 @@ import (
 const (
 	OfsBIOS   = 0x8000_0000
 	OfsKernel = 0x8020_0000
-	OfsDTB    = 0x8400_0000
+	OfsDTB    = 0x8220_0000
 	OfsInitrd = 0x8800_0000
 
 	UARTBase = 0x10000000
@@ -56,11 +56,10 @@ func systemEmulation(params kernel.Params, bios, kernel string) error {
 
 	core := &cpu.CPU{
 		Trace: params.CPUtrace,
-		Mode:  cpu.ModeM,
+		Mode:  isa.ModeM,
 		MMU: &mmu.MMU{
-			Satp: mmu.SatpModeBare,
-			Mem:  mem,
-			ROM:  rom,
+			Mem: mem,
+			ROM: rom,
 		},
 	}
 	data, err := os.ReadFile(bios)
@@ -114,19 +113,34 @@ func (rom *ROM) Load8(paddr uint64) (uint8, error) {
 			return seg.Load8(paddr)
 		}
 	}
-	return 0, isa.NewTrap(0, isa.CauseLoadPageFault, paddr, nil)
+	return 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, paddr, nil)
 }
 
 func (rom *ROM) Load16(paddr uint64) (uint16, error) {
-	return 0, nil
+	for _, seg := range rom.Segments {
+		if seg.Contains(paddr) {
+			return seg.Load16(paddr)
+		}
+	}
+	return 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, paddr, nil)
 }
 
 func (rom *ROM) Load32(paddr uint64) (uint32, error) {
-	return 0, nil
+	for _, seg := range rom.Segments {
+		if seg.Contains(paddr) {
+			return seg.Load32(paddr)
+		}
+	}
+	return 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, paddr, nil)
 }
 
 func (rom *ROM) Load64(paddr uint64) (uint64, error) {
-	return 0, nil
+	for _, seg := range rom.Segments {
+		if seg.Contains(paddr) {
+			return seg.Load64(paddr)
+		}
+	}
+	return 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, paddr, nil)
 }
 
 func (rom *ROM) Store8(paddr, v uint64) error {
@@ -135,7 +149,7 @@ func (rom *ROM) Store8(paddr, v uint64) error {
 			return seg.Store8(paddr, v)
 		}
 	}
-	return isa.NewTrap(0, isa.CauseStorePageFault, paddr, nil)
+	return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
 }
 
 func (rom *ROM) Store16(paddr, v uint64) error {
@@ -144,7 +158,7 @@ func (rom *ROM) Store16(paddr, v uint64) error {
 			return seg.Store16(paddr, v)
 		}
 	}
-	return isa.NewTrap(0, isa.CauseStorePageFault, paddr, nil)
+	return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
 }
 
 func (rom *ROM) Store32(paddr, v uint64) error {
@@ -153,7 +167,7 @@ func (rom *ROM) Store32(paddr, v uint64) error {
 			return seg.Store32(paddr, v)
 		}
 	}
-	return isa.NewTrap(0, isa.CauseStorePageFault, paddr, nil)
+	return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
 }
 
 func (rom *ROM) Store64(paddr, v uint64) error {
@@ -162,45 +176,55 @@ func (rom *ROM) Store64(paddr, v uint64) error {
 			return seg.Store64(paddr, v)
 		}
 	}
-	return isa.NewTrap(0, isa.CauseStorePageFault, paddr, nil)
+	return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
 }
 
 func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 	bool, error) {
 
-	fmt.Printf("goemu: mode: %v, trap: %v\n", core.Mode, trap)
-	switch trap.Cause {
-	case isa.CauseBreakpoint:
+	if trap.Cause>>63 != 0 {
 		var tvec uint64
 
 		switch core.Mode {
-		case cpu.ModeS:
-			tvec = core.LoadCSR(cpu.CsrStvec)
-		case cpu.ModeM:
-			tvec = core.LoadCSR(cpu.CsrMtvec)
+		case isa.ModeS:
+			tvec = core.GetCSR(cpu.CsrStvec)
+		case isa.ModeM:
+			tvec = core.GetCSR(cpu.CsrMtvec)
 		}
 
 		if tvec == 0 {
 			return false, fmt.Errorf("unhandled %v mode trap %w",
 				core.Mode, trap)
 		}
-		core.PC = tvec
+		fmt.Printf("Interrupt: sp=%x, tp=%x, sscratch=%x, tvec=%x\n",
+			core.X[isa.Sp], core.X[isa.Tp], core.GetCSR(0x140), tvec)
+
+		mode := tvec & 0x3
+		base := tvec & ^uint64(0x3)
+
+		if mode == 1 && (trap.Cause&(1<<63) != 0) { // Vectored Interrupt
+			fmt.Printf("Vectored Interrupt\n")
+			core.PC = base + (trap.Cause&0xff)*4
+		} else {
+			core.PC = base
+		}
 
 		return true, nil
 
-	case isa.CauseEcallM:
+	}
+	fmt.Printf("goemu: mode: %v, trap: %v\n", core.Mode, trap)
+
+	switch trap.Cause {
+	case isa.CauseBreakpoint:
 		var tvec uint64
 
-		fmt.Printf("goemu: stvec=%x, mtvec=%x\n",
-			core.LoadCSR(cpu.CsrStvec),
-			core.LoadCSR(cpu.CsrMtvec))
-
-		// Call higher mode, XXX check delegation
 		switch core.Mode {
-		case cpu.ModeS, cpu.ModeM:
-			tvec = core.LoadCSR(cpu.CsrStvec)
-		default:
+		case isa.ModeS:
+			tvec = core.GetCSR(cpu.CsrStvec)
+		case isa.ModeM:
+			tvec = core.GetCSR(cpu.CsrMtvec)
 		}
+
 		if tvec == 0 {
 			return false, fmt.Errorf("unhandled %v mode trap %w",
 				core.Mode, trap)
@@ -211,136 +235,38 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 
 	case isa.CauseEcallS:
 		var tvec uint64
-
-		fmt.Printf("goemu: stvec=%x, mtvec=%x\n",
-			core.LoadCSR(cpu.CsrStvec),
-			core.LoadCSR(cpu.CsrMtvec))
-
-		core.Mode = cpu.ModeM
-
-		// Call higher mode, XXX check delegation
-		switch core.Mode {
-		case cpu.ModeS:
-			tvec = core.LoadCSR(cpu.CsrStvec)
-		case cpu.ModeM:
-			tvec = core.LoadCSR(cpu.CsrMtvec)
+		switch trap.Target {
+		case isa.ModeS:
+			tvec = core.GetCSR(cpu.CsrStvec)
+		case isa.ModeM:
+			tvec = core.GetCSR(cpu.CsrMtvec)
 		default:
-		}
-		if tvec == 0 {
-			return false, fmt.Errorf("unhandled %v mode trap %w",
-				core.Mode, trap)
+			return false, fmt.Errorf("invalid target %v for trap %w",
+				trap.Target, trap)
 		}
 
-		// XXX kludge, need to rethink ecall CSR storing
-		core.StoreCSR(cpu.CsrMepc, trap.PC)
-		fmt.Printf("kludge: %x\n", trap.PC)
+		fmt.Printf("goemu: target=%v tvec=%x\n", trap.Target, tvec)
 
+		core.Mode = trap.Target
 		core.PC = tvec
 
+		return true, nil
+
+	case isa.CauseLoadPageFault, isa.CauseStorePageFault:
+		fmt.Printf("page fault: scause=%v, sepc=%x\n",
+			core.GetCSR(cpu.CsrScause),
+			core.GetCSR(cpu.CsrSepc))
+		core.Mode = isa.ModeS
+		core.PC = core.GetCSR(cpu.CsrStvec)
 		return true, nil
 	}
 
 	return false, nil
 }
 
-func makeDTBOld() []byte {
-	// 1. Initialize the FDT builder with a buffer
-	buf := make([]byte, 4096)
-	fdt := gofdt.NewFDT(buf)
-
-	// 2. Start Root Node
-	fdt.BeginNode("")
-	// Basic system properties
-	fdt.PropStr("model", "goemu,riscv-emulator")
-	fdt.PropStr("compatible", "riscv-virtio")
-	fdt.PropU32("#address-cells", 2) // 64-bit addresses (2x32-bit)
-	fdt.PropU32("#size-cells", 2)    // 64-bit sizes
-
-	// 3. CPU Topology
-	fdt.BeginNode("cpus")
-	fdt.PropU32("#address-cells", 1)
-	fdt.PropU32("#size-cells", 0)
-	fdt.PropU32("timebase-frequency", 10000000) // 10MHz standard
-
-	fdt.BeginNode("cpu@0")
-	fdt.PropStr("device_type", "cpu")
-	fdt.PropU32("reg", 0)
-	fdt.PropStr("status", "okay")
-	fdt.PropStr("compatible", "riscv")
-	fdt.PropStr("riscv,isa", "rv64imafdc")
-	fdt.PropStr("mmu-type", "riscv,sv39")
-
-	// CPU Interrupt Controller (required for S-Mode)
-	fdt.BeginNode("interrupt-controller")
-	fdt.PropU32("#interrupt-cells", 1)
-	fdt.Prop("interrupt-controller", nil, 0)
-	fdt.PropStr("compatible", "riscv,cpu-intc")
-	fdt.PropU32("phandle", 1) // Reference handle for PLIC
-	fdt.EndNode()
-
-	fdt.EndNode() // cpu@0
-	fdt.EndNode() // cpus
-
-	// 4. System Memory (RAM)
-	// Assuming RAM starts at 0x80000000 and is 512MB
-	fdt.BeginNodeNum("memory", memory.RAMBase)
-	fdt.PropStr("device_type", "memory")
-	// reg is [address_high, address_low, size_high, size_low]
-	tab := [4]uint32{
-		uint32(memory.RAMBase) >> 32, uint32(memory.RAMBase),
-		0x0, 0x20000000,
-	}
-	fdt.PropTabU32("reg", &tab[0], 4)
-	fdt.EndNode() // memory
-
-	// 5. CLINT (Timer and IPI)
-	// Standard address for QEMU virt is 0x2000000
-	fdt.BeginNodeNum("clint", CLINTBase)
-	fdt.PropStr("compatible", "riscv,clint0")
-	tab = [4]uint32{
-		uint32(CLINTBase) >> 32, uint32(CLINTBase),
-		uint32(CLINTSize) >> 32, uint32(CLINTSize),
-	}
-	fdt.PropTabU32("reg", &tab[0], 4)
-	// Link it to the CPUs
-	tab = [4]uint32{
-		1, 3, // Hart 0 M-Software
-		1, 7, // Hart 0 M-Timer
-	}
-	fdt.PropTabU32("interrupts-extended", &tab[0], 4)
-	fdt.EndNode() // clint
-
-	// 6. Peripherals (UART 16550A)
-	fdt.BeginNodeNum("uart", UARTBase)
-	fdt.PropStr("compatible", "ns16550a")
-	tab = [4]uint32{
-		uint32(UARTBase) >> 32, uint32(UARTBase),
-		uint32(UARTSize) >> 32, uint32(UARTSize),
-	}
-	fdt.PropTabU32("reg", &tab[0], 4)
-	fdt.PropU32("clock-frequency", 3686400)
-	fdt.PropU32("interrupt-parent", 1) // Link to CPU INTC phandle
-	fdt.PropU32("interrupts", 10)
-	fdt.EndNode() // uart
-
-	// 7. Chosen node (Boot arguments)
-	fdt.BeginNode("chosen")
-	// Tells Linux to use the UART for its console
-	fdt.PropStr("bootargs", "console=ttyS0 earlycon=uart8250,mmio,0x10000000")
-	fdt.PropStr("stdout-path", "/uart@10000000")
-	fdt.EndNode() // chosen
-
-	fdt.EndNode() // End Root
-
-	// 7. Finish and get binary blob
-	size := fdt.Output()
-
-	return buf[:size]
-}
-
 func makeDTB() []byte {
 	// Initialize FDT buffer
-	buf := make([]byte, 4096)
+	buf := make([]byte, 65536)
 	fdt := gofdt.NewFDT(buf)
 
 	// ---------------------------------------------------------------------
@@ -491,8 +417,8 @@ func makeDTB() []byte {
 	//  9 = supervisor external interrupt
 	//
 	tab = [8]uint32{
-		1, 11,
-		1, 9,
+		1, 0xffffffff, // hart 0 M-mode context (use 0xffffffff = not connected)
+		1, 9, // hart 0 S-mode supervisor external interrupt
 	}
 
 	fdt.PropTabU32("interrupts-extended", &tab[0], 4)
@@ -517,13 +443,15 @@ func makeDTB() []byte {
 
 	fdt.PropTabU32("reg", &tab[0], 4)
 
-	fdt.PropU32("clock-frequency", 3686400)
+	tab = [8]uint32{24000000}
+	fdt.PropTabU32("clock-frequency", &tab[0], 1)
+
+	fdt.PropU32("reg-shift", 0)
+	fdt.PropU32("reg-io-width", 1)
 
 	// UART interrupt comes from PLIC
-	fdt.PropU32("interrupt-parent", 2)
-
-	// PLIC interrupt source ID
-	fdt.PropU32("interrupts", 10)
+	tab = [8]uint32{2, 10} // phandle=2 (PLIC), irq source=10
+	fdt.PropTabU32("interrupts-extended", &tab[0], 2)
 
 	fdt.EndNode() // uart
 
@@ -535,13 +463,11 @@ func makeDTB() []byte {
 
 	fdt.PropStr(
 		"bootargs",
-		"console=ttyS0 earlycon=sbi",
+		//"console=ttyS0,115200 earlycon=uart8250,mmio,0x10000000,115200 keep_bootcon lpj=1000000",
+		"lpj=1000000 earlycon=sbi console=ttyS0,115200",
 	)
 
-	fdt.PropStr(
-		"stdout-path",
-		"/uart@10000000",
-	)
+	fdt.PropStr("stdout-path", "/uart@10000000:115200n8")
 
 	fdt.EndNode() // chosen
 
@@ -554,5 +480,9 @@ func makeDTB() []byte {
 	// Generate final DTB
 	size := fdt.Output()
 
-	return buf[:size]
+	dtb := buf[:size]
+
+	os.WriteFile("goemu.dtb", dtb, 0644)
+
+	return dtb
 }

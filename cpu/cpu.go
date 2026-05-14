@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
+	"time"
 
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/memory"
@@ -22,30 +23,6 @@ import (
 var (
 	bo = binary.LittleEndian
 )
-
-type Mode uint8
-
-const (
-	ModeU Mode = iota
-	ModeS
-	ModeH
-	ModeM
-)
-
-var modes = map[Mode]string{
-	ModeU: "U",
-	ModeS: "S",
-	ModeH: "H",
-	ModeM: "M",
-}
-
-func (m Mode) String() string {
-	name, ok := modes[m]
-	if ok {
-		return name
-	}
-	return fmt.Sprintf("{Mode %d}", int(m))
-}
 
 type TrapHandler func(cpu *CPU, trap *isa.Trap) (bool, error)
 
@@ -57,7 +34,9 @@ type CPU struct {
 	X [32]uint64
 	F [32]float64
 
-	Mode Mode
+	Mode              isa.PrivilegeMode
+	InterruptsPending bool
+	LastTimer         uint64
 
 	CSR [4096]uint64
 
@@ -76,44 +55,34 @@ type CPU struct {
 	TrapHandler TrapHandler
 
 	lastDescOp isa.Op
+	StartTime  time.Time
 }
 
 func (cpu *CPU) Run() error {
+	cpu.StartTime = time.Now()
+
 	for {
 		err := cpu.loop()
 		if err != nil {
 			if trap, ok := errors.AsType[*isa.Trap](err); ok {
-				trap.PC = cpu.PC
+				if trap.Target == 0 {
+					medeleg := cpu.GetCSR(CsrMedeleg)
+					delegated := medeleg&(1<<trap.Cause) != 0
 
-				// XXX: rethink the CSR storing:
-				// - create CPU.Trap() that saves things accordingly
-				// - fix ecall/ebreak to change state as needed so
-				// that CPU.Trap() does the right thing
-				// - if we are here with trap.PC == nil, store state
-				// so that it matches MMU's page faults - MMU does not
-				// have PC so save it here.
-				//
-				// - Save Mode: The current mode (1 for S) is saved
-				// into mstatus.MPP (Machine Previous Privilege).
-				//
-				// - Save Interrupt State: The current mstatus.MIE
-				// (Interrupt Enable) is saved into mstatus.MPIE, and
-				// then MIE is set to 0 (disabling interrupts).
+					if false {
+						fmt.Printf("%8x: cause=%v, mode=%v, medeleg=%v[%v]\n",
+							cpu.PC, trap.Cause, cpu.Mode, medeleg, delegated)
+					}
 
-				switch cpu.Mode {
-				case ModeS, ModeU:
-					cpu.StoreCSR(CsrSepc, trap.PC)
-					cpu.StoreCSR(CsrScause, trap.Cause)
-					cpu.StoreCSR(CsrStvec, trap.Tval)
+					var target isa.PrivilegeMode
 
-				case ModeM:
-					cpu.StoreCSR(CsrMepc, trap.PC)
-					cpu.StoreCSR(CsrMcause, trap.Cause)
-					cpu.StoreCSR(CsrMtvec, trap.Tval)
+					if delegated && cpu.Mode <= isa.ModeS {
+						target = isa.ModeS
+					} else {
+						target = isa.ModeM
+					}
 
-				default:
-					return fmt.Errorf("unhandled %v mode trap %w",
-						cpu.Mode, err)
+					trap = cpu.Trap(target, trap.Cause, trap.Tval, trap.Err)
 				}
 				err = cpu.HandleTrap(trap)
 			}
@@ -127,7 +96,7 @@ func (cpu *CPU) Run() error {
 
 func (cpu *CPU) loop() error {
 	if cpu.PC%2 == 1 {
-		return isa.NewTrap(cpu.PC, isa.CauseInstAddrMisaligned, cpu.PC, nil)
+		return isa.NewTrap(0, cpu.PC, isa.CauseInstAddrMisaligned, cpu.PC, nil)
 	}
 
 	var codePagenum uint64
@@ -139,6 +108,40 @@ func (cpu *CPU) loop() error {
 		var size int
 
 		cpu.X[isa.Zero] = 0
+
+		// Check interrupts every 64 instructions.
+		if cpu.Instret&0x3f == 0 {
+			mip := cpu.GetCSR(CsrMip)
+			mie := cpu.GetCSR(CsrMie)
+			pending := mip & mie
+
+			if pending != 0 {
+				mstatus := cpu.GetCSR(CsrMstatus)
+				mideleg := cpu.GetCSR(CsrMideleg)
+
+				// Check each pending interrupt, highest priority first
+				for _, bit := range []uint64{11, 9, 7, 5, 3, 1} {
+					if pending&(1<<bit) == 0 {
+						continue
+					}
+					if mideleg&(1<<bit) != 0 && cpu.Mode != isa.ModeM {
+						// Delegated to S-mode
+						sie := (mstatus >> 1) & 1 // sstatus.SIE = mstatus bit 1
+						if sie == 1 || cpu.Mode < isa.ModeS {
+							cause := 1<<63 | bit
+							return cpu.Trap(isa.ModeS, cause, 0, nil)
+						}
+					} else {
+						// Handle in M-mode
+						mie_bit := (mstatus >> 3) & 1 // mstatus.MIE
+						if mie_bit == 1 || cpu.Mode < isa.ModeM {
+							cause := 1<<63 | bit
+							return cpu.Trap(isa.ModeM, cause, 0, nil)
+						}
+					}
+				}
+			}
+		}
 
 		if memory.Page(cpu.PC) != codePagenum {
 			paddr, err := cpu.MMU.Map(cpu.PC, mmu.AccessExec)
@@ -192,7 +195,8 @@ func (cpu *CPU) loop() error {
 			instr = isa.DecodeCFast(uint16(raw))
 		}
 		if err != nil {
-			return isa.NewTrap(cpu.PC, isa.CauseIllegalInstr, uint64(raw), err)
+			return isa.NewTrap(0, cpu.PC, isa.CauseIllegalInstr, uint64(raw),
+				err)
 		}
 		cpu.Instret++
 
@@ -296,69 +300,87 @@ func (cpu *CPU) loop() error {
 			}
 
 		case isa.Ebreak:
-			// XXX mie, mpie, mpp
-			var tval uint64
-			switch cpu.Mode {
-			case ModeS:
-				tval = cpu.LoadCSR(CsrStvec)
-			case ModeM:
-				tval = cpu.LoadCSR(CsrMtvec)
-			}
-
 			if cpu.Trace {
-				cpu.tracef(raw, instr, "tval=%x", tval)
+				cpu.tracef(raw, instr, "")
 			}
 
-			return isa.NewTrap(cpu.PC, isa.CauseBreakpoint, tval, nil)
+			// XXX This is determined by the medeleg (Machine
+			// Exception Delegation) register.
+			//
+			//  - If medeleg[3] (Breakpoint bit) is 1: Trap to S-mode.
+			//  - If medeleg[3] is 0: Trap to M-mode.
+
+			return cpu.Trap(isa.ModeM, isa.CauseBreakpoint, 0, nil)
 
 		case isa.Sret:
-			// The sret semantics:
-			//
-			// 	 PC           ← sepc
-			// 	 privilege    ← sstatus.SPP
-			// 	 sstatus.SIE  ← sstatus.SPIE
-			// 	 sstatus.SPIE ← 1
-			// 	 sstatus.SPP  ← U (0)
-
+			status := cpu.GetCSR(CsrSstatus)
+			// privilege ← SPP (bit 8)
+			spp := (status >> 8) & 1
+			cpu.Mode = isa.PrivilegeMode(spp)
+			// SIE ← SPIE (bit 5)
+			spie := (status >> 5) & 1
+			status = (status & ^uint64(1<<1)) | (spie << 1)
+			// SPIE ← 1
+			status |= (1 << 5)
+			// SPP ← U (0)
+			status &= ^uint64(1 << 8)
+			cpu.SetCSR(CsrSstatus, status)
+			cpu.PC = cpu.GetCSR(CsrSepc)
 			if cpu.Trace {
-				cpu.tracef(raw, instr, "sepc=%x", cpu.LoadCSR(CsrSepc))
+				cpu.tracef(raw, instr, "sepc=%x", cpu.PC)
 			}
-			cpu.PC = cpu.LoadCSR(CsrSepc)
+			continue
 
 		case isa.Mret:
-			// The mret semantics:
-			//
-			// 	 PC           ← mepc
-			// 	 privilege    ← mstatus.MPP
-			// 	 mstatus.MIE  ← mstatus.MPIE
-			// 	 mstatus.MPIE ← 1
-			// 	 mstatus.MPP  ← U (0)
+			mstatus := cpu.GetCSR(CsrMstatus)
+
+			// 1. Restore Mode from MPP
+			mpp := (mstatus >> 11) & 0x3
+			cpu.Mode = isa.PrivilegeMode(mpp)
+
+			// 2. Restore Interrupts: MIE = MPIE
+			mpie := (mstatus >> 7) & 0x1
+			mstatus = (mstatus & ^uint64(1<<3)) | (mpie << 3)
+
+			// 3. Set MPIE to 1 and MPP to 0 (Standard RISC-V behavior)
+			mstatus |= (1 << 7)
+			mstatus &= ^uint64(0x1800)
+
+			// 4. Finalize Jump
+			cpu.SetCSR(CsrMstatus, mstatus)
+			cpu.PC = cpu.GetCSR(CsrMepc)
 
 			if cpu.Trace {
-				cpu.tracef(raw, instr, "mepc=%x", cpu.LoadCSR(CsrMepc))
-			}
-			cpu.Mode = ModeS
-
-			cpu.PC = cpu.LoadCSR(CsrMepc)
-			if cpu.PC == 0 && false {
-				cpu.PC = 0x8021cbd0 + 4
+				cpu.tracef(raw, instr, "mepc=%x", cpu.PC)
+				cpu.Dump(cpu.PC)
 			}
 			continue
 
 		case isa.Ecall:
 			var cause uint64
+			var target isa.PrivilegeMode
 			switch cpu.Mode {
-			case ModeU:
+			case isa.ModeU:
 				cause = isa.CauseEcallU
-			case ModeS:
+				target = isa.ModeS
+			case isa.ModeS:
 				cause = isa.CauseEcallS
-			case ModeM:
+				target = isa.ModeM
+			case isa.ModeM:
 				cause = isa.CauseEcallM
+				target = isa.ModeM
 			default:
-				return isa.NewTrap(cpu.PC, isa.CauseIllegalInstr, 0,
+				return isa.NewTrap(0, cpu.PC, isa.CauseIllegalInstr, 0,
 					fmt.Errorf("ecall in %v-mode", cpu.Mode))
 			}
-			return isa.NewTrap(cpu.PC, cause, 0, nil)
+			if cpu.Trace {
+				cpu.tracef(raw, instr,
+					"mode=%v, target=%v, cause=%v, a7=%x, a6=%x, a0=%x, a1=%x",
+					cpu.Mode, target, cause, cpu.X[isa.A7], cpu.X[isa.A6],
+					cpu.X[isa.A0], cpu.X[isa.A1])
+			}
+
+			return cpu.Trap(target, cause, 0, nil)
 
 		case isa.Fld:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
@@ -393,9 +415,10 @@ func (cpu *CPU) loop() error {
 			}
 
 		case isa.Fence:
+			// XXX fence
 
 		case isa.SfenceVMA:
-			// XXX Clear mmu.TLB
+			cpu.MMU.FlushTLB()
 
 		case isa.FeqS:
 			b1 := math.Float64bits(cpu.F[instr.Rs1])
@@ -674,35 +697,45 @@ func (cpu *CPU) loop() error {
 			// Control and Status Registers (CSRs).
 		case isa.Csrrs:
 			csr := CSR(instr.Imm)
-			t := cpu.LoadCSR(csr)
+			t := cpu.GetCSR(csr)
 			if instr.Rs1 != isa.Zero {
-				cpu.StoreCSR(csr, t|cpu.X[instr.Rs1])
+				cpu.SetCSRX(csr, t|cpu.X[instr.Rs1], raw, instr)
 			}
 			cpu.X[instr.Rd] = t
 
 		case isa.Csrrc:
 			csr := CSR(instr.Imm)
-			t := cpu.LoadCSR(csr)
+			t := cpu.GetCSR(csr)
 			if instr.Rs1 != isa.Zero {
-				cpu.StoreCSR(csr, t & ^cpu.X[instr.Rs1])
+				cpu.SetCSRX(csr, t & ^cpu.X[instr.Rs1], raw, instr)
+			}
+			cpu.X[instr.Rd] = t
+
+		case isa.Csrrci:
+			csr := CSR(instr.Imm)
+			t := cpu.GetCSR(csr)
+			if instr.Rs1 != isa.Zero {
+				cpu.SetCSRX(csr, t & ^uint64(instr.Rs1), raw, instr)
 			}
 			cpu.X[instr.Rd] = t
 
 		case isa.Csrrsi:
 			csr := CSR(instr.Imm)
-			t := cpu.LoadCSR(csr)
-			cpu.StoreCSR(csr, t|uint64(instr.Rs1))
+			t := cpu.GetCSR(csr)
+			cpu.SetCSRX(csr, t|uint64(instr.Rs1), raw, instr)
 			cpu.X[instr.Rd] = t
 
 		case isa.Csrrw:
 			csr := CSR(instr.Imm)
-			t := cpu.LoadCSR(csr)
-			cpu.StoreCSR(csr, cpu.X[instr.Rs1])
-			cpu.X[instr.Rd] = t
+			oldCSR := cpu.GetCSR(csr)    // 1. Capture old CSR value
+			valToSet := cpu.X[instr.Rs1] // 2. Capture value from GPR
+
+			cpu.SetCSRX(csr, valToSet, raw, instr) // 3. Update CSR
+			cpu.X[instr.Rd] = oldCSR               // 4. Update GPR with old CSR
 
 		case isa.Csrrwi:
 			csr := CSR(instr.Imm)
-			cpu.StoreCSR(csr, uint64(instr.Rs1))
+			cpu.SetCSRX(csr, uint64(instr.Rs1), raw, instr)
 
 			// Atomic (A extension).
 
@@ -722,8 +755,8 @@ func (cpu *CPU) loop() error {
 			addr := cpu.X[instr.Rs1]
 
 			if addr%4 != 0 {
-				return isa.NewTrap(cpu.PC, isa.CauseStoreAddrMisaligned, addr,
-					nil)
+				return isa.NewTrap(0, cpu.PC, isa.CauseStoreAddrMisaligned,
+					addr, nil)
 			}
 
 			v, err := cpu.MMU.Load32(addr)
@@ -762,6 +795,19 @@ func (cpu *CPU) loop() error {
 			}
 			cpu.X[instr.Rd] = uint64(int64(int32(v)))
 
+		case isa.AmoandD:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.MMU.Load64(addr)
+			if err != nil {
+				return err
+			}
+			t := v & cpu.X[instr.Rs2]
+			err = cpu.MMU.Store64(addr, t)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = v
+
 		case isa.AmoandW:
 			addr := cpu.X[instr.Rs1]
 			v, err := cpu.MMU.Load32(addr)
@@ -774,6 +820,19 @@ func (cpu *CPU) loop() error {
 				return err
 			}
 			cpu.X[instr.Rd] = uint64(int64(int32(v)))
+
+		case isa.AmoorD:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.MMU.Load64(addr)
+			if err != nil {
+				return err
+			}
+			t := v | cpu.X[instr.Rs2]
+			err = cpu.MMU.Store64(addr, t)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = v
 
 		case isa.AmoorW:
 			addr := cpu.X[instr.Rs1]
@@ -876,7 +935,7 @@ func (cpu *CPU) loop() error {
 			cpu.X[instr.Rd] = uint64(uint32(cpu.F[instr.Rs1]))
 
 		default:
-			return isa.NewTrap(cpu.PC, isa.CauseIllegalInstr, uint64(raw),
+			return isa.NewTrap(0, cpu.PC, isa.CauseIllegalInstr, uint64(raw),
 				fmt.Errorf("instruction %v[0x%x] not implemented yet",
 					instr, raw))
 		}

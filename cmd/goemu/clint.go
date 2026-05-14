@@ -23,7 +23,7 @@ func (clint *CLINT) Contains(paddr uint64) bool {
 
 func (clint *CLINT) Load8(paddr uint64) (uint8, error) {
 	if paddr < clint.Start {
-		return 0, isa.NewTrap(0, isa.CauseStorePageFault, paddr, nil)
+		return 0, isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
 	}
 	return 0, nil
 }
@@ -42,7 +42,7 @@ func (clint *CLINT) Load64(paddr uint64) (uint64, error) {
 
 func (clint *CLINT) Store8(paddr, v uint64) error {
 	if paddr < clint.Start {
-		return isa.NewTrap(0, isa.CauseStorePageFault, paddr, nil)
+		return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
 	}
 	fmt.Printf("CLINT: 0x%x = 0x%x\n", paddr, v)
 	return nil

@@ -7,10 +7,58 @@
 package cpu
 
 import (
+	"encoding/hex"
 	"fmt"
 
 	"github.com/markkurossi/riscv/isa"
 )
+
+func (cpu *CPU) Trap(target isa.PrivilegeMode, cause, tval uint64,
+	err error) *isa.Trap {
+
+	switch target {
+	case isa.ModeM:
+		// 1. Get current mstatus
+		mstatus := cpu.GetCSR(CsrMstatus)
+
+		// 2. Save Current Mode (S=1) into MPP (bits 11-12)
+		mstatus = (mstatus & ^uint64(0x1800)) | (uint64(cpu.Mode) << 11)
+
+		// 3. Save MIE into MPIE, then disable MIE
+		mie := (mstatus >> 3) & 0x1
+		mstatus = (mstatus & ^uint64(1<<7)) | (mie << 7) // MPIE = MIE
+		mstatus = (mstatus & ^uint64(1<<3))              // MIE = 0
+
+		// 4. Update CSR and CPU state
+		cpu.SetCSR(CsrMstatus, mstatus)
+		cpu.SetCSR(CsrMepc, cpu.PC)
+		cpu.SetCSR(CsrMcause, cause)
+		cpu.SetCSR(CsrMtval, tval)
+
+		return isa.NewTrap(target, cpu.PC, cause, tval, err)
+
+	case isa.ModeS:
+		status := cpu.GetCSR(CsrSstatus)
+		// SPP is bit 8, not 11-12
+		status = (status & ^uint64(1<<8)) | (uint64(cpu.Mode&1) << 8)
+		// SPIE is bit 5, SIE is bit 1
+		sie := (status >> 1) & 1
+		status = (status & ^uint64(1<<5)) | (sie << 5)
+		status &= ^uint64(1 << 1) // Disable SIE
+
+		// 4. Update CSR and CPU state
+		cpu.SetCSR(CsrSstatus, status)
+		cpu.SetCSR(CsrSepc, cpu.PC)
+		cpu.SetCSR(CsrScause, cause)
+		cpu.SetCSR(CsrStval, tval)
+
+		return isa.NewTrap(target, cpu.PC, cause, tval, err)
+
+	default:
+		return isa.NewTrap(isa.ModeM, cpu.PC, isa.CauseBreakpoint, 0,
+			fmt.Errorf("unexpected target mode %v", target))
+	}
+}
 
 func (cpu *CPU) HandleTrap(trap *isa.Trap) error {
 	if cpu.TrapHandler != nil {
@@ -56,4 +104,14 @@ func (cpu *CPU) Dump(epc uint64) {
 		cpu.X[isa.S11], cpu.X[isa.T3], cpu.X[isa.T4])
 	fmt.Printf(" t5 : %016x t6 : %016x\n",
 		cpu.X[isa.T5], cpu.X[isa.T6])
+
+	fmt.Printf("Satp: mode=%v, page=%x\n",
+		cpu.MMU.Satp().Mode(), cpu.MMU.Satp().PPN())
+
+	page, err := cpu.MMU.Mem.Page(uint64(cpu.MMU.Satp().PPN()))
+	if err != nil {
+		fmt.Printf("Page table root not found: %v\n", err)
+	} else if false {
+		fmt.Printf("Page table root:\n%s", hex.Dump(page))
+	}
 }
