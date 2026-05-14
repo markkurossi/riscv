@@ -6,6 +6,18 @@ A RISC-V emulator written in Go. The goal is to implement the RV64GC
 (64-bit, general-purpose, compressed) profile, with support for running
 Linux applications and, eventually, the Linux operating system.
 
+TODO:
+
+ - [x] Verify DTB (dtbtool etc.)
+   - [x] CPU.Dump() at mret: is dtb passed to Linux?
+   - [x] Check DTB format with dtbtool
+ - [ ] Walk page table and check what is at pc=ffffffff80026824
+   - [ ] Check Linux sources
+ - [ ] Draw architecture diagram of traps
+ - [ ] Study interrupts
+ - [ ] Interrupt check in loop
+ - [ ] Create CLINT device in CPU and fix ROM to write to right fields
+
 ## MMU Refactoring
 
  - [x] Fix page table MMU code to run the existing samples
@@ -68,6 +80,12 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 | Optimized Instr struct |  0.385 |  4.022 | 0m44.167s | 159.65 |    0.124 |
 
 # Appendix
+
+## Device Tree
+
+``` shell
+$ dtc -I dtb -O dts -o source.dts goemu.dtb
+```
 
 ## Emulator Example
 
