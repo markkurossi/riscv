@@ -39,3 +39,5 @@ ENV RISCV_LINUX_FLAGS="-march=rv64gc -mabi=lp64d -O2"
 RUN riscv64-unknown-elf-gcc --version && \
     riscv64-linux-gnu-gcc --version && \
     qemu-riscv64 --version
+
+RUN apt-get install -y device-tree-compiler
