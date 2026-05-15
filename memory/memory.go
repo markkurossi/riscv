@@ -46,15 +46,15 @@ type Memory struct {
 	nextPage int
 }
 
-func New(ramSize int) *Memory {
-	if ramSize&0xfff != 0 {
+func New(base, size uint64) *Memory {
+	if size&0xfff != 0 {
 		panic("memory size is not multiple of page size")
 	}
 
 	return &Memory{
-		RAM:      make([]byte, ramSize),
-		RAMBase:  RAMBase,
-		numPages: ramSize / PageSize,
+		RAM:      make([]byte, size),
+		RAMBase:  base,
+		numPages: int(size / PageSize),
 	}
 }
 

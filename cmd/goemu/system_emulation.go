@@ -35,7 +35,7 @@ const (
 )
 
 func systemEmulation(params kernel.Params, bios, kernel, symbols string) error {
-	mem := memory.New(0x20000000)
+	mem := memory.New(memory.RAMBase, 0x20000000)
 	rom := &ROM{
 		Segments: []mmu.ROM{
 			&UART{

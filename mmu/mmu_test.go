@@ -14,7 +14,7 @@ import (
 )
 
 func makeMem() (*memory.Memory, Satp, uint64) {
-	mem := memory.New(10 * memory.PageSize)
+	mem := memory.New(0, 10*memory.PageSize)
 
 	// Skip 0 page.
 	_, err := mem.AllocPage()

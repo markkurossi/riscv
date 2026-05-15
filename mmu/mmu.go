@@ -289,8 +289,8 @@ func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
 
 	addr, err := mmu.mapSlow(vaddr, vpn, access)
 	if err != nil {
-		if vaddr < memory.RAMBase ||
-			(memory.RAMBase <= vaddr && vaddr <= memory.RAMBase+0x20000000) {
+		if vaddr < mmu.Mem.RAMBase ||
+			(mmu.Mem.RAMBase <= vaddr && vaddr <= mmu.Mem.RAMBase+0x20000000) {
 			// XXX kludge???
 			return vaddr, nil
 		}
@@ -427,7 +427,7 @@ func (mmu *MMU) Load8(vaddr uint64) (uint8, error) {
 	if err != nil {
 		return 0, err
 	}
-	if paddr < memory.RAMBase {
+	if paddr < mmu.Mem.RAMBase {
 		return mmu.ROM.Load8(paddr)
 	}
 	return mmu.Mem.RAM[mmu.Mem.Offset(paddr)], nil
@@ -546,7 +546,7 @@ func (mmu *MMU) Store8(vaddr, v uint64) error {
 	if err != nil {
 		return err
 	}
-	if paddr < memory.RAMBase {
+	if paddr < mmu.Mem.RAMBase {
 		return mmu.ROM.Store8(vaddr, v)
 	}
 	mmu.Mem.RAM[mmu.Mem.Offset(paddr)] = byte(v)
