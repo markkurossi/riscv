@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
+	"os"
 	"time"
 
 	"github.com/markkurossi/riscv/isa"
@@ -22,6 +23,10 @@ import (
 
 var (
 	bo = binary.LittleEndian
+)
+
+const (
+	cpuDebug = false
 )
 
 type TrapHandler func(cpu *CPU, trap *isa.Trap) (bool, error)
@@ -53,9 +58,12 @@ type CPU struct {
 	MMU *mmu.MMU
 
 	TrapHandler TrapHandler
+	Symtab      Symtab
 
 	lastDescOp isa.Op
 	StartTime  time.Time
+	DebugTrace bool
+	LastSymbol *SymEntry
 }
 
 func (cpu *CPU) Run() error {
@@ -69,7 +77,7 @@ func (cpu *CPU) Run() error {
 					medeleg := cpu.GetCSR(CsrMedeleg)
 					delegated := medeleg&(1<<trap.Cause) != 0
 
-					if false {
+					if true {
 						fmt.Printf("%8x: cause=%v, mode=%v, medeleg=%v[%v]\n",
 							cpu.PC, trap.Cause, cpu.Mode, medeleg, delegated)
 					}
@@ -83,6 +91,9 @@ func (cpu *CPU) Run() error {
 					}
 
 					trap = cpu.Trap(target, trap.Cause, trap.Tval, trap.Err)
+					if cpu.Trace {
+						cpu.funcName(cpu.PC)
+					}
 				}
 				err = cpu.HandleTrap(trap)
 			}
@@ -200,8 +211,32 @@ func (cpu *CPU) loop() error {
 		}
 		cpu.Instret++
 
-		if false {
+		if cpuDebug || cpu.DebugTrace {
 			cpu.trace(raw, instr, "")
+		}
+		if (cpuDebug || cpu.DebugTrace) && cpu.Symtab != nil {
+			print := true
+			mapped := cpu.PC
+
+			// OpenSBI range: no kernel symbols here
+			if mapped >= 0x80000000 && mapped < 0x80200000 {
+				print = false
+			}
+			if mapped > 0x80200000 && mapped < 0x100000000 {
+				// Physical address during early boot (MMU off).
+				// Kernel is loaded at 0x80200000 physical = 0xffffffff80000000 virtual.
+				// delta = 0xffffffff80000000 - 0x80200000 = 0xffffffff7fe00000
+				mapped = mapped - 0x200000 + 0xffffffff00000000
+			}
+			entry := cpu.Symtab.Resolve(mapped)
+			if print && entry != nil && entry != cpu.LastSymbol {
+				fmt.Printf("%8x:  %s+0x%x\n",
+					cpu.PC, entry.Name, mapped-entry.Addr)
+				cpu.LastSymbol = entry
+			}
+			if print && entry.Name == "__delay" {
+				os.Exit(1)
+			}
 		}
 
 		switch instr.Op {
@@ -301,6 +336,7 @@ func (cpu *CPU) loop() error {
 
 		case isa.Ebreak:
 			if cpu.Trace {
+				cpu.funcName(cpu.PC)
 				cpu.tracef(raw, instr, "")
 			}
 
@@ -317,6 +353,8 @@ func (cpu *CPU) loop() error {
 			// privilege ← SPP (bit 8)
 			spp := (status >> 8) & 1
 			cpu.Mode = isa.PrivilegeMode(spp)
+			cpu.MMU.Mode = cpu.Mode
+
 			// SIE ← SPIE (bit 5)
 			spie := (status >> 5) & 1
 			status = (status & ^uint64(1<<1)) | (spie << 1)
@@ -337,6 +375,7 @@ func (cpu *CPU) loop() error {
 			// 1. Restore Mode from MPP
 			mpp := (mstatus >> 11) & 0x3
 			cpu.Mode = isa.PrivilegeMode(mpp)
+			cpu.MMU.Mode = cpu.Mode
 
 			// 2. Restore Interrupts: MIE = MPIE
 			mpie := (mstatus >> 7) & 0x1
@@ -346,14 +385,16 @@ func (cpu *CPU) loop() error {
 			mstatus |= (1 << 7)
 			mstatus &= ^uint64(0x1800)
 
+			if cpu.Trace {
+				cpu.funcName(cpu.PC)
+				cpu.tracef(raw, instr, "mepc=%x, mode=%v",
+					cpu.GetCSR(CsrMepc), cpu.Mode)
+			}
+
 			// 4. Finalize Jump
 			cpu.SetCSR(CsrMstatus, mstatus)
 			cpu.PC = cpu.GetCSR(CsrMepc)
 
-			if cpu.Trace {
-				cpu.tracef(raw, instr, "mepc=%x", cpu.PC)
-				cpu.Dump(cpu.PC)
-			}
 			continue
 
 		case isa.Ecall:
@@ -374,6 +415,7 @@ func (cpu *CPU) loop() error {
 					fmt.Errorf("ecall in %v-mode", cpu.Mode))
 			}
 			if cpu.Trace {
+				cpu.funcName(cpu.PC)
 				cpu.tracef(raw, instr,
 					"mode=%v, target=%v, cause=%v, a7=%x, a6=%x, a0=%x, a1=%x",
 					cpu.Mode, target, cause, cpu.X[isa.A7], cpu.X[isa.A6],
@@ -943,6 +985,30 @@ func (cpu *CPU) loop() error {
 	}
 }
 
+func (cpu *CPU) funcName(pc uint64) *SymEntry {
+	if cpu.Symtab == nil {
+		return nil
+	}
+	// OpenSBI range: no kernel symbols here
+	if pc >= 0x80000000 && pc < 0x80200000 {
+		return nil
+	}
+	mapped := pc
+	if pc > 0x80200000 && pc < 0x100000000 {
+		// Physical address during early boot (MMU off).
+		// Kernel is loaded at 0x80200000 physical = 0xffffffff80000000 virtual.
+		// delta = 0xffffffff80000000 - 0x80200000 = 0xffffffff7fe00000
+		mapped = pc - 0x200000 + 0xffffffff00000000
+		fmt.Printf(" - mapped=%x\n", mapped)
+	}
+	entry := cpu.Symtab.Resolve(mapped)
+	if entry == nil {
+		return nil
+	}
+	fmt.Printf("%8x:  %s+0x%x\n", pc, entry.Name, mapped-entry.Addr)
+	return entry
+}
+
 func (cpu *CPU) tracef(raw uint32, instr isa.Instr,
 	format string, args ...interface{}) {
 
@@ -964,10 +1030,10 @@ func (cpu *CPU) trace(raw uint32, instr isa.Instr, msg string) {
 		}
 	}
 	if len(msg) > 0 {
-		for len(line) < 47 {
+		for len(line) < 46 {
 			line += " "
 		}
-		line += fmt.Sprintf("# %s", msg)
+		line += fmt.Sprintf(" # %s", msg)
 	}
 	fmt.Println(line)
 

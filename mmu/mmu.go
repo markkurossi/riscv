@@ -48,6 +48,7 @@ type ROM interface {
 
 type MMU struct {
 	satp Satp
+	Mode isa.PrivilegeMode
 	Mem  *memory.Memory
 	ROM  ROM
 
@@ -193,11 +194,8 @@ func MakePTE(ppn uint64, flags PTEFlags) PTE {
 func (pte PTE) String() string {
 	var result string
 
-	reserved := pte >> 54
-	if reserved != 0 {
-		result = fmt.Sprintf("\u2205=%x,", reserved)
-	}
-	result += fmt.Sprintf("%03x/%03x/%03x,", pte.PPN2(), pte.PPN1(), pte.PPN0())
+	result += fmt.Sprintf("%011x/%03x/%03x,",
+		pte.PPN2(), pte.PPN1(), pte.PPN0())
 
 	result += fmt.Sprintf("%02b,", pte>>8&0b11)
 
@@ -230,7 +228,7 @@ func (pte PTE) Leaf() bool {
 }
 
 func (pte PTE) PPN() uint64 {
-	return uint64(pte >> 10)
+	return uint64(pte) >> 10
 }
 
 func (pte PTE) PPN0() uint64 {
@@ -242,7 +240,7 @@ func (pte PTE) PPN1() uint64 {
 }
 
 func (pte PTE) PPN2() uint64 {
-	return pte.PPN() >> 18 & 0x1FF
+	return pte.PPN() >> 18
 }
 
 // Virtual address:
@@ -275,6 +273,10 @@ func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
 	if mmu.satp.Mode() == SatpModeBare {
 		return vaddr, nil
 	}
+	if mmu.Mode == isa.ModeM {
+		fmt.Printf("Map in M-mode\n")
+		return vaddr, nil
+	}
 
 	vpn := vaddr >> 12
 	tlb := &mmu.TLB[vpn&0xfff]
@@ -285,7 +287,19 @@ func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
 		}
 	}
 
-	return mmu.mapSlow(vaddr, vpn, access)
+	addr, err := mmu.mapSlow(vaddr, vpn, access)
+	if err != nil {
+		if vaddr < memory.RAMBase ||
+			(memory.RAMBase <= vaddr && vaddr <= memory.RAMBase+0x20000000) {
+			// XXX kludge???
+			return vaddr, nil
+		}
+		return 0, err
+	}
+	if false {
+		fmt.Printf("%016x => %016x\n", vaddr, addr)
+	}
+	return addr, nil
 }
 
 func (mmu *MMU) mapSlow(vaddr, vpn uint64, access int) (uint64, error) {

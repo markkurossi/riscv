@@ -34,7 +34,7 @@ const (
 	PLICSize = 0x04000000
 )
 
-func systemEmulation(params kernel.Params, bios, kernel string) error {
+func systemEmulation(params kernel.Params, bios, kernel, symbols string) error {
 	mem := memory.New(0x20000000)
 	rom := &ROM{
 		Segments: []mmu.ROM{
@@ -62,6 +62,14 @@ func systemEmulation(params kernel.Params, bios, kernel string) error {
 			ROM: rom,
 		},
 	}
+	if len(symbols) > 0 {
+		sm, err := cpu.LoadSystemMap(symbols)
+		if err != nil {
+			return err
+		}
+		core.Symtab = sm
+	}
+
 	data, err := os.ReadFile(bios)
 	if err != nil {
 		return fmt.Errorf("failed to read bios: %w", err)
@@ -212,7 +220,7 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 		return true, nil
 
 	}
-	fmt.Printf("goemu: mode: %v, trap: %v\n", core.Mode, trap)
+	// fmt.Printf("goemu: mode: %v, trap: %v\n", core.Mode, trap)
 
 	switch trap.Cause {
 	case isa.CauseBreakpoint:
@@ -245,19 +253,45 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 				trap.Target, trap)
 		}
 
-		fmt.Printf("goemu: target=%v tvec=%x\n", trap.Target, tvec)
+		// fmt.Printf("goemu: target=%v tvec=%x\n", trap.Target, tvec)
 
 		core.Mode = trap.Target
 		core.PC = tvec
 
 		return true, nil
 
-	case isa.CauseLoadPageFault, isa.CauseStorePageFault:
-		fmt.Printf("page fault: scause=%v, sepc=%x\n",
-			core.GetCSR(cpu.CsrScause),
-			core.GetCSR(cpu.CsrSepc))
+	case isa.CauseLoadPageFault, isa.CauseStorePageFault,
+		isa.CauseInstPageFault:
+
+		fmt.Printf("goemu: %v\n", trap)
+
+		// Real hardware sets these before jumping to stvec:
+		core.SetCSR(cpu.CsrSepc, trap.PC)      // faulting instruction PC
+		core.SetCSR(cpu.CsrScause, trap.Cause) // fault cause
+		core.SetCSR(cpu.CsrStval, trap.Tval)   // faulting address
+
+		// Update sstatus: clear SPP (S-mode previous privilege),
+		// set it to current mode, disable SIE, save SIE to SPIE
+		sstatus := core.GetCSR(cpu.CsrSstatus)
+		spie := (sstatus >> 1) & 1 // save current SIE as SPIE
+		spp := uint64(0)
+		if core.Mode == isa.ModeS {
+			spp = 1
+		}
+		sstatus &^= uint64(0x122)           // clear SPP, SPIE, SIE
+		sstatus |= (spie << 5) | (spp << 8) // set SPIE and SPP
+		core.SetCSR(cpu.CsrSstatus, sstatus)
+
+		// Switch to S-mode and jump to stvec
 		core.Mode = isa.ModeS
-		core.PC = core.GetCSR(cpu.CsrStvec)
+		tvec := core.GetCSR(cpu.CsrStvec)
+		mode := tvec & 0x3
+		base := tvec &^ uint64(0x3)
+		if mode == 1 { // vectored mode
+			core.PC = base + (trap.Cause&0xff)*4
+		} else { // direct mode
+			core.PC = base
+		}
 		return true, nil
 	}
 
@@ -463,8 +497,8 @@ func makeDTB() []byte {
 
 	fdt.PropStr(
 		"bootargs",
-		//"console=ttyS0,115200 earlycon=uart8250,mmio,0x10000000,115200 keep_bootcon lpj=1000000",
-		"lpj=1000000 earlycon=sbi console=ttyS0,115200",
+		// "console=ttyS0,115200 earlycon=uart8250,mmio,0x10000000,115200 keep_bootcon lpj=1000000",
+		"earlycon=sbi console=ttyS0,115200 lpj=1000000",
 	)
 
 	fdt.PropStr("stdout-path", "/uart@10000000:115200n8")

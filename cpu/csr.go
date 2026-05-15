@@ -125,6 +125,8 @@ func (cpu *CPU) GetCSR(csr CSR) uint64 {
 			// cpu.DebugTrace = true
 			count++
 			if count > 5 {
+				// cpu.MMU.Dump()
+				cpu.Dump(cpu.PC)
 				os.Exit(1)
 			}
 			fmt.Printf("mip=%064b\nmie=%064b\n",
@@ -206,7 +208,14 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) {
 		satp := mmu.Satp(v)
 		cpu.MMU.SetSatp(satp)
 		if cpu.Trace {
+			cpu.funcName(cpu.PC)
 			cpu.tracef(raw, instr, "Satp: %v", satp)
+		}
+		if v != 0 {
+			if false {
+				cpu.DebugTrace = true
+				cpu.MMU.Dump()
+			}
 		}
 
 	default:

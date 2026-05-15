@@ -28,6 +28,7 @@ func main() {
 	objdump := flag.Bool("D", false, "disassemble")
 	bios := flag.String("bios", "", "the firmwire; enables system emulation")
 	kern := flag.String("kernel", "", "the kernel; enables system emulation")
+	symbols := flag.String("symbols", "", "kernel System.map")
 	flag.Parse()
 
 	log.SetFlags(0)
@@ -42,7 +43,7 @@ func main() {
 	}
 
 	if len(*bios) > 0 || len(*kern) > 0 {
-		err := systemEmulation(params, *bios, *kern)
+		err := systemEmulation(params, *bios, *kern, *symbols)
 		if err != nil {
 			log.Fatal(err)
 		}

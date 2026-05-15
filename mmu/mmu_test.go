@@ -14,7 +14,7 @@ import (
 )
 
 func makeMem() (*memory.Memory, Satp, uint64) {
-	mem := memory.NewMemory(10 * memory.PageSize)
+	mem := memory.New(10 * memory.PageSize)
 
 	// Skip 0 page.
 	_, err := mem.AllocPage()
@@ -40,7 +40,7 @@ func makeMem() (*memory.Memory, Satp, uint64) {
 func makeTestMMU() (*MMU, uint64) {
 	mem, satp, count := makeMem()
 	return &MMU{
-		Satp: satp,
+		satp: satp,
 		Mem:  mem,
 	}, count
 }

@@ -7,6 +7,8 @@
 package mmu
 
 import (
+	"fmt"
+
 	"github.com/markkurossi/riscv/memory"
 )
 
@@ -71,6 +73,37 @@ func (mmu *MMU) CopyToUser(vaddr uint64, data []byte) error {
 		}
 		data = data[l:]
 		vaddr += l
+	}
+	return nil
+}
+
+func (mmu *MMU) Dump() error {
+	mode := mmu.satp.Mode()
+	if mode == SatpModeBare {
+		fmt.Printf("bare mode")
+	} else if mode != SatpModeSv39 {
+		fmt.Errorf("unsupported mode %v", mode)
+	}
+	page := mmu.satp.PPN() << 12
+
+	return mmu.dumpLevel(page, 0, 2)
+}
+
+func (mmu *MMU) dumpLevel(root, vpage uint64, level int) error {
+	for i := uint64(0); i < 512; i++ {
+		addr := root + i*8
+		pte := PTE(bo.Uint64(mmu.Mem.RAM[mmu.Mem.Offset(addr):]))
+		if !pte.Valid() {
+			continue
+		}
+		if level == 0 {
+			fmt.Printf("pte: %v: %08x => %014x\n", pte, vpage+i, pte.PPN())
+		} else {
+			err := mmu.dumpLevel(pte.PPN()<<12, vpage|(i<<(9*level)), level-1)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

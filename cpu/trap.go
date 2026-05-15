@@ -82,6 +82,18 @@ func (cpu *CPU) HandleTrap(trap *isa.Trap) error {
 
 func (cpu *CPU) Dump(epc uint64) {
 	fmt.Printf("CPU: 0 PID: %v IC: %v\n", cpu.PID, cpu.Instret)
+
+	if cpu.Symtab != nil {
+		entry := cpu.Symtab.Resolve(epc)
+		if entry != nil {
+			fmt.Printf("epc : %s+0x%x\n", entry.Name, epc-entry.Addr)
+		}
+		entry = cpu.Symtab.Resolve(cpu.X[isa.Ra])
+		if entry != nil {
+			fmt.Printf(" ra : %s+0x%x\n", entry.Name, cpu.X[isa.Ra]-entry.Addr)
+		}
+	}
+
 	fmt.Printf("epc : %016x ra : %016x sp : %016x\n",
 		epc, cpu.X[isa.Ra], cpu.X[isa.Sp])
 	fmt.Printf(" gp : %016x tp : %016x t0 : %016x\n",
