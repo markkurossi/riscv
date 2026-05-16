@@ -56,12 +56,12 @@ func systemEmulation(params kernel.Params, bios, kernel, symbols string) error {
 
 	core := &cpu.CPU{
 		Trace: params.CPUtrace,
-		Mode:  isa.ModeM,
 		MMU: &mmu.MMU{
 			Mem: mem,
 			ROM: rom,
 		},
 	}
+	core.SetMode(isa.ModeM)
 	if len(symbols) > 0 {
 		sm, err := cpu.LoadSystemMap(symbols)
 		if err != nil {
@@ -193,7 +193,7 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 	if trap.Cause>>63 != 0 {
 		var tvec uint64
 
-		switch core.Mode {
+		switch core.Mode() {
 		case isa.ModeS:
 			tvec = core.GetCSR(cpu.CsrStvec)
 		case isa.ModeM:
@@ -202,7 +202,7 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 
 		if tvec == 0 {
 			return false, fmt.Errorf("unhandled %v mode trap %w",
-				core.Mode, trap)
+				core.Mode(), trap)
 		}
 		fmt.Printf("Interrupt: sp=%x, tp=%x, sscratch=%x, tvec=%x\n",
 			core.X[isa.Sp], core.X[isa.Tp], core.GetCSR(0x140), tvec)
@@ -226,7 +226,7 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 	case isa.CauseBreakpoint:
 		var tvec uint64
 
-		switch core.Mode {
+		switch core.Mode() {
 		case isa.ModeS:
 			tvec = core.GetCSR(cpu.CsrStvec)
 		case isa.ModeM:
@@ -235,7 +235,7 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 
 		if tvec == 0 {
 			return false, fmt.Errorf("unhandled %v mode trap %w",
-				core.Mode, trap)
+				core.Mode(), trap)
 		}
 		core.PC = tvec
 
@@ -255,7 +255,7 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 
 		// fmt.Printf("goemu: target=%v tvec=%x\n", trap.Target, tvec)
 
-		core.Mode = trap.Target
+		core.SetMode(trap.Target)
 		core.PC = tvec
 
 		return true, nil
@@ -275,7 +275,7 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 		sstatus := core.GetCSR(cpu.CsrSstatus)
 		spie := (sstatus >> 1) & 1 // save current SIE as SPIE
 		spp := uint64(0)
-		if core.Mode == isa.ModeS {
+		if core.Mode() == isa.ModeS {
 			spp = 1
 		}
 		sstatus &^= uint64(0x122)           // clear SPP, SPIE, SIE
@@ -283,7 +283,7 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 		core.SetCSR(cpu.CsrSstatus, sstatus)
 
 		// Switch to S-mode and jump to stvec
-		core.Mode = isa.ModeS
+		core.SetMode(isa.ModeS)
 		tvec := core.GetCSR(cpu.CsrStvec)
 		mode := tvec & 0x3
 		base := tvec &^ uint64(0x3)
@@ -339,10 +339,22 @@ func makeDTB() []byte {
 
 	fdt.PropU32("reg", 0)
 
-	// Linux-compatible CPU description
-	fdt.PropStr("compatible", "riscv,rv64")
+	// The standard compatible string for the CPU node
+	fdt.PropStr("compatible", "riscv")
 
-	fdt.PropStr("riscv,isa", "rv64imafdc")
+	// The legacy ISA string (Mandatory for many versions)
+	// Note: Use 'g' as an alias for 'imafd' to stay compatible
+	fdt.PropStr("riscv,isa", "rv64gc")
+
+	// Modern granular ISA description
+	fdt.PropStr("riscv,isa-base", "rv64i")
+
+	// Critical: These must be passed as individual arguments to the PropStr function
+	// so they are encoded as a string list in the blob.
+	fdt.PropStr("riscv,isa-extensions",
+		"i m a f d c zicsr zifencei zicntr zihpm",
+	)
+
 	fdt.PropStr("mmu-type", "riscv,sv39")
 
 	// -------------------------------------------------------------

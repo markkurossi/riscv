@@ -92,16 +92,19 @@ func (cpu *CPU) GetCSR(csr CSR) uint64 {
 	// value.
 	switch csr {
 	case CsrMisa:
-		// RV64IMAFDC
-		return uint64(2<<62) | // MXLEN = 64
+		v := cpu.CSR[csr]
+		v |= uint64(2<<62) |
 			(1 << 0) | // A (Atomic)
 			(1 << 2) | // C (Compressed)
 			(1 << 3) | // D (Double)
 			(1 << 5) | // F (Float)
+			(1 << 6) | // G (Additional alias for IMAFD)
 			(1 << 8) | // I (Integer)
 			(1 << 12) | // M (Multiply)
 			(1 << 18) | // S (Supervisor)
 			(1 << 20) // U (User mode)
+		// fmt.Printf("GetCSR(%x) => %b\n", csr, v)
+		return v
 
 		// Debug triggers.
 	case 0x7a0, 0x7a1, 0x7a2, 0x7a3, 0x7a4:
@@ -118,10 +121,12 @@ func (cpu *CPU) GetCSR(csr CSR) uint64 {
 			mtimecmp = 100000000
 		}
 
-		if cpu.Mode == isa.ModeS && now >= mtimecmp &&
+		if cpu.Mode() == isa.ModeS && now >= mtimecmp &&
 			time.Now().Sub(cpu.StartTime) > time.Second*1 {
 
-			fmt.Printf("***** CsrTime: a0=%v, time=%v\n", cpu.X[isa.A0], now)
+			fmt.Printf("CsrTime: time=%v, mip=%016b, mie=%016b\n",
+				now, cpu.GetCSR(CsrMip), cpu.GetCSR(CsrMie))
+
 			// cpu.DebugTrace = true
 			count++
 			if count > 5 {
@@ -129,9 +134,6 @@ func (cpu *CPU) GetCSR(csr CSR) uint64 {
 				cpu.Dump(cpu.PC)
 				os.Exit(1)
 			}
-			fmt.Printf("mip=%064b\nmie=%064b\n",
-				cpu.GetCSR(CsrMip),
-				cpu.GetCSR(CsrMie))
 
 			// 2. Set the "Timer Interrupt Pending" bit in mip
 			// Bit 7 is MTIP (Machine Timer Interrupt Pending)
@@ -148,8 +150,14 @@ func (cpu *CPU) GetCSR(csr CSR) uint64 {
 
 		return now
 
-	case CsrMvendorid, CsrMarchid, CsrMimpid:
+	case CsrMvendorid:
 		return 0
+
+	case CsrMarchid:
+		return 0x100
+
+	case CsrMimpid:
+		return 0x1
 
 	case CsrMhartid:
 		return 0
@@ -158,7 +166,8 @@ func (cpu *CPU) GetCSR(csr CSR) uint64 {
 		return 0
 
 	case CsrSstatus:
-		mask := uint64(0x000de762)
+		// Mask must allow: SIE(1), SPIE(5), SPP(8), FS(13-14), SUM(18), MXR(19)
+		mask := uint64(0x00000000000de122) | (1 << 18) | (1 << 19)
 		return cpu.CSR[CsrMstatus] & mask
 
 	case CsrSie:
@@ -187,9 +196,10 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) {
 	// by updating CPU state accordingly.
 	switch csr {
 	case CsrMisa:
+		cpu.CSR[csr] = v
 
 	case CsrSstatus:
-		mask := uint64(0x000de762) // S-mode visible bits of mstatus
+		mask := uint64(0x00000000000de122) | (1 << 18) | (1 << 19)
 		cpu.CSR[CsrMstatus] = (cpu.CSR[CsrMstatus] & ^mask) | (v & mask)
 
 	case CsrSie:

@@ -39,13 +39,16 @@ type CPU struct {
 	X [32]uint64
 	F [32]float64
 
-	Mode              isa.PrivilegeMode
+	mode              isa.PrivilegeMode
 	InterruptsPending bool
 	LastTimer         uint64
 
 	CSR [4096]uint64
 
 	PC uint64
+
+	Reservation    uint64 // The address currently reserved
+	HasReservation bool   // Whether the reservation is active
 
 	decodeCache [4096]struct {
 		Raw   uint32
@@ -66,6 +69,15 @@ type CPU struct {
 	LastSymbol *SymEntry
 }
 
+func (cpu *CPU) Mode() isa.PrivilegeMode {
+	return cpu.mode
+}
+
+func (cpu *CPU) SetMode(mode isa.PrivilegeMode) {
+	cpu.mode = mode
+	cpu.MMU.Mode = mode
+}
+
 func (cpu *CPU) Run() error {
 	cpu.StartTime = time.Now()
 
@@ -79,12 +91,12 @@ func (cpu *CPU) Run() error {
 
 					if true {
 						fmt.Printf("%8x: cause=%v, mode=%v, medeleg=%v[%v]\n",
-							cpu.PC, trap.Cause, cpu.Mode, medeleg, delegated)
+							cpu.PC, trap.Cause, cpu.Mode(), medeleg, delegated)
 					}
 
 					var target isa.PrivilegeMode
 
-					if delegated && cpu.Mode <= isa.ModeS {
+					if delegated && cpu.Mode() <= isa.ModeS {
 						target = isa.ModeS
 					} else {
 						target = isa.ModeM
@@ -135,17 +147,17 @@ func (cpu *CPU) loop() error {
 					if pending&(1<<bit) == 0 {
 						continue
 					}
-					if mideleg&(1<<bit) != 0 && cpu.Mode != isa.ModeM {
+					if mideleg&(1<<bit) != 0 && cpu.Mode() != isa.ModeM {
 						// Delegated to S-mode
 						sie := (mstatus >> 1) & 1 // sstatus.SIE = mstatus bit 1
-						if sie == 1 || cpu.Mode < isa.ModeS {
+						if sie == 1 || cpu.Mode() < isa.ModeS {
 							cause := 1<<63 | bit
 							return cpu.Trap(isa.ModeS, cause, 0, nil)
 						}
 					} else {
 						// Handle in M-mode
 						mie_bit := (mstatus >> 3) & 1 // mstatus.MIE
-						if mie_bit == 1 || cpu.Mode < isa.ModeM {
+						if mie_bit == 1 || cpu.Mode() < isa.ModeM {
 							cause := 1<<63 | bit
 							return cpu.Trap(isa.ModeM, cause, 0, nil)
 						}
@@ -352,8 +364,7 @@ func (cpu *CPU) loop() error {
 			status := cpu.GetCSR(CsrSstatus)
 			// privilege ← SPP (bit 8)
 			spp := (status >> 8) & 1
-			cpu.Mode = isa.PrivilegeMode(spp)
-			cpu.MMU.Mode = cpu.Mode
+			cpu.SetMode(isa.PrivilegeMode(spp))
 
 			// SIE ← SPIE (bit 5)
 			spie := (status >> 5) & 1
@@ -374,8 +385,7 @@ func (cpu *CPU) loop() error {
 
 			// 1. Restore Mode from MPP
 			mpp := (mstatus >> 11) & 0x3
-			cpu.Mode = isa.PrivilegeMode(mpp)
-			cpu.MMU.Mode = cpu.Mode
+			cpu.SetMode(isa.PrivilegeMode(mpp))
 
 			// 2. Restore Interrupts: MIE = MPIE
 			mpie := (mstatus >> 7) & 0x1
@@ -388,7 +398,7 @@ func (cpu *CPU) loop() error {
 			if cpu.Trace {
 				cpu.funcName(cpu.PC)
 				cpu.tracef(raw, instr, "mepc=%x, mode=%v",
-					cpu.GetCSR(CsrMepc), cpu.Mode)
+					cpu.GetCSR(CsrMepc), cpu.Mode())
 			}
 
 			// 4. Finalize Jump
@@ -400,7 +410,7 @@ func (cpu *CPU) loop() error {
 		case isa.Ecall:
 			var cause uint64
 			var target isa.PrivilegeMode
-			switch cpu.Mode {
+			switch cpu.Mode() {
 			case isa.ModeU:
 				cause = isa.CauseEcallU
 				target = isa.ModeS
@@ -412,13 +422,13 @@ func (cpu *CPU) loop() error {
 				target = isa.ModeM
 			default:
 				return isa.NewTrap(0, cpu.PC, isa.CauseIllegalInstr, 0,
-					fmt.Errorf("ecall in %v-mode", cpu.Mode))
+					fmt.Errorf("ecall in %v-mode", cpu.Mode()))
 			}
 			if cpu.Trace {
 				cpu.funcName(cpu.PC)
 				cpu.tracef(raw, instr,
 					"mode=%v, target=%v, cause=%v, a7=%x, a6=%x, a0=%x, a1=%x",
-					cpu.Mode, target, cause, cpu.X[isa.A7], cpu.X[isa.A6],
+					cpu.Mode(), target, cause, cpu.X[isa.A7], cpu.X[isa.A6],
 					cpu.X[isa.A0], cpu.X[isa.A1])
 			}
 
@@ -625,6 +635,7 @@ func (cpu *CPU) loop() error {
 			if err := cpu.MMU.Store8(addr, cpu.X[instr.Rs2]); err != nil {
 				return err
 			}
+			cpu.HasReservation = false
 
 		case isa.Sd:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
@@ -644,6 +655,21 @@ func (cpu *CPU) loop() error {
 					return err
 				}
 			}
+			cpu.HasReservation = false
+
+		case isa.Sh:
+			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+			if err := cpu.MMU.Store16(addr, cpu.X[instr.Rs2]); err != nil {
+				return err
+			}
+			cpu.HasReservation = false
+
+		case isa.Sw:
+			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+			if err := cpu.MMU.Store32(addr, cpu.X[instr.Rs2]); err != nil {
+				return err
+			}
+			cpu.HasReservation = false
 
 		case isa.Sll:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] << (cpu.X[instr.Rs2] & 0b111111)
@@ -717,18 +743,6 @@ func (cpu *CPU) loop() error {
 		case isa.Subw:
 			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1] -
 				cpu.X[instr.Rs2])))
-
-		case isa.Sh:
-			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			if err := cpu.MMU.Store16(addr, cpu.X[instr.Rs2]); err != nil {
-				return err
-			}
-
-		case isa.Sw:
-			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			if err := cpu.MMU.Store32(addr, cpu.X[instr.Rs2]); err != nil {
-				return err
-			}
 
 		case isa.Xor:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] ^ cpu.X[instr.Rs2]
@@ -889,37 +903,77 @@ func (cpu *CPU) loop() error {
 			}
 			cpu.X[instr.Rd] = uint64(int64(int32(v)))
 
-		case isa.LrD:
-			addr := cpu.X[instr.Rs1]
-			v, err := cpu.MMU.Load64(addr)
-			if err != nil {
-				return err
-			}
-			cpu.X[instr.Rd] = v
-
 		case isa.LrW:
 			addr := cpu.X[instr.Rs1]
+			// Optional: Check alignment (4-byte)
+			if addr%4 != 0 {
+				return isa.NewTrap(0, cpu.PC, isa.CauseLoadAddrMisaligned, addr, nil)
+			}
 			v, err := cpu.MMU.Load32(addr)
 			if err != nil {
 				return err
 			}
 			cpu.X[instr.Rd] = uint64(int64(int32(v)))
 
-		case isa.ScD:
+			// Register the reservation
+			cpu.Reservation = addr
+			cpu.HasReservation = true
+
+		case isa.LrD:
 			addr := cpu.X[instr.Rs1]
-			err := cpu.MMU.Store64(addr, cpu.X[instr.Rs2])
+			// Optional: Check alignment (8-byte)
+			if addr%8 != 0 {
+				return isa.NewTrap(0, cpu.PC, isa.CauseLoadAddrMisaligned, addr, nil)
+			}
+			v, err := cpu.MMU.Load64(addr)
 			if err != nil {
 				return err
 			}
-			cpu.X[instr.Rd] = 0
+			cpu.X[instr.Rd] = v
+
+			// Register the reservation
+			cpu.Reservation = addr
+			cpu.HasReservation = true
 
 		case isa.ScW:
 			addr := cpu.X[instr.Rs1]
-			err := cpu.MMU.Store32(addr, cpu.X[instr.Rs2])
-			if err != nil {
-				return err
+			// Check alignment
+			if addr%4 != 0 {
+				cpu.HasReservation = false
+				return isa.NewTrap(0, cpu.PC, isa.CauseStoreAddrMisaligned, addr, nil)
 			}
-			cpu.X[instr.Rd] = 0
+
+			// SC succeeds only if the reservation matches
+			if cpu.HasReservation && cpu.Reservation == addr {
+				err := cpu.MMU.Store32(addr, cpu.X[instr.Rs2])
+				if err != nil {
+					cpu.HasReservation = false
+					return err
+				}
+				cpu.X[instr.Rd] = 0 // 0 = Success
+			} else {
+				cpu.X[instr.Rd] = 1 // 1 = Failure
+			}
+			cpu.HasReservation = false
+
+		case isa.ScD:
+			addr := cpu.X[instr.Rs1]
+			if addr%8 != 0 {
+				cpu.HasReservation = false
+				return isa.NewTrap(0, cpu.PC, isa.CauseStoreAddrMisaligned, addr, nil)
+			}
+
+			if cpu.HasReservation && cpu.Reservation == addr {
+				err := cpu.MMU.Store64(addr, cpu.X[instr.Rs2])
+				if err != nil {
+					cpu.HasReservation = false
+					return err
+				}
+				cpu.X[instr.Rd] = 0
+			} else {
+				cpu.X[instr.Rd] = 1
+			}
+			cpu.HasReservation = false
 
 			// Floating point extension.
 

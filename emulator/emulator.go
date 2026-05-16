@@ -91,11 +91,11 @@ func New(params kernel.Params) (*Emulator, error) {
 	}
 
 	cpu := &cpu.CPU{
-		Mode: isa.ModeU,
 		MMU: &mmu.MMU{
 			Mem: mem,
 		},
 	}
+	cpu.SetMode(isa.ModeU)
 	cpu.MMU.SetSatp(satp)
 	cpu.X[isa.Sp] = stackTop
 

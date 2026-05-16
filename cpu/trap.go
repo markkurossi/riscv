@@ -22,7 +22,7 @@ func (cpu *CPU) Trap(target isa.PrivilegeMode, cause, tval uint64,
 		mstatus := cpu.GetCSR(CsrMstatus)
 
 		// 2. Save Current Mode (S=1) into MPP (bits 11-12)
-		mstatus = (mstatus & ^uint64(0x1800)) | (uint64(cpu.Mode) << 11)
+		mstatus = (mstatus & ^uint64(0x1800)) | (uint64(cpu.Mode()) << 11)
 
 		// 3. Save MIE into MPIE, then disable MIE
 		mie := (mstatus >> 3) & 0x1
@@ -40,7 +40,7 @@ func (cpu *CPU) Trap(target isa.PrivilegeMode, cause, tval uint64,
 	case isa.ModeS:
 		status := cpu.GetCSR(CsrSstatus)
 		// SPP is bit 8, not 11-12
-		status = (status & ^uint64(1<<8)) | (uint64(cpu.Mode&1) << 8)
+		status = (status & ^uint64(1<<8)) | (uint64(cpu.Mode()&1) << 8)
 		// SPIE is bit 5, SIE is bit 1
 		sie := (status >> 1) & 1
 		status = (status & ^uint64(1<<5)) | (sie << 5)

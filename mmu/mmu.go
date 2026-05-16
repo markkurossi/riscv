@@ -274,7 +274,6 @@ func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
 		return vaddr, nil
 	}
 	if mmu.Mode == isa.ModeM {
-		fmt.Printf("Map in M-mode\n")
 		return vaddr, nil
 	}
 
