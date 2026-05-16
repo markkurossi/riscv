@@ -351,8 +351,8 @@ func makeDTB() []byte {
 
 	// Critical: These must be passed as individual arguments to the PropStr function
 	// so they are encoded as a string list in the blob.
-	fdt.PropStr("riscv,isa-extensions",
-		"i m a f d c zicsr zifencei zicntr zihpm",
+	fdt.PropTabStr("riscv,isa-extensions",
+		"i", "m", "a", "f", "d", "c", "zicsr", "zifencei", "zicntr", "zihpm",
 	)
 
 	fdt.PropStr("mmu-type", "riscv,sv39")
