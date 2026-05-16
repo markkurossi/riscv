@@ -91,7 +91,7 @@ func (cpu *CPU) Run() error {
 					medeleg := cpu.GetCSR(CsrMedeleg)
 					delegated := medeleg&(1<<trap.Cause) != 0
 
-					if true {
+					if false {
 						fmt.Printf("%8x: cause=%v, mode=%v, medeleg=%v[%v]\n",
 							cpu.PC, trap.Cause, cpu.Mode(), medeleg, delegated)
 					}
