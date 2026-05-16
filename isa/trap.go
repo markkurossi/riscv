@@ -84,7 +84,8 @@ func (trap *Trap) Error() string {
 	if !ok {
 		name = fmt.Sprintf("{Cause %d}", trap.Cause)
 	}
-	return fmt.Sprintf("%s: pc=%x, tval=%x", name, trap.PC, trap.Tval)
+	return fmt.Sprintf("%s: target=%v, pc=%x, tval=%x",
+		name, trap.Target, trap.PC, trap.Tval)
 }
 
 func (trap *Trap) Unwrap() error {

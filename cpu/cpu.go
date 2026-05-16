@@ -22,11 +22,13 @@ import (
 )
 
 var (
-	bo = binary.LittleEndian
+	bo        = binary.LittleEndian
+	mretCount int
 )
 
 const (
 	cpuDebug = false
+	cpuColor = false
 )
 
 type TrapHandler func(cpu *CPU, trap *isa.Trap) (bool, error)
@@ -384,8 +386,13 @@ func (cpu *CPU) loop() error {
 			mstatus := cpu.GetCSR(CsrMstatus)
 
 			// 1. Restore Mode from MPP
-			mpp := (mstatus >> 11) & 0x3
-			cpu.SetMode(isa.PrivilegeMode(mpp))
+			mpp := isa.PrivilegeMode((mstatus >> 11) & 0x3)
+			if cpu.Trace {
+				cpu.funcName(cpu.PC)
+				cpu.tracef(raw, instr, "mepc=%x, mode=%v",
+					cpu.GetCSR(CsrMepc), mpp)
+			}
+			cpu.SetMode(mpp)
 
 			// 2. Restore Interrupts: MIE = MPIE
 			mpie := (mstatus >> 7) & 0x1
@@ -395,15 +402,15 @@ func (cpu *CPU) loop() error {
 			mstatus |= (1 << 7)
 			mstatus &= ^uint64(0x1800)
 
-			if cpu.Trace {
-				cpu.funcName(cpu.PC)
-				cpu.tracef(raw, instr, "mepc=%x, mode=%v",
-					cpu.GetCSR(CsrMepc), cpu.Mode())
-			}
-
 			// 4. Finalize Jump
 			cpu.SetCSR(CsrMstatus, mstatus)
 			cpu.PC = cpu.GetCSR(CsrMepc)
+
+			mretCount++
+			// fmt.Printf("mretCount: %v\n", mretCount)
+			if mretCount == 97 {
+				cpu.DebugTrace = true
+			}
 
 			continue
 
@@ -517,7 +524,7 @@ func (cpu *CPU) loop() error {
 			vpn := addr >> 12
 			tlb := &cpu.MMU.TLB[vpn&0xfff]
 
-			if tlb.VPN == vpn && tlb.Flags.Readable() {
+			if cpu.mode <= isa.ModeS && tlb.VPN == vpn && tlb.Flags.Readable() {
 				// Fast path: TLB hit.
 				paddr := tlb.Page | (addr & uint64(tlb.OffsetMask))
 				cpu.X[instr.Rd] =
@@ -644,7 +651,7 @@ func (cpu *CPU) loop() error {
 			vpn := addr >> 12
 			tlb := &cpu.MMU.TLB[vpn&0xfff]
 
-			if tlb.VPN == vpn && tlb.Flags.Writable() {
+			if cpu.mode <= isa.ModeS && tlb.VPN == vpn && tlb.Flags.Writable() {
 				// Fast path: TLB hit.
 				paddr := tlb.Page | (addr & uint64(tlb.OffsetMask))
 				bo.PutUint64(cpu.MMU.Mem.RAM[cpu.MMU.Mem.Offset(paddr):],
@@ -1059,7 +1066,11 @@ func (cpu *CPU) funcName(pc uint64) *SymEntry {
 	if entry == nil {
 		return nil
 	}
-	fmt.Printf("%8x:  %s+0x%x\n", pc, entry.Name, mapped-entry.Addr)
+	cpu.colorOn()
+	fmt.Printf("%8x:  %s+0x%x", pc, entry.Name, mapped-entry.Addr)
+	cpu.colorOff()
+	fmt.Println()
+
 	return entry
 }
 
@@ -1069,7 +1080,32 @@ func (cpu *CPU) tracef(raw uint32, instr isa.Instr,
 	cpu.trace(raw, instr, fmt.Sprintf(format, args...))
 }
 
+func (cpu *CPU) colorOn() {
+	if !cpuColor {
+		return
+	}
+	var color string
+	switch cpu.Mode() {
+	case isa.ModeS:
+		color = "30;106"
+	case isa.ModeM:
+		color = "30;103"
+	default:
+		color = "30"
+	}
+	fmt.Printf("\x1b[%sm", color)
+}
+
+func (cpu *CPU) colorOff() {
+	if !cpuColor {
+		return
+	}
+	fmt.Printf("\x1b[0m")
+}
+
 func (cpu *CPU) trace(raw uint32, instr isa.Instr, msg string) {
+	cpu.colorOn()
+
 	var line string
 	if raw&0b11 == 0b11 {
 		line = fmt.Sprintf("%8x:  %08x   %v", cpu.PC, raw, instr)
@@ -1089,6 +1125,7 @@ func (cpu *CPU) trace(raw uint32, instr isa.Instr, msg string) {
 		}
 		line += fmt.Sprintf(" # %s", msg)
 	}
-	fmt.Println(line)
-
+	fmt.Print(line)
+	cpu.colorOff()
+	fmt.Println()
 }

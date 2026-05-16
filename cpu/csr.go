@@ -217,6 +217,10 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) {
 	case CsrSatp:
 		satp := mmu.Satp(v)
 		cpu.MMU.SetSatp(satp)
+
+		// Save Satp to CSR so that it can be queried.
+		cpu.CSR[csr] = v
+
 		if cpu.Trace {
 			cpu.funcName(cpu.PC)
 			cpu.tracef(raw, instr, "Satp: %v", satp)

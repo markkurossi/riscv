@@ -220,7 +220,12 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 		return true, nil
 
 	}
-	// fmt.Printf("goemu: mode: %v, trap: %v\n", core.Mode, trap)
+	if core.Trace {
+		fmt.Printf("goemu: mode: %v-mode trap: %v\n", core.Mode(), trap)
+		if trap.Err != nil {
+			fmt.Printf("  caused by: %v\n", trap.Err)
+		}
+	}
 
 	switch trap.Cause {
 	case isa.CauseBreakpoint:
@@ -510,7 +515,9 @@ func makeDTB() []byte {
 	fdt.PropStr(
 		"bootargs",
 		// "console=ttyS0,115200 earlycon=uart8250,mmio,0x10000000,115200 keep_bootcon lpj=1000000",
-		"earlycon=sbi console=ttyS0,115200 lpj=1000000",
+		// "earlycon=sbi console=ttyS0,115200 lpj=1000000",
+		// "earlycon=sbi console=ttyS0,115200",
+		"earlycon=sbi console=ttyS0,115200 keep_bootcon",
 	)
 
 	fdt.PropStr("stdout-path", "/uart@10000000:115200n8")

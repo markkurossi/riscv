@@ -516,6 +516,11 @@ func (mmu *MMU) Load64(vaddr uint64) (uint64, error) {
 		if paddr < mmu.Mem.RAMBase {
 			return mmu.ROM.Load64(paddr)
 		}
+		if paddr-mmu.Mem.RAMBase >= uint64(len(mmu.Mem.RAM)) && true {
+			return 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, vaddr,
+				fmt.Errorf("mapped page out of range: vaddr=%x, paddr=%x",
+					vaddr, paddr))
+		}
 		return bo.Uint64(mmu.Mem.RAM[mmu.Mem.Offset(paddr):]), nil
 	}
 
