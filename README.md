@@ -11,12 +11,13 @@ TODO:
  - [x] Verify DTB (dtbtool etc.)
    - [x] CPU.Dump() at mret: is dtb passed to Linux?
    - [x] Check DTB format with dtbtool
- - [ ] Walk page table and check what is at pc=ffffffff80026824
-   - [ ] Check Linux sources
+ - [x] Walk page table and check what is at pc=ffffffff80026824
+   - [x] Check Linux sources
  - [ ] Draw architecture diagram of traps
  - [ ] Study interrupts
- - [ ] Interrupt check in loop
+ - [x] Interrupt check in loop
  - [ ] Create CLINT device in CPU and fix ROM to write to right fields
+ - [ ] Does Image have a PE header? Does it also contain System.map?
 
 ## MMU Refactoring
 
