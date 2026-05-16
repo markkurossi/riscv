@@ -12,66 +12,121 @@ import (
 	"github.com/markkurossi/riscv/isa"
 )
 
+const (
+	ClintOfsMsip     = 0
+	ClintOfsMtimecmp = 0x4000
+	ClintOfsMtime    = 0xbff8
+)
+
 type CLINT struct {
 	Start uint64
 	End   uint64
+
+	Msip     uint64
+	Mtimecmp uint64
+	Mtime    uint64
 }
 
 func (clint *CLINT) Contains(paddr uint64) bool {
 	return paddr >= clint.Start && paddr < clint.End
 }
 
-func (clint *CLINT) Load8(paddr uint64) (uint8, error) {
-	if paddr < clint.Start {
-		return 0, isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
+func (clint *CLINT) load(paddr uint64) (uint64, error) {
+	if !clint.Contains(paddr) {
+		return 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, paddr, nil)
 	}
-	fmt.Printf("CLINT.Load8: 0x%x\n", paddr)
-	return 0, nil
+
+	var v uint64
+
+	ofs := paddr - clint.Start
+	switch ofs {
+	case ClintOfsMsip:
+		v = clint.Msip
+
+	case ClintOfsMtimecmp:
+		v = clint.Mtimecmp
+
+	case ClintOfsMtime:
+		v = clint.Mtime
+
+	default:
+		fmt.Printf("CLINT: load: unknown register %x\n", ofs)
+	}
+
+	fmt.Printf("CLINT.load(0x%x) => 0x%x\n", ofs, v)
+
+	return v, nil
+}
+
+func (clint *CLINT) store(paddr, v uint64) error {
+	if !clint.Contains(paddr) {
+		return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
+	}
+	ofs := paddr - clint.Start
+
+	fmt.Printf("CLINT.store(0x%x, 0x%x)\n", ofs, v)
+
+	switch ofs {
+	case ClintOfsMsip:
+		clint.Msip = v
+
+	case ClintOfsMtimecmp:
+		clint.Mtimecmp = v
+
+	case ClintOfsMtime:
+		clint.Mtime = v
+
+	default:
+		fmt.Printf("CLINT: store: unknown register %x = %x\n", ofs, v)
+	}
+
+	return nil
+}
+
+func (clint *CLINT) Load8(paddr uint64) (uint8, error) {
+	v, err := clint.load(paddr)
+	if err != nil {
+		return 0, err
+	}
+	return uint8(v), nil
 }
 
 func (clint *CLINT) Load16(paddr uint64) (uint16, error) {
-	if paddr < clint.Start {
-		return 0, isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
+	v, err := clint.load(paddr)
+	if err != nil {
+		return 0, err
 	}
-	fmt.Printf("CLINT.Load16: 0x%x\n", paddr)
-	return 0, nil
+	return uint16(v), nil
 }
 
 func (clint *CLINT) Load32(paddr uint64) (uint32, error) {
-	if paddr < clint.Start {
-		return 0, isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
+	v, err := clint.load(paddr)
+	if err != nil {
+		return 0, err
 	}
-	fmt.Printf("CLINT.Load32: 0x%x\n", paddr)
-	return 0, nil
+	return uint32(v), nil
 }
 
 func (clint *CLINT) Load64(paddr uint64) (uint64, error) {
-	if paddr < clint.Start {
-		return 0, isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
+	v, err := clint.load(paddr)
+	if err != nil {
+		return 0, err
 	}
-	fmt.Printf("CLINT.Load64: 0x%x\n", paddr)
-	return 0, nil
+	return v, nil
 }
 
 func (clint *CLINT) Store8(paddr, v uint64) error {
-	if paddr < clint.Start {
-		return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
-	}
-	fmt.Printf("CLINT.Store8: 0x%x = 0x%x\n", paddr, v)
-	return nil
+	return clint.store(paddr, v)
 }
 
 func (clint *CLINT) Store16(paddr, v uint64) error {
-	fmt.Printf("CLINT.Store16: 0x%x = 0x%02x\n", paddr, v)
-	return nil
+	return clint.store(paddr, v)
 }
 
 func (clint *CLINT) Store32(paddr, v uint64) error {
-	fmt.Printf("CLINT.Store32: 0x%x = 0x%04x\n", paddr, v)
-	return nil
+	return clint.store(paddr, v)
 }
 
 func (clint *CLINT) Store64(paddr, v uint64) error {
-	fmt.Printf("CLINT.Store64: 0x%x = 0x%08x\n", paddr, v)
-	return nil
+	return clint.store(paddr, v)
 }
