@@ -8,8 +8,6 @@ package cpu
 
 import (
 	"fmt"
-	"os"
-	"time"
 
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/mmu"
@@ -28,7 +26,7 @@ const (
 	CsrScause        = 0x142
 	CsrStval         = 0x143
 	CsrSip           = 0x144
-	CsrScontext      = 0x14d
+	CsrStimecmp      = 0x14d // RISC-V Sstc (Supervisor Time Compare) extension
 	CsrSatp          = 0x180
 	CsrMstatus       = 0x300
 	CsrMisa          = 0x301
@@ -61,6 +59,59 @@ const (
 	CsrMhartid       = 0xf14
 	CsrScountinhibit = 0xfb0
 )
+
+var csrs = map[int]string{
+	0x003: "Fcsr",
+	0x100: "Sstatus",
+	0x104: "Sie",
+	0x105: "Stvec",
+	0x106: "Scounteren",
+	0x140: "Sscratch",
+	0x141: "Sepc",
+	0x142: "Scause",
+	0x143: "Stval",
+	0x144: "Sip",
+	0x14d: "Stimecmp",
+	0x180: "Satp",
+	0x300: "Mstatus",
+	0x301: "Misa",
+	0x302: "Medeleg",
+	0x303: "Mideleg",
+	0x304: "Mie",
+	0x305: "Mtvec",
+	0x306: "Mcounteren",
+	0x30a: "Menvcfg",
+	0x30c: "Mstateen0",
+	0x320: "Mcountinhibit",
+	0x321: "Mhpmevent3",
+	0x340: "Mscratch",
+	0x341: "Mepc",
+	0x342: "Mcause",
+	0x343: "Mtval",
+	0x344: "Mip",
+	0x3a0: "Mpmpcfg0",
+	0x3b0: "Mpmpcfg2",
+	0x3b1: "Mpmpaddr8",
+	0x7a0: "Tselect",
+	0x7a1: "Tdata1",
+	0x7a4: "Tinfo",
+	0xc00: "Cycle",
+	0xc01: "Time",
+	0xda0: "Senvcfg",
+	0xf11: "Mvendorid",
+	0xf12: "Marchid",
+	0xf13: "Mimpid",
+	0xf14: "Mhartid",
+	0xfb0: "Scountinhibit",
+}
+
+func csrName(csr int) string {
+	name, ok := csrs[csr]
+	if ok {
+		return fmt.Sprintf("%s[%03x]", name, csr)
+	}
+	return fmt.Sprintf("%03x", csr)
+}
 
 // CsrMedeleg:
 //
@@ -111,44 +162,7 @@ func (cpu *CPU) GetCSR(csr CSR) uint64 {
 		return 0
 
 	case CsrTime:
-		now := cpu.Instret
-
-		// 1. Get the comparison value set by OpenSBI/Linux CLINT
-		// mtimecmp is typically at CLINTBase + 0x4000
-		// mtimecmp := cpu.GetMtimecmp() XXX
-		mtimecmp := cpu.LastTimer + 100
-		if mtimecmp < 100000000 {
-			mtimecmp = 100000000
-		}
-
-		if cpu.Mode() == isa.ModeS && now >= mtimecmp &&
-			time.Now().Sub(cpu.StartTime) > time.Second*1 {
-
-			fmt.Printf("CsrTime: time=%v, mip=%016b, mie=%016b\n",
-				now, cpu.GetCSR(CsrMip), cpu.GetCSR(CsrMie))
-
-			// cpu.DebugTrace = true
-			count++
-			if count > 5 {
-				// cpu.MMU.Dump()
-				cpu.Dump(cpu.PC)
-				os.Exit(1)
-			}
-
-			// 2. Set the "Timer Interrupt Pending" bit in mip
-			// Bit 7 is MTIP (Machine Timer Interrupt Pending)
-			// Bit 5 is STIP (Supervisor Timer Interrupt Pending)
-			mip := cpu.GetCSR(CsrMip)
-			cpu.SetCSR(CsrMip, mip|(1<<7)|(1<<5))
-
-			// 3. Optional: If you want to force an immediate trap you
-			// can trigger your handleTrap logic here if (status.MIE
-			// && mip.MTIP)
-			cpu.InterruptsPending = true
-			cpu.LastTimer = now
-		}
-
-		return now
+		return cpu.Now()
 
 	case CsrMvendorid:
 		return 0
@@ -198,9 +212,15 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) {
 	case CsrMisa:
 		cpu.CSR[csr] = v
 
+	case CsrMie, CsrMip:
+		cpu.CSR[csr] = v
+
 	case CsrSstatus:
 		mask := uint64(0x00000000000de122) | (1 << 18) | (1 << 19)
 		cpu.CSR[CsrMstatus] = (cpu.CSR[CsrMstatus] & ^mask) | (v & mask)
+
+	case CsrStimecmp:
+		cpu.CSR[csr] = v
 
 	case CsrSie:
 		// sie is a masked view of mie — only S-mode bits

@@ -190,6 +190,7 @@ func (rom *ROM) Store64(paddr, v uint64) error {
 func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 	bool, error) {
 
+	// If the high bit of cause is set, this is an asynchronous interrupt
 	if trap.Cause>>63 != 0 {
 		var tvec uint64
 
@@ -204,22 +205,29 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 			return false, fmt.Errorf("unhandled %v mode trap %w",
 				core.Mode(), trap)
 		}
-		fmt.Printf("Interrupt: sp=%x, tp=%x, sscratch=%x, tvec=%x\n",
-			core.X[isa.Sp], core.X[isa.Tp], core.GetCSR(0x140), tvec)
+
+		if false {
+			fmt.Printf("Interrupt: mode=%v, cause=%x, sp=%x, tp=%x, tvec=%x\n",
+				core.Mode(), trap.Cause, core.X[isa.Sp], core.X[isa.Tp], tvec)
+		}
 
 		mode := tvec & 0x3
 		base := tvec & ^uint64(0x3)
 
-		if mode == 1 && (trap.Cause&(1<<63) != 0) { // Vectored Interrupt
-			fmt.Printf("Vectored Interrupt\n")
-			core.PC = base + (trap.Cause&0xff)*4
+		// Check if Vectored Interrupt mode is enabled (mode == 1)
+		if mode == 1 {
+			// PC jumps to base + (exception code * 4)
+			// Strip the interrupt bit (bit 63) to isolate the index
+			irqIndex := trap.Cause & 0xfff
+			core.PC = base + (irqIndex * 4)
 		} else {
+			// Direct mode (mode == 0): all traps jump directly to base
 			core.PC = base
 		}
 
 		return true, nil
-
 	}
+
 	if core.Trace {
 		fmt.Printf("goemu: mode: %v-mode trap: %v\n", core.Mode(), trap)
 		if trap.Err != nil {

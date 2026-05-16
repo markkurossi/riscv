@@ -38,19 +38,33 @@ func (cpu *CPU) Trap(target isa.PrivilegeMode, cause, tval uint64,
 		return isa.NewTrap(target, cpu.PC, cause, tval, err)
 
 	case isa.ModeS:
-		status := cpu.GetCSR(CsrSstatus)
-		// SPP is bit 8, not 11-12
-		status = (status & ^uint64(1<<8)) | (uint64(cpu.Mode()&1) << 8)
-		// SPIE is bit 5, SIE is bit 1
-		sie := (status >> 1) & 1
-		status = (status & ^uint64(1<<5)) | (sie << 5)
-		status &= ^uint64(1 << 1) // Disable SIE
+		// Read directly from master register to avoid shadow mask stripping
+		mstatus := cpu.CSR[CsrMstatus]
 
-		// 4. Update CSR and CPU state
-		cpu.SetCSR(CsrSstatus, status)
-		cpu.SetCSR(CsrSepc, cpu.PC)
-		cpu.SetCSR(CsrScause, cause)
-		cpu.SetCSR(CsrStval, tval)
+		// 1. Save current SIE (bit 1) into SPIE (bit 5)
+		sie := (mstatus >> 1) & 1
+		mstatus = (mstatus & ^uint64(1<<5)) | (sie << 5)
+
+		// 2. Clear SIE (bit 1) to globally disable interrupts on entry
+		mstatus &^= uint64(1 << 1)
+
+		// 3. Save current privilege mode into SPP (bit 8)
+		// ModeU (0) -> 0, ModeS (1) -> 1. We strip bit 0 of the current mode.
+		currentPriv := uint64(cpu.Mode() & 1)
+		mstatus = (mstatus & ^uint64(1<<8)) | (currentPriv << 8)
+
+		// 4. Save the modified master status register back
+		cpu.CSR[CsrMstatus] = mstatus
+
+		// 5. Update architectural exception tracking CSRs
+		cpu.CSR[CsrSepc] = cpu.PC
+		cpu.CSR[CsrScause] = cause
+		cpu.CSR[CsrStval] = tval
+
+		// 6. CRITICAL: Shift the CPU privilege mode to Supervisor
+		// mode now!  This ensures handleTrap reads the correct target
+		// execution environment.
+		cpu.SetMode(isa.ModeS)
 
 		return isa.NewTrap(target, cpu.PC, cause, tval, err)
 
