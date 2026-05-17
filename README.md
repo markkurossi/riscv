@@ -1,12 +1,166 @@
 # RISC-V in Go
 
-<img align="center" src="goemu-small.png">
+<p align="center">
+  <img src="goemu-small.png" width="320">
+</p>
 
-A RISC-V emulator written in Go. The goal is to implement the RV64GC
-(64-bit, general-purpose, compressed) profile, with support for running
-Linux applications and, eventually, the Linux operating system.
+<p align="center">
+Building a Linux-capable RV64GC RISC-V machine from scratch in Go,
+including CPU emulation, virtual memory, privilege modes, and hardware
+devices.
+</p>
 
-TODO:
+<p align="center">
+  <img src="https://img.shields.io/badge/ISA-RV64GC-blue">
+  <img src="https://img.shields.io/badge/Linux-Booting-success">
+  <img src="https://img.shields.io/badge/Language-Go-00ADD8">
+  <img src="https://img.shields.io/badge/License-BSD-green">
+</p>
+
+## Features
+
+- RV64GC instruction set support
+- Machine, Supervisor, and User privilege modes
+- SV39 virtual memory and page tables
+- Linux syscall emulation
+- OpenSBI support
+- Linux kernel boot support
+- Device emulation:
+  - NS16550A UART
+  - PLIC interrupt controller
+  - CLINT / ACLINT timer and IPI devices
+- Symbol-aware traces and debugging support
+- Instruction-level execution tracing
+- Compressed instruction support
+
+## Current status
+
+The emulator currently boots OpenSBI and Linux, reaches initramfs
+loading, initializes core devices, and is actively progressing toward
+stable userspace execution.
+
+### Userspace
+
+- [x] Standalone binaries
+- [x] Statically linked binaries
+- [x] Dynamically linked binaries
+- [x] Basic Go binaries
+- [ ] Full Linux userspace compatibility
+
+### Linux boot
+
+- [x] OpenSBI boot
+- [x] Device Tree support
+- [x] Supervisor mode
+- [x] SV39 MMU
+- [x] Linux kernel boot
+- [x] Initramfs loading
+- [ ] Stable userspace startup
+- [ ] Multiprocessor support
+
+## Quick start
+
+Clone and run:
+
+```shell
+$ git clone https://github.com/markkurossi/riscv
+$ cd riscv/cmd/goemu
+$ go build
+$ ./goemu -bios linux-2026-04-08/fw_jump.bin \
+          -kernel linux-2026-04-08/Image \
+          -initrd linux-2026-04-08/rootfs.cpio.gz \
+          -symbols linux-2026-04-08/System.map
+```
+
+Expected output:
+
+``` shell
+OpenSBI v1.6
+
+[    0.000000] Booting Linux on hartid 0
+[    0.000000] Linux version 6.18.7 (root@036cbf3b7083) (riscv64-linux-gcc.br_real (Buildroot 2021.11-18033-g83947c7bb6) 15.1.0, GNU ld (GNU Binutils) 2.44) #1 SMP Wed Apr  8 09:41:06 UTC 2026
+[    0.000000] Machine model: goemu,riscv-emulator
+...
+[  139.479820] Freeing initrd memory: 9468K
+```
+
+## Architecture
+
+```text
++--------------------+
+| Linux / Userspace  |
++--------------------+
+| OpenSBI            |
++--------------------+
+| Emulator Core      |
+|  - RV64GC CPU      |
+|  - MMU (SV39)      |
+|  - CSR subsystem   |
++--------------------+
+| Devices            |
+| UART | PLIC        |
+| CLINT | VirtIO     |
++--------------------+
+```
+
+## Benchmarks
+
+Performance improvements are tracked as the emulator evolves. The
+numbers below show the effect of individual optimizations. They are
+from running [fibo.c](tests/static/fibo.c) on:
+
+``` text
+cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
+```
+
+| Optimization             |   MIPS |
+|:-------------------------|-------:|
+| Base                     |  19.75 |
+| GC-less decode           |  32.55 |
+| PTE access checks        |  33.57 |
+| MMU Map fastpath         |  34.70 |
+| DecodeCFast              |  45.78 |
+| Cached code page         |  60.68 |
+| Concrete memory          |  65.29 |
+| 32-bit decode cache      |  87.64 |
+| Ld/Sd TLB fastpath       | 101.49 |
+| Optimized Instr struct   | 159.65 |
+| Added interrupt handling | 147.38 |
+
+
+# Development roadmap
+
+## Near term
+
+ - [ ] Stable Linux userspace startup
+ - [ ] Process-local page tables in emulator mode
+ - [ ] Full syscall coverage in emulator mode
+
+## Longer term
+
+ - [ ] SMP support
+ - [ ] VirtIO devices
+ - [ ] Additional ISA extensions
+
+# Appendix
+
+## Benchmark history
+
+| Optimization           | fib 30 | fib 35 |    fib 40 |   MIPS | Relative |
+|:-----------------------|-------:|-------:|----------:|-------:|---------:|
+| Base                   |  2.969 | 32.510 |           |  19.75 |    1.000 |
+| GC-less decode         |  1.803 | 19.726 |           |  32.55 |    0.607 |
+| PTE access checks      |  1.763 | 19.128 |           |  33.57 |    0.588 |
+| MMU Map fastpath       |  1.709 | 18.507 |           |  34.70 |    0.569 |
+| DecodeCFast            |  1.280 | 13.848 | 2m33.240s |  45.78 |    0.426 |
+| Cached code page       |  0.977 | 10.582 | 1m57.654s |  60.68 |    0.325 |
+| Concrete memory        |  0.915 |  9.835 | 1m48.920s |  65.29 |    0.303 |
+| 32-bit decode cache    |  0.684 |  7.327 | 1m20.509s |  87.64 |    0.225 |
+| Ld/Sd TLB fastpath     |  0.603 |  6.327 | 1m10.533s | 101.49 |    0.195 |
+| Optimized Instr struct |  0.385 |  4.022 | 0m44.167s | 159.65 |    0.124 |
+| Interrupts             |  0.418 |  4.357 | 0m49.469s | 147.38 |    0.134 |
+
+## Internal roadmap
 
  - [x] Verify DTB (dtbtool etc.)
    - [x] CPU.Dump() at mret: is dtb passed to Linux?
@@ -58,31 +212,6 @@ basic support for simple Go programs.
  - [ ] Supervisor mode
  - [ ] Boot Linux kernel
 
-# Benchmarks
-
-These benchmarks are a work-in-progress performance tracker. The
-numbers below are from running [fibo.c](tests/static/fibo.c) on:
-
-``` text
-cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
-```
-
-| Optimization           | fib 30 | fib 35 |    fib 40 |   MIPS | Relative |
-|:-----------------------|-------:|-------:|----------:|-------:|---------:|
-| Base                   |  2.969 | 32.510 |           |  19.75 |    1.000 |
-| GC-less decode         |  1.803 | 19.726 |           |  32.55 |    0.607 |
-| PTE access checks      |  1.763 | 19.128 |           |  33.57 |    0.588 |
-| MMU Map fastpath       |  1.709 | 18.507 |           |  34.70 |    0.569 |
-| DecodeCFast            |  1.280 | 13.848 | 2m33.240s |  45.78 |    0.426 |
-| Cached code page       |  0.977 | 10.582 | 1m57.654s |  60.68 |    0.325 |
-| Concrete memory        |  0.915 |  9.835 | 1m48.920s |  65.29 |    0.303 |
-| 32-bit decode cache    |  0.684 |  7.327 | 1m20.509s |  87.64 |    0.225 |
-| Ld/Sd TLB fastpath     |  0.603 |  6.327 | 1m10.533s | 101.49 |    0.195 |
-| Optimized Instr struct |  0.385 |  4.022 | 0m44.167s | 159.65 |    0.124 |
-| Interrupts             |  0.418 |  4.357 | 0m49.469s | 147.38 |    0.134 |
-
-# Appendix
-
 ## Emulator Example
 
 ``` shell
@@ -94,51 +223,6 @@ $ ./goemu -ktrace examples/hello
 Hello, RISC-V!
     0     0 RET  write 15
     0     0 CALL exit(0)
-```
-
-## Supervisor Mode Example
-
-``` shell
-$ cd cmd/goemu/
-$ ./goemu  -bios linux-2026-04-08/fw_jump.bin -kernel linux-2026-04-08/Image -initrd linux-2026-04-08/rootfs.cpio.gz -symbols linux-2026-04-08/System.map
-
-OpenSBI v1.6
-   ____                    _____ ____ _____
-  / __ \                  / ____|  _ \_   _|
- | |  | |_ __   ___ _ __ | (___ | |_) || |
- | |  | | '_ \ / _ \ '_ \ \___ \|  _ < | |
- | |__| | |_) |  __/ | | |____) | |_) || |_
-  \____/| .__/ \___|_| |_|_____/|____/_____|
-        | |
-        |_|
-
-
-...
-[    0.000000] Booting Linux on hartid 0
-[    0.000000] Linux version 6.18.7 (root@036cbf3b7083) (riscv64-linux-gcc.br_real (Buildroot 2021.11-18033-g83947c7bb6) 15.1.0, GNU ld (GNU Binutils) 2.44) #1 SMP Wed Apr  8 09:41:06 UTC 2026
-[    0.000000] Machine model: goemu,riscv-emulator
-[    0.000000] SBI specification v2.0 detected
-[    0.000000] SBI implementation ID=0x1 Version=0x10006
-[    0.000000] SBI TIME extension detected
-[    0.000000] SBI IPI extension detected
-[    0.000000] SBI RFENCE extension detected
-[    0.000000] SBI DBCN extension detected
-[    0.000000] earlycon: sbi0 at I/O port 0x0 (options '')
-[    0.000000] printk: legacy bootconsole [sbi0] enabled
-...
-[   86.116380] NET: Registered PF_INET6 protocol family
-[   87.462906] Segment Routing with IPv6
-[   87.469746] In-situ OAM (IOAM) with IPv6
-[   87.475707] sit: IPv6, IPv4 and MPLS over IPv4 tunneling driver
-[   87.513858] NET: Registered PF_PACKET protocol family
-[   87.519586] 9pnet: Installing 9P2000 support
-[   87.526249] Key type dns_resolver registered
-[  139.479820] Freeing initrd memory: 9468K
-[  208.722456] clk: Disabling unused clocks
-[  208.723727] PM: genpd: Disabling unused power domains
-...
-[  208.911858] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,0)
-[  208.913414] ---[ end Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,0) ]---
 ```
 
 ## Linux image
@@ -156,50 +240,6 @@ find . | cpio -o -H newc | gzip > ../rootfs.cpio.gz
 ``` shell
 $ dtc -I dtb -O dts -o source.dts goemu.dtb
 ```
-
-## Step 2.2 - correctness
-
-### Flw / FmvWX NaN-boxing is wrong
-
-The RISC-V F extension requires that single-precision values stored in
-double-precision registers be NaN-boxed: the upper 32 bits must be all
-1s. The code does this:
-
-gov64 |= uint64(0xffffffff) << 32
-
-This ORs in the upper bits — but it should be setting the bits
-unconditionally, which is fine here since v64 started as
-zero-extended. However, the resulting 64-bit pattern is then
-interpreted by the host as a double-precision float via
-Float64frombits. That bit pattern (0xFFFFFFFF_xxxxxxxx) is a quiet NaN
-in IEEE 754 double precision — meaning any subsequent double-precision
-operation on this register will silently propagate NaN rather than
-operating on the intended single-precision value. The register file
-should store the raw bits instead, or FP operations must unwrap the
-NaN box. Since FcvtWD just casts cpu.F[instr.Rs1] as float64, loading
-a float32 via Flw and then converting with FcvtWD will produce
-garbage.
-
-### Div — signed overflow case is missing
-
-The RISC-V spec mandates a special case: INT64_MIN / -1 must return
-INT64_MIN (not trap, not undefined). Go's integer division will panic
-with a runtime overflow here. The fix:
-
-``` go
-case isa.Div:
-    rs1 := int64(cpu.X[instr.Rs1])
-    rs2 := int64(cpu.X[instr.Rs2])
-    if rs2 == 0 {
-        cpu.X[instr.Rd] = ^uint64(0)
-    } else if rs1 == math.MinInt64 && rs2 == -1 {
-        cpu.X[instr.Rd] = uint64(math.MinInt64) // overflow case
-    } else {
-        cpu.X[instr.Rd] = uint64(rs1 / rs2)
-    }
-```
-
-The same applies to `Divw` (`INT32_MIN / -1`) and `Rem`/`Remw`.
 
 ## Supervisor Model
 
