@@ -14,7 +14,7 @@ devices.
   <img src="https://img.shields.io/badge/ISA-RV64GC-blue">
   <img src="https://img.shields.io/badge/Linux-Booting-success">
   <img src="https://img.shields.io/badge/Language-Go-00ADD8">
-  <img src="https://img.shields.io/badge/License-BSD-green">
+  <img src="https://img.shields.io/badge/License-MIT-green">
 </p>
 
 ## Features
