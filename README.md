@@ -30,7 +30,7 @@ TODO:
    - [ ] Process has {Put,}Uint{8,16,32,64,String,Data}() functions
    - [ ] Syscall can cause page fault on mmap'ed files. Syscall's
          traps should fill page table.
- - [ ] sfence.vma must clear MMU's TLB entries
+ - [x] sfence.vma must clear MMU's TLB entries
  - [x] Remove `Raw uint32` from `Instr`?
 
 ## Step 1 - Basics
@@ -83,6 +83,61 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 
 # Appendix
 
+## Emulator Example
+
+``` shell
+$ cd cmd/goemu/
+$ file examples/hello
+examples/hello: ELF 64-bit LSB executable, UCB RISC-V, soft-float ABI, version 1 (SYSV), statically linked, not stripped
+$ ./goemu -ktrace examples/hello
+    0     0 CALL write(1,10050,15)
+Hello, RISC-V!
+    0     0 RET  write 15
+    0     0 CALL exit(0)
+```
+
+## Supervisor Mode Example
+
+``` shell
+$ ./goemu  -bios linux-2026-04-08/fw_jump.bin -kernel linux-2026-04-08/Image -initrd linux-2026-04-08/rootfs.cpio.gz -symbols linux-2026-04-08/System.map
+
+OpenSBI v1.6
+   ____                    _____ ____ _____
+  / __ \                  / ____|  _ \_   _|
+ | |  | |_ __   ___ _ __ | (___ | |_) || |
+ | |  | | '_ \ / _ \ '_ \ \___ \|  _ < | |
+ | |__| | |_) |  __/ | | |____) | |_) || |_
+  \____/| .__/ \___|_| |_|_____/|____/_____|
+        | |
+        |_|
+
+
+...
+[    0.000000] Booting Linux on hartid 0
+[    0.000000] Linux version 6.18.7 (root@036cbf3b7083) (riscv64-linux-gcc.br_real (Buildroot 2021.11-18033-g83947c7bb6) 15.1.0, GNU ld (GNU Binutils) 2.44) #1 SMP Wed Apr  8 09:41:06 UTC 2026
+[    0.000000] Machine model: goemu,riscv-emulator
+[    0.000000] SBI specification v2.0 detected
+[    0.000000] SBI implementation ID=0x1 Version=0x10006
+[    0.000000] SBI TIME extension detected
+[    0.000000] SBI IPI extension detected
+[    0.000000] SBI RFENCE extension detected
+[    0.000000] SBI DBCN extension detected
+[    0.000000] earlycon: sbi0 at I/O port 0x0 (options '')
+[    0.000000] printk: legacy bootconsole [sbi0] enabled
+...
+[   86.116380] NET: Registered PF_INET6 protocol family
+[   87.462906] Segment Routing with IPv6
+[   87.469746] In-situ OAM (IOAM) with IPv6
+[   87.475707] sit: IPv6, IPv4 and MPLS over IPv4 tunneling driver
+[   87.513858] NET: Registered PF_PACKET protocol family
+[   87.519586] 9pnet: Installing 9P2000 support
+[   87.526249] Key type dns_resolver registered
+[  139.479820] Freeing initrd memory: 9468K
+[  208.722456] clk: Disabling unused clocks
+[  208.723727] PM: genpd: Disabling unused power domains
+...
+```
+
 ## Linux image
 
 Converting from `rootfs.ext2` to `rootfs.cpio`:
@@ -97,19 +152,6 @@ find . | cpio -o -H newc | gzip > ../rootfs.cpio.gz
 
 ``` shell
 $ dtc -I dtb -O dts -o source.dts goemu.dtb
-```
-
-## Emulator Example
-
-``` shell
-$ cd cmd/goemu/
-$ file examples/hello
-examples/hello: ELF 64-bit LSB executable, UCB RISC-V, soft-float ABI, version 1 (SYSV), statically linked, not stripped
-$ ./goemu -ktrace examples/hello
-    0     0 CALL write(1,10050,15)
-Hello, RISC-V!
-    0     0 RET  write 15
-    0     0 CALL exit(0)
 ```
 
 ## Step 2.2 - correctness
