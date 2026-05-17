@@ -99,6 +99,7 @@ Hello, RISC-V!
 ## Supervisor Mode Example
 
 ``` shell
+$ cd cmd/goemu/
 $ ./goemu  -bios linux-2026-04-08/fw_jump.bin -kernel linux-2026-04-08/Image -initrd linux-2026-04-08/rootfs.cpio.gz -symbols linux-2026-04-08/System.map
 
 OpenSBI v1.6
@@ -136,6 +137,8 @@ OpenSBI v1.6
 [  208.722456] clk: Disabling unused clocks
 [  208.723727] PM: genpd: Disabling unused power domains
 ...
+[  208.911858] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,0)
+[  208.913414] ---[ end Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,0) ]---
 ```
 
 ## Linux image
