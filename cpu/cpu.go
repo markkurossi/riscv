@@ -989,6 +989,32 @@ func (cpu *CPU) loop() error {
 			}
 			cpu.X[instr.Rd] = uint64(int64(int32(v)))
 
+		case isa.AmoxorD:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.MMU.Load64(addr)
+			if err != nil {
+				return err
+			}
+			t := v ^ cpu.X[instr.Rs2]
+			err = cpu.MMU.Store64(addr, t)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = v
+
+		case isa.AmoxorW:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.MMU.Load32(addr)
+			if err != nil {
+				return err
+			}
+			t := uint64(int64(int32(v) ^ int32(cpu.X[instr.Rs2])))
+			err = cpu.MMU.Store32(addr, t)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = uint64(int64(int32(v)))
+
 		case isa.LrW:
 			addr := cpu.X[instr.Rs1]
 			// Optional: Check alignment (4-byte)
