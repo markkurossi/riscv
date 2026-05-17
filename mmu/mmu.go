@@ -554,7 +554,7 @@ func (mmu *MMU) Store8(vaddr, v uint64) error {
 		return err
 	}
 	if paddr < mmu.Mem.RAMBase {
-		return mmu.ROM.Store8(vaddr, v)
+		return mmu.ROM.Store8(paddr, v)
 	}
 	mmu.Mem.RAM[mmu.Mem.Offset(paddr)] = byte(v)
 	return nil
