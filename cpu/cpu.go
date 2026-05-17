@@ -442,48 +442,77 @@ func (cpu *CPU) loop() error {
 			return cpu.Trap(isa.ModeM, isa.CauseBreakpoint, 0, nil)
 
 		case isa.Sret:
-			status := cpu.GetCSR(CsrSstatus)
-			// privilege ← SPP (bit 8)
-			spp := (status >> 8) & 1
-			cpu.SetMode(isa.PrivilegeMode(spp))
+			// 1. Read directly from master CsrMstatus to avoid shadow
+			// mask stripping defects
+			mstatus := cpu.CSR[CsrMstatus]
 
-			// SIE ← SPIE (bit 5)
-			spie := (status >> 5) & 1
-			status = (status & ^uint64(1<<1)) | (spie << 1)
-			// SPIE ← 1
-			status |= (1 << 5)
-			// SPP ← U (0)
-			status &= ^uint64(1 << 8)
-			cpu.SetCSR(CsrSstatus, status)
-			cpu.PC = cpu.GetCSR(CsrSepc)
+			// Privilege level to return to is stored in SPP (bit 8)
+			spp := isa.PrivilegeMode((mstatus >> 8) & 1)
+
+			if cpu.Trace {
+				cpu.funcName(cpu.PC)
+				cpu.tracef(raw, instr, "sepc=%x, mode=%v",
+					cpu.GetCSR(CsrSepc), spp)
+			}
+
+			// 2. Synchronize both your core mode fields and your
+			// virtual translation MMU state
+			cpu.SetMode(spp)
+
+			// 3. SIE (bit 1) ← SPIE (bit 5)
+			spie := (mstatus >> 5) & 1
+			mstatus = (mstatus & ^uint64(1<<1)) | (spie << 1)
+
+			// 4. SPIE (bit 5) ← 1
+			mstatus |= uint64(1 << 5)
+
+			// 5. SPP (bit 8) ← ModeU (0)
+			mstatus &^= uint64(1 << 8)
+
+			// 6. Write back safely straight to the underlying
+			// register storage slot
+			cpu.CSR[CsrMstatus] = mstatus
+
+			// 7. Relocate your instruction pointer target
+			cpu.PC = cpu.CSR[CsrSepc]
+
 			if cpu.Trace {
 				cpu.tracef(raw, instr, "sepc=%x", cpu.PC)
 			}
 			continue
 
 		case isa.Mret:
-			mstatus := cpu.GetCSR(CsrMstatus)
+			// 1. Read directly from the raw master internal register
+			// storage slice
+			mstatus := cpu.CSR[CsrMstatus]
 
-			// 1. Restore Mode from MPP
+			// Restore Privilege Mode from MPP (Bits 11-12)
 			mpp := isa.PrivilegeMode((mstatus >> 11) & 0x3)
 			if cpu.Trace {
 				cpu.funcName(cpu.PC)
 				cpu.tracef(raw, instr, "mepc=%x, mode=%v",
 					cpu.GetCSR(CsrMepc), mpp)
 			}
+
+			// 2. Update both the core's operating privilege state AND
+			// the MMU
 			cpu.SetMode(mpp)
 
-			// 2. Restore Interrupts: MIE = MPIE
+			// 3. Restore Interrupts: MIE (Bit 3) = MPIE (Bit 7)
 			mpie := (mstatus >> 7) & 0x1
 			mstatus = (mstatus & ^uint64(1<<3)) | (mpie << 3)
 
-			// 3. Set MPIE to 1 and MPP to 0 (Standard RISC-V behavior)
-			mstatus |= (1 << 7)
-			mstatus &= ^uint64(0x1800)
+			// 4. Set MPIE (Bit 7) to 1
+			mstatus |= uint64(1 << 7)
 
-			// 4. Finalize Jump
-			cpu.SetCSR(CsrMstatus, mstatus)
-			cpu.PC = cpu.GetCSR(CsrMepc)
+			// 5. Set MPP (Bits 11-12) to User mode (0)
+			mstatus &^= uint64(3 << 11)
+
+			// 6. Save back straight to the raw master registry array index
+			cpu.CSR[CsrMstatus] = mstatus
+
+			// 7. Finalize Jump to the Machine Exception Program Counter
+			cpu.PC = cpu.CSR[CsrMepc]
 			continue
 
 		case isa.Ecall:
