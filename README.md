@@ -83,6 +83,16 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 
 # Appendix
 
+## Linux image
+
+Converting from `rootfs.ext2` to `rootfs.cpio`:
+
+``` shell
+debugfs -R "rdump / ./rootfs_contents" rootfs.ext2
+cd rootfs_contents
+find . | cpio -o -H newc | gzip > ../rootfs.cpio.gz
+```
+
 ## Device Tree
 
 ``` shell

@@ -34,7 +34,9 @@ const (
 	PLICSize = 0x04000000
 )
 
-func systemEmulation(params kernel.Params, bios, kernel, symbols string) error {
+func systemEmulation(params kernel.Params,
+	bios, kernel, initrd, symbols string) error {
+
 	mem := memory.New(memory.RAMBase, 0x20000000)
 	rom := &ROM{
 		Segments: []mmu.ROM{
@@ -82,7 +84,14 @@ func systemEmulation(params kernel.Params, bios, kernel, symbols string) error {
 	}
 	copy(mem.RAM[mem.Offset(OfsKernel):], data)
 
-	dtb := makeDTB()
+	data, err = os.ReadFile(initrd)
+	if err != nil {
+		return fmt.Errorf("failed to read initrd: %w", err)
+	}
+	initrdSize := uint64(len(data))
+	copy(mem.RAM[mem.Offset(OfsInitrd):], data)
+
+	dtb := makeDTB(initrdSize)
 	copy(mem.RAM[mem.Offset(OfsDTB):], dtb)
 
 	core.X[isa.A0] = 0
@@ -311,7 +320,7 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 	return false, nil
 }
 
-func makeDTB() []byte {
+func makeDTB(initrdSize uint64) []byte {
 	// Initialize FDT buffer
 	buf := make([]byte, 65536)
 	fdt := gofdt.NewFDT(buf)
@@ -525,8 +534,23 @@ func makeDTB() []byte {
 		// "console=ttyS0,115200 earlycon=uart8250,mmio,0x10000000,115200 keep_bootcon lpj=1000000",
 		// "earlycon=sbi console=ttyS0,115200 lpj=1000000",
 		// "earlycon=sbi console=ttyS0,115200",
-		"earlycon=sbi console=ttyS0,115200 keep_bootcon",
+		"earlycon=sbi console=ttyS0,115200 init=/init",
 	)
+
+	// Linux expects these properties to define the physical address
+	// boundaries of the ramdisk
+	tab = [8]uint32{
+		uint32(OfsInitrd >> 32),
+		uint32(OfsInitrd),
+	}
+	fdt.PropTabU32("linux,initrd-start", &tab[0], 2)
+
+	initrdEnd := OfsInitrd + initrdSize
+	tab = [8]uint32{
+		uint32(initrdEnd >> 32),
+		uint32(initrdEnd),
+	}
+	fdt.PropTabU32("linux,initrd-end", &tab[0], 2)
 
 	fdt.PropStr("stdout-path", "/uart@10000000:115200n8")
 
