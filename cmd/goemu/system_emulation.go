@@ -285,8 +285,6 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 	case isa.CauseLoadPageFault, isa.CauseStorePageFault,
 		isa.CauseInstPageFault:
 
-		fmt.Printf("goemu: %v\n", trap)
-
 		// Real hardware sets these before jumping to stvec:
 		core.SetCSR(cpu.CsrSepc, trap.PC)      // faulting instruction PC
 		core.SetCSR(cpu.CsrScause, trap.Cause) // fault cause
@@ -314,6 +312,20 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 		} else { // direct mode
 			core.PC = base
 		}
+
+		fmt.Printf("goemu: %v\n", trap)
+		if trap.Err != nil {
+			fmt.Printf("  in %v\n", trap.Err)
+		}
+		entry, _ := core.FuncName(trap.PC)
+		if entry != nil {
+			fmt.Printf("  function: %v\n", entry.Name)
+		}
+		entry, _ = core.FuncName(core.PC)
+		if entry != nil {
+			fmt.Printf("  handler : %v\n", entry.Name)
+		}
+
 		return true, nil
 	}
 

@@ -175,8 +175,11 @@ func (cpu *CPU) Run() error {
 
 					trap = cpu.Trap(target, trap.Cause, trap.Tval, trap.Err)
 					if cpu.Trace {
-						cpu.funcName(cpu.PC)
+						cpu.traceFunc(cpu.PC)
 					}
+				}
+				if trap.PC == 0 {
+					panic("trap PC not set")
 				}
 				err = cpu.HandleTrap(trap)
 			}
@@ -429,7 +432,7 @@ func (cpu *CPU) loop() error {
 
 		case isa.Ebreak:
 			if cpu.Trace {
-				cpu.funcName(cpu.PC)
+				cpu.traceFunc(cpu.PC)
 				cpu.tracef(raw, instr, "")
 			}
 
@@ -450,7 +453,7 @@ func (cpu *CPU) loop() error {
 			spp := isa.PrivilegeMode((mstatus >> 8) & 1)
 
 			if cpu.Trace {
-				cpu.funcName(cpu.PC)
+				cpu.traceFunc(cpu.PC)
 				cpu.tracef(raw, instr, "sepc=%x, mode=%v",
 					cpu.GetCSR(CsrSepc), spp)
 			}
@@ -472,6 +475,7 @@ func (cpu *CPU) loop() error {
 			// 6. Write back safely straight to the underlying
 			// register storage slot
 			cpu.CSR[CsrMstatus] = mstatus
+			cpu.SyncCSR()
 
 			// 7. Relocate your instruction pointer target
 			cpu.PC = cpu.CSR[CsrSepc]
@@ -489,7 +493,7 @@ func (cpu *CPU) loop() error {
 			// Restore Privilege Mode from MPP (Bits 11-12)
 			mpp := isa.PrivilegeMode((mstatus >> 11) & 0x3)
 			if cpu.Trace {
-				cpu.funcName(cpu.PC)
+				cpu.traceFunc(cpu.PC)
 				cpu.tracef(raw, instr, "mepc=%x, mode=%v",
 					cpu.GetCSR(CsrMepc), mpp)
 			}
@@ -510,6 +514,7 @@ func (cpu *CPU) loop() error {
 
 			// 6. Save back straight to the raw master registry array index
 			cpu.CSR[CsrMstatus] = mstatus
+			cpu.SyncCSR()
 
 			// 7. Finalize Jump to the Machine Exception Program Counter
 			cpu.PC = cpu.CSR[CsrMepc]
@@ -533,7 +538,7 @@ func (cpu *CPU) loop() error {
 					fmt.Errorf("ecall in %v-mode", cpu.Mode()))
 			}
 			if cpu.Trace {
-				cpu.funcName(cpu.PC)
+				cpu.traceFunc(cpu.PC)
 				cpu.tracef(raw, instr,
 					"mode=%v, target=%v, cause=%v, a7=%x, a6=%x, a0=%x, a1=%x",
 					cpu.Mode(), target, cause, cpu.X[isa.A7], cpu.X[isa.A6],
@@ -577,7 +582,7 @@ func (cpu *CPU) loop() error {
 		case isa.Fence:
 			// XXX fence
 			if cpu.DebugTrace {
-				cpu.funcName(cpu.PC)
+				cpu.traceFunc(cpu.PC)
 			}
 
 		case isa.SfenceVMA:
@@ -628,7 +633,8 @@ func (cpu *CPU) loop() error {
 			vpn := addr >> 12
 			tlb := &cpu.MMU.TLB[vpn&0xfff]
 
-			if cpu.mode <= isa.ModeS && tlb.VPN == vpn && tlb.Flags.Readable() {
+			if cpu.mode <= isa.ModeS && tlb.VPN == vpn &&
+				tlb.Flags.Readable() && memory.Avail(addr, 8) {
 				// Fast path: TLB hit.
 				paddr := tlb.Page | (addr & uint64(tlb.OffsetMask))
 				cpu.X[instr.Rd] =
@@ -755,7 +761,8 @@ func (cpu *CPU) loop() error {
 			vpn := addr >> 12
 			tlb := &cpu.MMU.TLB[vpn&0xfff]
 
-			if cpu.mode <= isa.ModeS && tlb.VPN == vpn && tlb.Flags.Writable() {
+			if cpu.mode <= isa.ModeS && tlb.VPN == vpn &&
+				tlb.Flags.Writable() && memory.Avail(addr, 8) {
 				// Fast path: TLB hit.
 				paddr := tlb.Page | (addr & uint64(tlb.OffsetMask))
 				bo.PutUint64(cpu.MMU.Mem.RAM[cpu.MMU.Mem.Offset(paddr):],
@@ -1180,13 +1187,13 @@ func (cpu *CPU) loop() error {
 	}
 }
 
-func (cpu *CPU) funcName(pc uint64) *SymEntry {
+func (cpu *CPU) FuncName(pc uint64) (*SymEntry, uint64) {
 	if cpu.Symtab == nil {
-		return nil
+		return nil, 0
 	}
 	// OpenSBI range: no kernel symbols here
 	if pc >= 0x80000000 && pc < 0x80200000 {
-		return nil
+		return nil, 0
 	}
 	mapped := pc
 	if pc > 0x80200000 && pc < 0x100000000 {
@@ -1198,8 +1205,17 @@ func (cpu *CPU) funcName(pc uint64) *SymEntry {
 	}
 	entry := cpu.Symtab.Resolve(mapped)
 	if entry == nil {
+		return nil, 0
+	}
+	return entry, mapped
+}
+
+func (cpu *CPU) traceFunc(pc uint64) *SymEntry {
+	entry, mapped := cpu.FuncName(pc)
+	if entry == nil {
 		return nil
 	}
+
 	cpu.colorOn()
 	fmt.Printf("%8x:  %s+0x%x", pc, entry.Name, mapped-entry.Addr)
 	cpu.colorOff()

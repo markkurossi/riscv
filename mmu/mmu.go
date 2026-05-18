@@ -52,6 +52,9 @@ type MMU struct {
 	Mem  *memory.Memory
 	ROM  ROM
 
+	Sum bool
+	Mxr bool
+
 	TLB [4096]TLBEntry
 }
 
@@ -174,6 +177,10 @@ func (flags PTEFlags) Executable() bool {
 	return flags&PteX != 0
 }
 
+func (flags PTEFlags) User() bool {
+	return flags&PteU != 0
+}
+
 func (flags PTEFlags) CanAccess(access int) (bool, uint64) {
 	if int(flags)&access == access {
 		return true, 0
@@ -221,6 +228,10 @@ func (pte PTE) Writable() bool {
 
 func (pte PTE) Executable() bool {
 	return pte.Flags()&PteX != 0
+}
+
+func (pte PTE) User() bool {
+	return pte.Flags()&PteU != 0
 }
 
 func (pte PTE) Leaf() bool {
@@ -372,18 +383,92 @@ func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 		fmt.Errorf("no leaf page found"))
 }
 
+type AccessContext struct {
+	Addr   uint64
+	PTE    PTE
+	Access int
+	SUM    bool
+	MXR    bool
+	Desc   string
+}
+
+func (ac *AccessContext) Error() string {
+	result := fmt.Sprintf("context: addr=%x, pte=%v, access=%d, sum=%v, mxr=%v",
+		ac.Addr, ac.PTE, ac.Access, ac.SUM, ac.MXR)
+	if len(ac.Desc) != 0 {
+		result += ", desc=" + ac.Desc
+	}
+	return result
+}
+
+func (ac *AccessContext) WithDesc(desc string) *AccessContext {
+	ac.Desc = desc
+	return ac
+}
+
 func (mmu *MMU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 	uint64, PTEFlags, int, error) {
 
+	ac := &AccessContext{
+		Addr:   vaddr,
+		PTE:    pte,
+		Access: access,
+		SUM:    mmu.Sum,
+		MXR:    mmu.Mxr,
+	}
+
+	readable := pte.Readable()
+	if mmu.Mxr && pte.Executable() {
+		// MXR overrides read constraints if executable is active
+		readable = true
+	}
+
 	// Check permissions.
-	if access&AccessRead != 0 && !pte.Readable() {
-		return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, vaddr, nil)
+	if access&AccessRead != 0 && !readable {
+		return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, vaddr, ac)
 	}
 	if access&AccessWrite != 0 && !pte.Writable() {
-		return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseStorePageFault, vaddr, nil)
+		return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseStorePageFault, vaddr, ac)
 	}
 	if access&AccessExec != 0 && !pte.Executable() {
-		return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseInstPageFault, vaddr, nil)
+		return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseInstPageFault, vaddr, ac)
+	}
+
+	isUserPage := pte.User()
+
+	if mmu.Mode == isa.ModeU && false {
+		// User mode CANNOT access kernel pages (PteU == 0)
+		if !isUserPage {
+			if access&AccessExec != 0 {
+				return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseInstPageFault,
+					vaddr, ac.WithDesc("U-mode"))
+			}
+			if access&AccessWrite != 0 {
+				return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseStorePageFault,
+					vaddr, ac.WithDesc("U-mode"))
+			}
+			return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault,
+				vaddr, ac.WithDesc("U-mode"))
+		}
+	} else if mmu.Mode == isa.ModeS && false {
+		// Supervisor mode accessing a User Page (PteU == 1)
+		if isUserPage {
+			// Rule A: Supervisor mode can NEVER execute code from a User page
+			if access&AccessExec != 0 {
+				return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseInstPageFault,
+					vaddr, ac.WithDesc("S-mode exec user page"))
+			}
+			// Rule B: Supervisor data access is ONLY allowed if
+			// sstatus.SUM == 1
+			if !mmu.Sum {
+				if access&AccessWrite != 0 {
+					return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseStorePageFault,
+						vaddr, ac.WithDesc("S-mode user page"))
+				}
+				return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault,
+					vaddr, ac.WithDesc("S-mode user page"))
+			}
+		}
 	}
 
 	// Enforce superpage alignment rules.
@@ -398,15 +483,15 @@ func (mmu *MMU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 	if misaligned {
 		if access&AccessWrite != 0 {
 			return 0, 0, 0,
-				isa.NewTrap(0, 0, isa.CauseStoreAddrMisaligned, vaddr, nil)
+				isa.NewTrap(0, 0, isa.CauseStoreAddrMisaligned, vaddr, ac)
 		}
 		if access&AccessExec != 0 {
 			return 0, 0, 0,
-				isa.NewTrap(0, 0, isa.CauseInstAddrMisaligned, vaddr, nil)
+				isa.NewTrap(0, 0, isa.CauseInstAddrMisaligned, vaddr, ac)
 		}
 		// Default to load fault.
 		return 0, 0, 0,
-			isa.NewTrap(0, 0, isa.CauseLoadAddrMisaligned, vaddr, nil)
+			isa.NewTrap(0, 0, isa.CauseLoadAddrMisaligned, vaddr, ac)
 	}
 
 	var page uint64

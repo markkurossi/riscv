@@ -180,7 +180,8 @@ func (cpu *CPU) GetCSR(csr CSR) uint64 {
 		return 0
 
 	case CsrSstatus:
-		// Mask must allow: SIE(1), SPIE(5), SPP(8), FS(13-14), SUM(18), MXR(19)
+		// Update the read mask to allow the SUM (bit 18) and MXR (bit
+		// 19) views to pass through
 		mask := uint64(0x00000000000de122) | (1 << 18) | (1 << 19)
 		return cpu.CSR[CsrMstatus] & mask
 
@@ -216,7 +217,8 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) {
 		cpu.CSR[csr] = v
 
 	case CsrSstatus:
-		mask := uint64(0x00000000000de122) | (1 << 18) | (1 << 19)
+		// Ensure bit 5 (1<<5) and bit 8 (1<<8) are preserved during writes
+		mask := uint64(0x00000000000de122) | (1 << 5) | (1 << 8) | (1 << 18) | (1 << 19)
 		cpu.CSR[CsrMstatus] = (cpu.CSR[CsrMstatus] & ^mask) | (v & mask)
 
 	case CsrStimecmp:
@@ -242,7 +244,7 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) {
 		cpu.CSR[csr] = v
 
 		if cpu.Trace {
-			cpu.funcName(cpu.PC)
+			cpu.traceFunc(cpu.PC)
 			cpu.tracef(raw, instr, "Satp: %v", satp)
 		}
 		if v != 0 {
@@ -255,4 +257,11 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) {
 	default:
 		cpu.CSR[csr] = v
 	}
+
+	cpu.SyncCSR()
+}
+
+func (cpu *CPU) SyncCSR() {
+	cpu.MMU.Sum = (cpu.CSR[CsrMstatus]>>18)&1 == 1
+	cpu.MMU.Mxr = (cpu.CSR[CsrMstatus]>>19)&1 == 1
 }
