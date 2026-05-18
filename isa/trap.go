@@ -29,6 +29,14 @@ const (
 	CauseLoadPageFault
 	_
 	CauseStorePageFault
+	CauseDoubleTrap
+	_
+	CauseSoftwareCheck
+	CauseHardwareError
+	CauseInstGuestPageFault
+	CauseLoadGuestPageFault
+	CuaseVirtualInst
+	CuaseStoreGuestPageFault
 )
 
 var causes = map[uint64]string{
@@ -47,6 +55,13 @@ var causes = map[uint64]string{
 	CauseInstPageFault:       "Instruction page fault",
 	CauseLoadPageFault:       "Load page fault",
 	CauseStorePageFault:      "Store/AMO page fault",
+	CauseDoubleTrap:          "Double trap",
+	CauseSoftwareCheck:       "Software check",
+	CauseHardwareError:       "Hardware error",
+	CauseInstGuestPageFault:  "Instruction guest-page fault",
+	CauseLoadGuestPageFault:  "Load guest-page fault",
+	CuaseVirtualInst:         "Virtual instruction",
+	CuaseStoreGuestPageFault: "Store/AMO guest-page fault",
 }
 
 type Trap struct {
