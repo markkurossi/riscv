@@ -15,6 +15,18 @@ import (
 
 type CSR int
 
+func (csr CSR) ReadWrite() bool {
+	return csr>>10&0b11 != 0b11
+}
+
+func (csr CSR) ReadOnly() bool {
+	return csr>>10&0b11 == 0b11
+}
+
+func (csr CSR) Privilege() isa.PrivilegeMode {
+	return isa.PrivilegeMode(csr >> 8 & 0b11)
+}
+
 const (
 	CsrFcsr          = 0x003
 	CsrSstatus       = 0x100
@@ -138,12 +150,19 @@ func csrName(csr int) string {
 
 var count int
 
-func (cpu *CPU) GetCSR(csr CSR) uint64 {
+func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
+	if cpu.Mode() < csr.Privilege() {
+		return 0, cpu.Trap(0, isa.CauseIllegalInstr, uint64(csr),
+			fmt.Errorf("GetCSR(%x), mode=%v", csr, cpu.Mode()))
+	}
 	// Handle read-only CSRs here by returning the fixed or computed
 	// value.
+
+	var v uint64
+
 	switch csr {
 	case CsrMisa:
-		v := cpu.CSR[csr]
+		v = cpu.CSR[csr]
 		v |= uint64(2<<62) |
 			(1 << 0) | // A (Atomic)
 			(1 << 2) | // C (Compressed)
@@ -154,59 +173,66 @@ func (cpu *CPU) GetCSR(csr CSR) uint64 {
 			(1 << 12) | // M (Multiply)
 			(1 << 18) | // S (Supervisor)
 			(1 << 20) // U (User mode)
-		// fmt.Printf("GetCSR(%x) => %b\n", csr, v)
-		return v
 
 		// Debug triggers.
 	case 0x7a0, 0x7a1, 0x7a2, 0x7a3, 0x7a4:
-		return 0
 
 	case CsrTime:
-		return cpu.Now()
+		v = cpu.Now()
 
 	case CsrMvendorid:
-		return 0
 
 	case CsrMarchid:
-		return 0x100
+		v = 0x100
 
 	case CsrMimpid:
-		return 0x1
+		v = 0x1
 
 	case CsrMhartid:
-		return 0
 
 	case CsrScountinhibit:
-		return 0
 
 	case CsrSstatus:
 		// Update the read mask to allow the SUM (bit 18) and MXR (bit
 		// 19) views to pass through
 		mask := uint64(0x00000000000de122) | (1 << 18) | (1 << 19)
-		return cpu.CSR[CsrMstatus] & mask
+		v = cpu.CSR[CsrMstatus] & mask
 
 	case CsrSie:
 		mask := uint64((1 << 1) | (1 << 5) | (1 << 9))
-		return cpu.CSR[CsrMie] & mask
+		v = cpu.CSR[CsrMie] & mask
 
 	case CsrSip:
 		mask := uint64((1 << 1) | (1 << 5) | (1 << 9))
-		return cpu.CSR[CsrMip] & mask
+		v = cpu.CSR[CsrMip] & mask
 
 	default:
 		if csr >= 0xb03 && csr <= 0xb1f {
 			// Mhpmcounters
-			return 0
+		} else {
+			v = cpu.CSR[csr]
 		}
-		return cpu.CSR[csr]
 	}
+
+	// fmt.Printf("GetCSR(%x) => %b\n", csr, v)
+	return v, nil
 }
 
-func (cpu *CPU) SetCSR(csr CSR, v uint64) {
-	cpu.SetCSRX(csr, v, 0, isa.Instr{})
+func (cpu *CPU) SetCSR(csr CSR, v uint64) error {
+	return cpu.SetCSRX(csr, v, 0, isa.Instr{})
 }
 
-func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) {
+func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
+
+	if cpu.Mode() < csr.Privilege() {
+		return cpu.Trap(0, isa.CauseIllegalInstr, uint64(csr),
+			fmt.Errorf("SetCSR(%x)=%v, mode=%v", csr, v, cpu.Mode()))
+	}
+	if csr.ReadOnly() {
+		return cpu.Trap(0, isa.CauseIllegalInstr, uint64(csr),
+			fmt.Errorf("SetCSR(%x)=%v: read-only", csr, v))
+	}
+
 	// Handle read-only and functional CSRs here by ignoring update or
 	// by updating CPU state accordingly.
 	switch csr {
@@ -259,6 +285,8 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) {
 	}
 
 	cpu.SyncCSR()
+
+	return nil
 }
 
 func (cpu *CPU) SyncCSR() {

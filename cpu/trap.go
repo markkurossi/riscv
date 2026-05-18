@@ -19,7 +19,7 @@ func (cpu *CPU) Trap(target isa.PrivilegeMode, cause, tval uint64,
 	switch target {
 	case isa.ModeM:
 		// 1. Get current mstatus
-		mstatus := cpu.GetCSR(CsrMstatus)
+		mstatus := cpu.CSR[CsrMstatus]
 
 		// 2. Save Current Mode (S=1) into MPP (bits 11-12)
 		mstatus = (mstatus & ^uint64(0x1800)) | (uint64(cpu.Mode()) << 11)
@@ -30,10 +30,10 @@ func (cpu *CPU) Trap(target isa.PrivilegeMode, cause, tval uint64,
 		mstatus = (mstatus & ^uint64(1<<3))              // MIE = 0
 
 		// 4. Update CSR and CPU state
-		cpu.SetCSR(CsrMstatus, mstatus)
-		cpu.SetCSR(CsrMepc, cpu.PC)
-		cpu.SetCSR(CsrMcause, cause)
-		cpu.SetCSR(CsrMtval, tval)
+		cpu.CSR[CsrMstatus] = mstatus
+		cpu.CSR[CsrMepc] = cpu.PC
+		cpu.CSR[CsrMcause] = cause
+		cpu.CSR[CsrMtval] = tval
 
 		return isa.NewTrap(target, cpu.PC, cause, tval, err)
 
@@ -69,8 +69,9 @@ func (cpu *CPU) Trap(target isa.PrivilegeMode, cause, tval uint64,
 		return isa.NewTrap(target, cpu.PC, cause, tval, err)
 
 	default:
+		panic(42)
 		return isa.NewTrap(isa.ModeM, cpu.PC, isa.CauseBreakpoint, 0,
-			fmt.Errorf("unexpected target mode %v", target))
+			fmt.Errorf("trap: unexpected target mode %v", target))
 	}
 }
 

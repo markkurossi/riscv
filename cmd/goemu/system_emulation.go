@@ -202,12 +202,16 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 	// If the high bit of cause is set, this is an asynchronous interrupt
 	if trap.Cause>>63 != 0 {
 		var tvec uint64
+		var err error
 
 		switch core.Mode() {
 		case isa.ModeS:
-			tvec = core.GetCSR(cpu.CsrStvec)
+			tvec, err = core.GetCSR(cpu.CsrStvec)
 		case isa.ModeM:
-			tvec = core.GetCSR(cpu.CsrMtvec)
+			tvec, err = core.GetCSR(cpu.CsrMtvec)
+		}
+		if err != nil {
+			return false, err
 		}
 
 		if tvec == 0 {
@@ -247,12 +251,16 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 	switch trap.Cause {
 	case isa.CauseBreakpoint:
 		var tvec uint64
+		var err error
 
 		switch core.Mode() {
 		case isa.ModeS:
-			tvec = core.GetCSR(cpu.CsrStvec)
+			tvec, err = core.GetCSR(cpu.CsrStvec)
 		case isa.ModeM:
-			tvec = core.GetCSR(cpu.CsrMtvec)
+			tvec, err = core.GetCSR(cpu.CsrMtvec)
+		}
+		if err != nil {
+			return false, err
 		}
 
 		if tvec == 0 {
@@ -265,11 +273,12 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 
 	case isa.CauseEcallS:
 		var tvec uint64
+
 		switch trap.Target {
 		case isa.ModeS:
-			tvec = core.GetCSR(cpu.CsrStvec)
+			tvec = core.CSR[cpu.CsrStvec]
 		case isa.ModeM:
-			tvec = core.GetCSR(cpu.CsrMtvec)
+			tvec = core.CSR[cpu.CsrMtvec]
 		default:
 			return false, fmt.Errorf("invalid target %v for trap %w",
 				trap.Target, trap)
@@ -286,13 +295,25 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 		isa.CauseInstPageFault:
 
 		// Real hardware sets these before jumping to stvec:
-		core.SetCSR(cpu.CsrSepc, trap.PC)      // faulting instruction PC
-		core.SetCSR(cpu.CsrScause, trap.Cause) // fault cause
-		core.SetCSR(cpu.CsrStval, trap.Tval)   // faulting address
+		err := core.SetCSR(cpu.CsrSepc, trap.PC) // faulting instruction PC
+		if err != nil {
+			return false, err
+		}
+		err = core.SetCSR(cpu.CsrScause, trap.Cause) // fault cause
+		if err != nil {
+			return false, err
+		}
+		err = core.SetCSR(cpu.CsrStval, trap.Tval) // faulting address
+		if err != nil {
+			return false, err
+		}
 
 		// Update sstatus: clear SPP (S-mode previous privilege),
 		// set it to current mode, disable SIE, save SIE to SPIE
-		sstatus := core.GetCSR(cpu.CsrSstatus)
+		sstatus, err := core.GetCSR(cpu.CsrSstatus)
+		if err != nil {
+			return false, err
+		}
 		spie := (sstatus >> 1) & 1 // save current SIE as SPIE
 		spp := uint64(0)
 		if core.Mode() == isa.ModeS {
@@ -304,7 +325,10 @@ func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
 
 		// Switch to S-mode and jump to stvec
 		core.SetMode(isa.ModeS)
-		tvec := core.GetCSR(cpu.CsrStvec)
+		tvec, err := core.GetCSR(cpu.CsrStvec)
+		if err != nil {
+			return false, err
+		}
 		mode := tvec & 0x3
 		base := tvec &^ uint64(0x3)
 		if mode == 1 { // vectored mode

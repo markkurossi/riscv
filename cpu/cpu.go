@@ -157,7 +157,7 @@ func (cpu *CPU) Run() error {
 		if err != nil {
 			if trap, ok := errors.AsType[*isa.Trap](err); ok {
 				if trap.Target == 0 {
-					medeleg := cpu.GetCSR(CsrMedeleg)
+					medeleg := cpu.CSR[CsrMedeleg]
 					delegated := medeleg&(1<<trap.Cause) != 0
 
 					if false {
@@ -208,10 +208,11 @@ func (cpu *CPU) loop() error {
 
 		// Check interrupts every 64 instructions.
 		if cpu.Instret&0x3f == 0 {
-			mip := cpu.GetCSR(CsrMip)
+			mip := cpu.CSR[CsrMip]
+			stimecmp := cpu.CSR[CsrStimecmp]
 			now := cpu.Now()
 
-			if now > cpu.GetCSR(CsrStimecmp) {
+			if now > stimecmp {
 				mip |= IntSTIP
 			} else {
 				// Clear it if the time comparison drops below threshold
@@ -221,12 +222,12 @@ func (cpu *CPU) loop() error {
 			// backing storage slice
 			cpu.CSR[CsrMip] = mip
 
-			mie := cpu.GetCSR(CsrMie)
+			mie := cpu.CSR[CsrMie]
 			pending := mip & mie
 
 			if pending != 0 {
-				mstatus := cpu.GetCSR(CsrMstatus)
-				mideleg := cpu.GetCSR(CsrMideleg)
+				mstatus := cpu.CSR[CsrMstatus]
+				mideleg := cpu.CSR[CsrMideleg]
 
 				// Check each pending interrupt, highest priority first
 				for _, bit := range []uint64{11, 9, 7, 5, 3, 1} {
@@ -454,8 +455,11 @@ func (cpu *CPU) loop() error {
 
 			if cpu.Trace {
 				cpu.traceFunc(cpu.PC)
-				cpu.tracef(raw, instr, "sepc=%x, mode=%v",
-					cpu.GetCSR(CsrSepc), spp)
+				sepc, err := cpu.GetCSR(CsrSepc)
+				if err != nil {
+					return err
+				}
+				cpu.tracef(raw, instr, "sepc=%x, mode=%v", sepc, spp)
 			}
 
 			// 2. Synchronize both your core mode fields and your
@@ -494,8 +498,11 @@ func (cpu *CPU) loop() error {
 			mpp := isa.PrivilegeMode((mstatus >> 11) & 0x3)
 			if cpu.Trace {
 				cpu.traceFunc(cpu.PC)
-				cpu.tracef(raw, instr, "mepc=%x, mode=%v",
-					cpu.GetCSR(CsrMepc), mpp)
+				mepc, err := cpu.GetCSR(CsrMepc)
+				if err != nil {
+					return err
+				}
+				cpu.tracef(raw, instr, "mepc=%x, mode=%v", mepc, mpp)
 			}
 
 			// 2. Update both the core's operating privilege state AND
@@ -875,45 +882,78 @@ func (cpu *CPU) loop() error {
 			// Control and Status Registers (CSRs).
 		case isa.Csrrs:
 			csr := CSR(instr.Imm)
-			t := cpu.GetCSR(csr)
+			t, err := cpu.GetCSR(csr)
+			if err != nil {
+				return err
+			}
 			if instr.Rs1 != isa.Zero {
-				cpu.SetCSRX(csr, t|cpu.X[instr.Rs1], raw, instr)
+				err = cpu.SetCSRX(csr, t|cpu.X[instr.Rs1], raw, instr)
+				if err != nil {
+					return err
+				}
 			}
 			cpu.X[instr.Rd] = t
 
 		case isa.Csrrc:
 			csr := CSR(instr.Imm)
-			t := cpu.GetCSR(csr)
+			t, err := cpu.GetCSR(csr)
+			if err != nil {
+				return err
+			}
 			if instr.Rs1 != isa.Zero {
-				cpu.SetCSRX(csr, t & ^cpu.X[instr.Rs1], raw, instr)
+				err = cpu.SetCSRX(csr, t & ^cpu.X[instr.Rs1], raw, instr)
+				if err != nil {
+					return err
+				}
 			}
 			cpu.X[instr.Rd] = t
 
 		case isa.Csrrci:
 			csr := CSR(instr.Imm)
-			t := cpu.GetCSR(csr)
+			t, err := cpu.GetCSR(csr)
+			if err != nil {
+				return err
+			}
 			if instr.Rs1 != isa.Zero {
-				cpu.SetCSRX(csr, t & ^uint64(instr.Rs1), raw, instr)
+				err = cpu.SetCSRX(csr, t & ^uint64(instr.Rs1), raw, instr)
+				if err != nil {
+					return err
+				}
 			}
 			cpu.X[instr.Rd] = t
 
 		case isa.Csrrsi:
 			csr := CSR(instr.Imm)
-			t := cpu.GetCSR(csr)
-			cpu.SetCSRX(csr, t|uint64(instr.Rs1), raw, instr)
+			t, err := cpu.GetCSR(csr)
+			if err != nil {
+				return err
+			}
+			err = cpu.SetCSRX(csr, t|uint64(instr.Rs1), raw, instr)
+			if err != nil {
+				return err
+			}
 			cpu.X[instr.Rd] = t
 
 		case isa.Csrrw:
 			csr := CSR(instr.Imm)
-			oldCSR := cpu.GetCSR(csr)    // 1. Capture old CSR value
+			oldCSR, err := cpu.GetCSR(csr) // 1. Capture old CSR value
+			if err != nil {
+				return err
+			}
 			valToSet := cpu.X[instr.Rs1] // 2. Capture value from GPR
 
-			cpu.SetCSRX(csr, valToSet, raw, instr) // 3. Update CSR
-			cpu.X[instr.Rd] = oldCSR               // 4. Update GPR with old CSR
+			err = cpu.SetCSRX(csr, valToSet, raw, instr) // 3. Update CSR
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = oldCSR // 4. Update GPR with old CSR
 
 		case isa.Csrrwi:
 			csr := CSR(instr.Imm)
-			cpu.SetCSRX(csr, uint64(instr.Rs1), raw, instr)
+			err = cpu.SetCSRX(csr, uint64(instr.Rs1), raw, instr)
+			if err != nil {
+				return err
+			}
 
 			// Atomic (A extension).
 
