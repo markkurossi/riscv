@@ -562,7 +562,7 @@ func (mmu *MMU) Store8(vaddr, v uint64) error {
 
 func (mmu *MMU) Store16(vaddr, v uint64) error {
 	if memory.Avail(vaddr, 2) {
-		paddr, err := mmu.Map(vaddr, AccessRead)
+		paddr, err := mmu.Map(vaddr, AccessWrite)
 		if err != nil {
 			return err
 		}
@@ -582,7 +582,7 @@ func (mmu *MMU) Store16(vaddr, v uint64) error {
 
 func (mmu *MMU) Store32(vaddr, v uint64) error {
 	if memory.Avail(vaddr, 4) {
-		paddr, err := mmu.Map(vaddr, AccessRead)
+		paddr, err := mmu.Map(vaddr, AccessWrite)
 		if err != nil {
 			return err
 		}
@@ -601,7 +601,7 @@ func (mmu *MMU) Store32(vaddr, v uint64) error {
 
 func (mmu *MMU) Store64(vaddr, v uint64) error {
 	if (vaddr&0xfff)+8 <= 0xfff {
-		paddr, err := mmu.Map(vaddr, AccessRead)
+		paddr, err := mmu.Map(vaddr, AccessWrite)
 		if err != nil {
 			return err
 		}
