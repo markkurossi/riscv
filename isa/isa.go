@@ -12,6 +12,37 @@ import (
 	"fmt"
 )
 
+const (
+	MisaA uint64 = 1 << iota // Atomic extension
+	MisaB                    // B extension
+	MisaC                    // Compressed extension
+	MisaD                    // Double-precision floating-point extension
+	MisaE                    // RV32E/64E base ISA
+	MisaF                    // Single-precision floating-point extension
+	MisaG                    // Reserved
+	MisaH                    // Hypervisor extension
+	MisaI                    // RV32I/64I base ISA
+	MisaJ                    // Reserved
+	MisaK                    // Reserved
+	MisaL                    // Reserved
+	MisaM                    // Integer Multiply/Divide extension
+	MisaN                    // Tentatively reserved for User-Level Interrupts extension
+	MisaO                    // Reserved
+	MisaP                    // Tentatively reserved for Packed-SIMD extension
+	MisaQ                    // Quad-precision floating-point extension
+	MisaR                    // Reserved
+	MisaS                    // Supervisor mode implemented
+	MisaT                    // Reserved
+	MisaU                    // User mode implemented
+	MisaV                    // Vector extension
+	MisaW                    // Reserved
+	MisaX                    // Non-standard extensions present
+	MisaY                    // Reserved
+	MisaZ                    // Reserved
+
+	MisaMXL uint64 = 2 << 62
+)
+
 type PrivilegeMode uint8
 
 const (

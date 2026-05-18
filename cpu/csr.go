@@ -163,16 +163,16 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 	switch csr {
 	case CsrMisa:
 		v = cpu.CSR[csr]
-		v |= uint64(2<<62) |
-			(1 << 0) | // A (Atomic)
-			(1 << 2) | // C (Compressed)
-			(1 << 3) | // D (Double)
-			(1 << 5) | // F (Float)
-			(1 << 6) | // G (Additional alias for IMAFD)
-			(1 << 8) | // I (Integer)
-			(1 << 12) | // M (Multiply)
-			(1 << 18) | // S (Supervisor)
-			(1 << 20) // U (User mode)
+		v |= isa.MisaMXL |
+			isa.MisaA | // A (Atomic)
+			isa.MisaC | // C (Compressed)
+			isa.MisaD | // D (Double)
+			isa.MisaF | // F (Float)
+			isa.MisaG | // G (Additional alias for IMAFD)
+			isa.MisaI | // I (Integer)
+			isa.MisaM | // M (Multiply)
+			isa.MisaS | // S (Supervisor)
+			isa.MisaU // U (User mode)
 
 		// Debug triggers.
 	case 0x7a0, 0x7a1, 0x7a2, 0x7a3, 0x7a4:
