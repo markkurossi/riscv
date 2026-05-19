@@ -122,16 +122,17 @@ func (cpu *CPU) Dump(epc uint64) {
 	fmt.Printf(" t5 : %016x t6 : %016x\n",
 		cpu.X[isa.T5], cpu.X[isa.T6])
 
-	fmt.Printf("Satp: mode=%v, page=%x\n",
-		cpu.MMU.Satp().Mode(), cpu.MMU.Satp().PPN())
+	fmt.Printf("Satp: %v\n", cpu.MMU.Satp())
 
 	root := cpu.MMU.Satp().PPN()
 	if root != 0 {
 		page, err := cpu.MMU.Mem.Page(uint64(cpu.MMU.Satp().PPN()))
 		if err != nil {
 			fmt.Printf("Page table root not found: %v\n", err)
-		} else if false {
-			fmt.Printf("Page table root:\n%s", hex.Dump(page))
+		} else {
+			if false {
+				fmt.Printf("Page table root:\n%s", hex.Dump(page))
+			}
 		}
 	}
 }

@@ -90,7 +90,7 @@ func (satp Satp) PPN() uint64 {
 }
 
 func (satp Satp) String() string {
-	return fmt.Sprintf("mode=%v, ppn=%v", satp.Mode(), satp.PPN())
+	return fmt.Sprintf("mode=%v, ppn=%x", satp.Mode(), satp.PPN())
 }
 
 // PTE defines the page table entry.
@@ -347,9 +347,6 @@ func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 	uint64, PTEFlags, int, error) {
 
 	base := root << 12
-
-	fmt.Printf("MMU.MapSv39: root=%x => base=%x, vaddr=%x\n",
-		root, base, vaddr)
 
 	for level := 2; level >= 0; level-- {
 		idx := index(vaddr, level)
