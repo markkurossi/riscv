@@ -273,7 +273,7 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 		}
 		if v != 0 {
 			cpu.tracef(raw, instr, "Satp: %v", satp)
-			cpu.DebugTrace = true
+			cpu.DebugTrace = false
 		}
 		if v != 0 {
 			if false {

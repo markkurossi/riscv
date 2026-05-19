@@ -166,6 +166,7 @@ func (cpu *CPU) Run() error {
 					if trap.Err != nil {
 						fmt.Printf("  caused by %v\n", trap.Err)
 					}
+					cpu.Dump(cpu.PC)
 				}
 			} else {
 				return err
@@ -320,7 +321,7 @@ func (cpu *CPU) loop() error {
 			}
 			if print {
 				switch entry.Name {
-				case "__delay", "panic_on_other_cpu":
+				case "__delay":
 					os.Exit(1)
 				}
 			}
@@ -430,8 +431,9 @@ func (cpu *CPU) loop() error {
 
 		case isa.Sret:
 			cpu.mstatus.SetSIE(cpu.mstatus.SPIE())
-			cpu.mstatus.SetSPIE(false)
+			cpu.mstatus.SetSPIE(true)
 			cpu.SetMode(cpu.mstatus.SPP())
+			cpu.mstatus.SetSPP(isa.ModeU)
 			cpu.PC = cpu.CSR[CsrSepc]
 
 			if cpu.Trace {
@@ -449,8 +451,9 @@ func (cpu *CPU) loop() error {
 			}
 
 			cpu.mstatus.SetMIE(cpu.mstatus.MPIE())
-			cpu.mstatus.SetMPIE(false)
+			cpu.mstatus.SetMPIE(true)
 			cpu.SetMode(cpu.mstatus.MPP())
+			cpu.mstatus.SetMPP(isa.ModeU)
 			cpu.PC = cpu.CSR[CsrMepc]
 
 			if cpu.Trace {

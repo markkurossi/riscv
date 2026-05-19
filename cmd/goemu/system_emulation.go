@@ -91,12 +91,15 @@ func systemEmulation(params kernel.Params,
 	}
 	copy(mem.RAM[mem.Offset(OfsKernel):], data)
 
-	data, err = os.ReadFile(initrd)
-	if err != nil {
-		return fmt.Errorf("failed to read initrd: %w", err)
+	var initrdSize uint64
+	if len(initrd) > 0 {
+		data, err = os.ReadFile(initrd)
+		if err != nil {
+			return fmt.Errorf("failed to read initrd: %w", err)
+		}
+		initrdSize = uint64(len(data))
+		copy(mem.RAM[mem.Offset(OfsInitrd):], data)
 	}
-	initrdSize := uint64(len(data))
-	copy(mem.RAM[mem.Offset(OfsInitrd):], data)
 
 	dtb := makeDTB(initrdSize)
 	copy(mem.RAM[mem.Offset(OfsDTB):], dtb)
@@ -415,22 +418,25 @@ func makeDTB(initrdSize uint64) []byte {
 		// "earlycon=sbi console=ttyS0,115200 lpj=1000000",
 		// "earlycon=sbi console=ttyS0,115200",
 		"earlycon=sbi console=ttyS0,115200 init=/init",
+		//"earlycon=uart8250,mmio,0x10000000 console=ttyS0,115200 root=/dev/ram0 rw init=/init norandmaps",
 	)
 
-	// Linux expects these properties to define the physical address
-	// boundaries of the ramdisk
-	tab = [8]uint32{
-		uint32(OfsInitrd >> 32),
-		uint32(OfsInitrd),
-	}
-	fdt.PropTabU32("linux,initrd-start", &tab[0], 2)
+	if initrdSize > 0 {
+		// Linux expects these properties to define the physical
+		// address boundaries of the ramdisk
+		tab = [8]uint32{
+			uint32(OfsInitrd >> 32),
+			uint32(OfsInitrd),
+		}
+		fdt.PropTabU32("linux,initrd-start", &tab[0], 2)
 
-	initrdEnd := OfsInitrd + initrdSize
-	tab = [8]uint32{
-		uint32(initrdEnd >> 32),
-		uint32(initrdEnd),
+		initrdEnd := OfsInitrd + initrdSize
+		tab = [8]uint32{
+			uint32(initrdEnd >> 32),
+			uint32(initrdEnd),
+		}
+		fdt.PropTabU32("linux,initrd-end", &tab[0], 2)
 	}
-	fdt.PropTabU32("linux,initrd-end", &tab[0], 2)
 
 	fdt.PropStr("stdout-path", "/uart@10000000:115200n8")
 
