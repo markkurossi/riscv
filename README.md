@@ -243,6 +243,114 @@ $ dtc -I dtb -O dts -o source.dts goemu.dtb
 
 ## Supervisor Model
 
+### Mode Transition
+
+In RISC-V, mode transitions are governed by privileged instructions
+(`ecall`, `ebreak`, `sret`, `mret`) and hardware interrupts. When an
+exception or interrupt occurs, the processor transitions to a higher
+(or equal) privilege mode to handle it. Conversely, returning from a
+handler restores the previous state.
+
+Here is the foundational breakdown of how these transitions work,
+filling out the table for **User (U)**, **Supervisor (S)**, and
+**Machine (M)** modes.
+
+#### Key Concepts & CSR Fields
+
+Before looking at the table, it helps to understand what the actions
+mean:
+
+* **`xPP` (Previous Privilege):** Holds the mode the processor was in
+  *before* the trap occurred ($U=00$, $S=01$, $M=11$).
+* **`xPIE` (Previous Interrupt Enable):** Saves the state of the
+  interrupt enable bit (`xIE`) from before the trap.
+* **`xIE` (Interrupt Enable):** Gets set to `0` during a trap to
+  globally disable interrupts while entering the handler.
+* **`xtvec` / `xepc`:** The target address is determined by the trap
+  vector register (`mtvec`/`stvec`), and the return address is saved
+  in the exception program counter (`mepc`/`sepc`).
+
+### RISC-V State Transition Table
+
+By default, traps go to **M-mode** unless they are explicitly
+delegated to **S-mode** using delegation registers (`medeleg` for
+exceptions, `mideleg` for interrupts).
+
+| Input  | Mode | Cond   | Cause  | Actions                             | Tgt |
+|--------|------|--------|--------|-------------------------------------|-----|
+| ecall  | M    | —      | EcallM | MPP=M, MPIE=MIE, MIE=0, mepc=pc     | M   |
+| ecall  | S    | !Deleg | EcallS | MPP=S, MPIE=MIE, MIE=0, mepc=pc     | M   |
+| ecall  | S    | Deleg  | EcallS | SPP=S, SPIE=SIE, SIE=0, sepc=pc     | S   |
+| ecall  | U    | !Deleg | EcallU | MPP=U, MPIE=MIE, MIE=0, mepc=pc     | M   |
+| ecall  | U    | Deleg  | EcallU | SPP=U, SPIE=SIE, SIE=0, sepc=pc     | S   |
+| ebreak | Any  | !Deleg | Break  | MPP=mode, MPIE=MIE, MIE=0, mepc=pc  | M   |
+| ebreak | Any  | Deleg  | Break  | SPP=mode, SPIE=SIE, SIE=0, sepc=pc  | S   |
+| mret   | M    | —      | —      | MIE=MPIE, MPIE=1, mode=MPP, pc=mepc | MPP |
+| sret   | S    | —      | —      | SIE=SPIE, SPIE=1, mode=SPP, pc=sepc | SPP |
+| Intr   | Any  | !Deleg | Intr   | MPP=mode, MPIE=MIE, MIE=0, mepc=pc  | M   |
+| Intr   | Any  | Deleg  | Intr   | SPP=mode, SPIE=SIE, SIE=0, sepc=pc  | S   |
+
+
+### Key Takeaways from the Table
+
+1. **The Delegation Rule:** Notice how for `U` and `S` modes, the
+   outcome depends on whether the trap is delegated. If
+   `medeleg[cause]` or `mideleg[cause]` is set to 1, the trap bypasses
+   M-mode entirely and updates the **S-mode** CSRs (`sstatus`, `sepc`,
+   `stvec`).
+
+2. **The Return Mechanism (`xret`):** When executing `mret`, the
+   hardware reads the `MPP` field to know what mode to drop back
+   into. It also restores the interrupt state (`MIE = MPIE`) and
+   resets `MPIE` to 1.
+
+3. **Interrupts vs. Exceptions:** An `ecall` or `ebreak` is
+   synchronous (the saved `epc` points to the instruction itself). An
+   interrupt is asynchronous, meaning `epc` points to the next
+   instruction that *would* have been executed.
+
+4. **M-Mode Interrupts:** If an interrupt occurs while already running
+   in M-mode, it cannot be delegated to S-mode (global RISC-V rule:
+   traps can never be delegated to a lower privilege mode than the one
+   they occurred in). The table still holds true because Deleg
+   implicitly evaluates to false if Mode == M.
+
+### MMU
+
+| Mode | PTE (U, R, W, X)   | SUM      | MXR      | Read    | Store   | Exec |
+| ---- | :----------------- | :------- | :------- | :------ | :------ | :--- |
+| U    | U=0 (Any R/W/X)    | —        | —        | No      | No      | No   |
+| U    | U=1, R=1, W=1, X=0 | —        | —        | yes     | yes     | No   |
+| U    | U=1, R=0, W=0, X=1 | —        | MXR=0    | No      | No      | yes  |
+| U    | U=1, R=0, W=0, X=1 | —        | MXR=1    | yes     | No      | yes  |
+| S    | U=1 (Any R/W/X)    | SUM=0    | —        | No      | No      | No   |
+| S    | U=1, R=1, W=1, X=0 | SUM=1    | —        | yes     | yes     | No   |
+| S    | U=1, R=0, W=0, X=1 | SUM=1    | MXR=0    | No      | No      | No¹  |
+| S    | U=0, R=1, W=0, X=1 | —        | MXR=0    | yes     | No      | yes  |
+| S    | U=0, R=0, W=0, X=1 | —        | MXR=1    | yes     | No      | yes  |
+| M    | (Any Page)         | —        | —        | yes²    | yes²    | yes² |
+| M    | (Any Page)         | mstatus³ | mstatus³ | Match S | Match S | No   |
+
+**Architectural Rules & Pitfalls**
+
+1. The S-Mode Execution Trap: Notice row 7. Even if SUM=1, an attempt
+   by Supervisor mode to fetch an instruction from a User page (U=1)
+   will always trigger an instruction page fault. This is a hardcoded
+   security feature to prevent "ret2usr" exploits where a kernel is
+   tricked into running malicious user-space code.
+
+2. M-Mode and the MPRV Exception: Normally, if the Modify Privilege
+   bit is unset (mstatus.MPRV=0), Machine mode bypasses the MMU
+   entirely.
+
+2. However, if the Modify Privilege bit is set (mstatus.MPRV=1), the
+   MMU steps in only for data loads and stores (not fetches). It
+   translates those accesses using the privilege level specified in
+   mstatus.MPP (usually S or U mode), meaning SUM and MXR suddenly
+   apply to M-mode data operations too. The `Read` and `Store`
+   operations match S-mode semantics.
+
+
 ### Kernel memory map
 
 ``` text

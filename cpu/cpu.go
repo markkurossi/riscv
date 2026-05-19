@@ -23,7 +23,8 @@ import (
 )
 
 var (
-	bo = binary.LittleEndian
+	bo          = binary.LittleEndian
+	_  isa.Hart = &CPU{}
 )
 
 const (
@@ -31,6 +32,8 @@ const (
 	cpuColor = false
 )
 
+// XXX Thise are interrupt cause code.
+//
 // Bit  Name   Meaning
 // ─────────────────────────────────────────
 //
@@ -110,7 +113,8 @@ type CPU struct {
 	InterruptsPending bool
 	LastTimer         uint64
 
-	CSR [4096]uint64
+	CSR     [4096]uint64
+	mstatus isa.Mstatus
 
 	PC uint64
 
@@ -146,7 +150,6 @@ func (cpu *CPU) Mode() isa.PrivilegeMode {
 
 func (cpu *CPU) SetMode(mode isa.PrivilegeMode) {
 	cpu.mode = mode
-	cpu.MMU.Mode = mode
 }
 
 func (cpu *CPU) Run() error {
@@ -156,44 +159,24 @@ func (cpu *CPU) Run() error {
 		err := cpu.loop()
 		if err != nil {
 			if trap, ok := errors.AsType[*isa.Trap](err); ok {
-				if trap.Target == 0 {
-					medeleg := cpu.CSR[CsrMedeleg]
-					delegated := medeleg&(1<<trap.Cause) != 0
-
-					if false {
-						fmt.Printf("%8x: cause=%v, mode=%v, medeleg=%v[%v]\n",
-							cpu.PC, trap.Cause, cpu.Mode(), medeleg, delegated)
-					}
-
-					var target isa.PrivilegeMode
-
-					if delegated && cpu.Mode() <= isa.ModeS {
-						target = isa.ModeS
-					} else {
-						target = isa.ModeM
-					}
-
-					trap = cpu.Trap(target, trap.Cause, trap.Tval, trap.Err)
-					if cpu.Trace {
-						cpu.traceFunc(cpu.PC)
+				// The trap handler saved relevant CPU state and moved
+				// PC to trap handler. All done, let's continue
+				if true {
+					fmt.Printf("CPU: trap %v\n", trap)
+					if trap.Err != nil {
+						fmt.Printf("  caused by %v\n", trap.Err)
 					}
 				}
-				if trap.PC == 0 {
-					panic("trap PC not set")
-				}
-				err = cpu.HandleTrap(trap)
-			}
-			if err != nil {
+			} else {
 				return err
 			}
-			// Exception handled, let's continue
 		}
 	}
 }
 
 func (cpu *CPU) loop() error {
 	if cpu.PC%2 == 1 {
-		return isa.NewTrap(0, cpu.PC, isa.CauseInstAddrMisaligned, cpu.PC, nil)
+		return cpu.Trap(isa.CauseInstAddrMisaligned, cpu.PC, nil)
 	}
 
 	var codePagenum uint64
@@ -226,7 +209,6 @@ func (cpu *CPU) loop() error {
 			pending := mip & mie
 
 			if pending != 0 {
-				mstatus := cpu.CSR[CsrMstatus]
 				mideleg := cpu.CSR[CsrMideleg]
 
 				// Check each pending interrupt, highest priority first
@@ -234,19 +216,25 @@ func (cpu *CPU) loop() error {
 					if pending&(1<<bit) == 0 {
 						continue
 					}
-					if mideleg&(1<<bit) != 0 && cpu.Mode() != isa.ModeM {
-						// Delegated to S-mode
-						sie := (mstatus >> 1) & 1 // sstatus.SIE = mstatus bit 1
-						if sie == 1 || cpu.Mode() < isa.ModeS {
+
+					currentMode := cpu.Mode()
+
+					if mideleg&(1<<bit) == 0 {
+						// Handle in M-mode Enabled if explicitly in a
+						// lower mode, OR if in M-mode with MIE active
+						if currentMode < isa.ModeM ||
+							(currentMode == isa.ModeM && cpu.mstatus.MIE()) {
 							cause := 1<<63 | bit
-							return cpu.Trap(isa.ModeS, cause, 0, nil)
+							return cpu.Trap(cause, 0, nil)
 						}
 					} else {
-						// Handle in M-mode
-						mie_bit := (mstatus >> 3) & 1 // mstatus.MIE
-						if mie_bit == 1 || cpu.Mode() < isa.ModeM {
+						// Delegated to S-mode Enabled if explicitly
+						// in User mode, OR if in S-mode with SIE
+						// active
+						if currentMode < isa.ModeS ||
+							(currentMode == isa.ModeS && cpu.mstatus.SIE()) {
 							cause := 1<<63 | bit
-							return cpu.Trap(isa.ModeM, cause, 0, nil)
+							return cpu.Trap(cause, 0, nil)
 						}
 					}
 				}
@@ -260,7 +248,7 @@ func (cpu *CPU) loop() error {
 			}
 			codePage, err = cpu.MMU.Mem.Page(memory.Page(paddr))
 			if err != nil {
-				return err
+				return cpu.Trap(isa.CauseInstAccessFault, paddr, err)
 			}
 			codePagenum = memory.Page(cpu.PC)
 		}
@@ -281,7 +269,7 @@ func (cpu *CPU) loop() error {
 				}
 				nextPage, err := cpu.MMU.Mem.Page(memory.Page(paddr))
 				if err != nil {
-					return err
+					return cpu.Trap(isa.CauseInstAccessFault, paddr, err)
 				}
 				nextOfs := memory.PageOffset(paddr)
 				raw |= uint32(nextPage[nextOfs+0]) << 16
@@ -295,8 +283,7 @@ func (cpu *CPU) loop() error {
 			} else {
 				instr, err = isa.Decode(raw)
 				if err != nil {
-					return isa.NewTrap(0, cpu.PC, isa.CauseIllegalInstr,
-						uint64(raw), err)
+					return err
 				}
 				cpu.decodeCache[idx].Raw = raw
 				cpu.decodeCache[idx].Instr = instr
@@ -331,8 +318,11 @@ func (cpu *CPU) loop() error {
 					cpu.PC, entry.Name, mapped-entry.Addr)
 				cpu.LastSymbol = entry
 			}
-			if print && entry.Name == "__delay" {
-				os.Exit(1)
+			if print {
+				switch entry.Name {
+				case "__delay", "panic_on_other_cpu":
+					os.Exit(1)
+				}
 			}
 		}
 
@@ -436,123 +426,61 @@ func (cpu *CPU) loop() error {
 				cpu.traceFunc(cpu.PC)
 				cpu.tracef(raw, instr, "")
 			}
-
-			// XXX This is determined by the medeleg (Machine
-			// Exception Delegation) register.
-			//
-			//  - If medeleg[3] (Breakpoint bit) is 1: Trap to S-mode.
-			//  - If medeleg[3] is 0: Trap to M-mode.
-
-			return cpu.Trap(isa.ModeM, isa.CauseBreakpoint, 0, nil)
+			return cpu.Trap(isa.CauseBreakpoint, 0, nil)
 
 		case isa.Sret:
-			// 1. Read directly from master CsrMstatus to avoid shadow
-			// mask stripping defects
-			mstatus := cpu.CSR[CsrMstatus]
-
-			// Privilege level to return to is stored in SPP (bit 8)
-			spp := isa.PrivilegeMode((mstatus >> 8) & 1)
-
-			if cpu.Trace {
-				cpu.traceFunc(cpu.PC)
-				sepc, err := cpu.GetCSR(CsrSepc)
-				if err != nil {
-					return err
-				}
-				cpu.tracef(raw, instr, "sepc=%x, mode=%v", sepc, spp)
-			}
-
-			// 2. Synchronize both your core mode fields and your
-			// virtual translation MMU state
-			cpu.SetMode(spp)
-
-			// 3. SIE (bit 1) ← SPIE (bit 5)
-			spie := (mstatus >> 5) & 1
-			mstatus = (mstatus & ^uint64(1<<1)) | (spie << 1)
-
-			// 4. SPIE (bit 5) ← 1
-			mstatus |= uint64(1 << 5)
-
-			// 5. SPP (bit 8) ← ModeU (0)
-			mstatus &^= uint64(1 << 8)
-
-			// 6. Write back safely straight to the underlying
-			// register storage slot
-			cpu.CSR[CsrMstatus] = mstatus
-			cpu.SyncCSR()
-
-			// 7. Relocate your instruction pointer target
+			cpu.mstatus.SetSIE(cpu.mstatus.SPIE())
+			cpu.mstatus.SetSPIE(false)
+			cpu.SetMode(cpu.mstatus.SPP())
 			cpu.PC = cpu.CSR[CsrSepc]
 
 			if cpu.Trace {
-				cpu.tracef(raw, instr, "sepc=%x", cpu.PC)
+				cpu.traceFunc(cpu.PC)
+				cpu.tracef(raw, instr, "sepc=%x, mode=%v", cpu.PC, cpu.Mode())
 			}
+
 			continue
 
 		case isa.Mret:
-			// 1. Read directly from the raw master internal register
-			// storage slice
-			mstatus := cpu.CSR[CsrMstatus]
-
-			// Restore Privilege Mode from MPP (Bits 11-12)
-			mpp := isa.PrivilegeMode((mstatus >> 11) & 0x3)
 			if cpu.Trace {
 				cpu.traceFunc(cpu.PC)
-				mepc, err := cpu.GetCSR(CsrMepc)
-				if err != nil {
-					return err
-				}
-				cpu.tracef(raw, instr, "mepc=%x, mode=%v", mepc, mpp)
+				cpu.tracef(raw, instr, "mode=%v => %v",
+					cpu.Mode(), cpu.mstatus.MPP())
 			}
 
-			// 2. Update both the core's operating privilege state AND
-			// the MMU
-			cpu.SetMode(mpp)
-
-			// 3. Restore Interrupts: MIE (Bit 3) = MPIE (Bit 7)
-			mpie := (mstatus >> 7) & 0x1
-			mstatus = (mstatus & ^uint64(1<<3)) | (mpie << 3)
-
-			// 4. Set MPIE (Bit 7) to 1
-			mstatus |= uint64(1 << 7)
-
-			// 5. Set MPP (Bits 11-12) to User mode (0)
-			mstatus &^= uint64(3 << 11)
-
-			// 6. Save back straight to the raw master registry array index
-			cpu.CSR[CsrMstatus] = mstatus
-			cpu.SyncCSR()
-
-			// 7. Finalize Jump to the Machine Exception Program Counter
+			cpu.mstatus.SetMIE(cpu.mstatus.MPIE())
+			cpu.mstatus.SetMPIE(false)
+			cpu.SetMode(cpu.mstatus.MPP())
 			cpu.PC = cpu.CSR[CsrMepc]
+
+			if cpu.Trace {
+				cpu.tracef(raw, instr, "mepc=%x, mode=%v", cpu.PC, cpu.Mode())
+			}
+
 			continue
 
 		case isa.Ecall:
 			var cause uint64
-			var target isa.PrivilegeMode
 			switch cpu.Mode() {
 			case isa.ModeU:
 				cause = isa.CauseEcallU
-				target = isa.ModeS
 			case isa.ModeS:
 				cause = isa.CauseEcallS
-				target = isa.ModeM
 			case isa.ModeM:
 				cause = isa.CauseEcallM
-				target = isa.ModeM
 			default:
-				return isa.NewTrap(0, cpu.PC, isa.CauseIllegalInstr, 0,
+				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 					fmt.Errorf("ecall in %v-mode", cpu.Mode()))
 			}
 			if cpu.Trace {
 				cpu.traceFunc(cpu.PC)
 				cpu.tracef(raw, instr,
-					"mode=%v, target=%v, cause=%v, a7=%x, a6=%x, a0=%x, a1=%x",
-					cpu.Mode(), target, cause, cpu.X[isa.A7], cpu.X[isa.A6],
+					"cause=%v, a7=%x, a6=%x, a0=%x, a1=%x",
+					cause, cpu.X[isa.A7], cpu.X[isa.A6],
 					cpu.X[isa.A0], cpu.X[isa.A1])
 			}
 
-			return cpu.Trap(target, cause, 0, nil)
+			return cpu.Trap(cause, 0, nil)
 
 		case isa.Fld:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
@@ -973,8 +901,7 @@ func (cpu *CPU) loop() error {
 			addr := cpu.X[instr.Rs1]
 
 			if addr%4 != 0 {
-				return isa.NewTrap(0, cpu.PC, isa.CauseStoreAddrMisaligned,
-					addr, nil)
+				return cpu.Trap(isa.CauseStoreAddrMisaligned, addr, nil)
 			}
 
 			v, err := cpu.MMU.Load32(addr)
@@ -1093,10 +1020,6 @@ func (cpu *CPU) loop() error {
 
 		case isa.LrW:
 			addr := cpu.X[instr.Rs1]
-			// Optional: Check alignment (4-byte)
-			if addr%4 != 0 {
-				return isa.NewTrap(0, cpu.PC, isa.CauseLoadAddrMisaligned, addr, nil)
-			}
 			v, err := cpu.MMU.Load32(addr)
 			if err != nil {
 				return err
@@ -1109,10 +1032,6 @@ func (cpu *CPU) loop() error {
 
 		case isa.LrD:
 			addr := cpu.X[instr.Rs1]
-			// Optional: Check alignment (8-byte)
-			if addr%8 != 0 {
-				return isa.NewTrap(0, cpu.PC, isa.CauseLoadAddrMisaligned, addr, nil)
-			}
 			v, err := cpu.MMU.Load64(addr)
 			if err != nil {
 				return err
@@ -1125,11 +1044,6 @@ func (cpu *CPU) loop() error {
 
 		case isa.ScW:
 			addr := cpu.X[instr.Rs1]
-			// Check alignment
-			if addr%4 != 0 {
-				cpu.HasReservation = false
-				return isa.NewTrap(0, cpu.PC, isa.CauseStoreAddrMisaligned, addr, nil)
-			}
 
 			// SC succeeds only if the reservation matches
 			if cpu.HasReservation && cpu.Reservation == addr {
@@ -1146,10 +1060,6 @@ func (cpu *CPU) loop() error {
 
 		case isa.ScD:
 			addr := cpu.X[instr.Rs1]
-			if addr%8 != 0 {
-				cpu.HasReservation = false
-				return isa.NewTrap(0, cpu.PC, isa.CauseStoreAddrMisaligned, addr, nil)
-			}
 
 			if cpu.HasReservation && cpu.Reservation == addr {
 				err := cpu.MMU.Store64(addr, cpu.X[instr.Rs2])
@@ -1219,9 +1129,10 @@ func (cpu *CPU) loop() error {
 			cpu.X[instr.Rd] = uint64(uint32(cpu.F[instr.Rs1]))
 
 		default:
-			return isa.NewTrap(0, cpu.PC, isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("instruction %v[0x%x] not implemented yet",
-					instr, raw))
+			cpu.tracef(raw, instr, "not implemented")
+			cpu.Dump(cpu.PC)
+			return fmt.Errorf("instruction %v[0x%x] not implemented yet",
+				instr, raw)
 		}
 		cpu.PC += uint64(size)
 	}
@@ -1256,9 +1167,9 @@ func (cpu *CPU) traceFunc(pc uint64) *SymEntry {
 		return nil
 	}
 
-	cpu.colorOn()
+	cpu.ColorOn()
 	fmt.Printf("%8x:  %s+0x%x", pc, entry.Name, mapped-entry.Addr)
-	cpu.colorOff()
+	cpu.ColorOff()
 	fmt.Println()
 
 	return entry
@@ -1270,23 +1181,34 @@ func (cpu *CPU) tracef(raw uint32, instr isa.Instr,
 	cpu.trace(raw, instr, fmt.Sprintf(format, args...))
 }
 
-func (cpu *CPU) colorOn() {
+func (cpu *CPU) ColorOn() {
 	if !cpuColor {
 		return
 	}
 	var color string
-	switch cpu.Mode() {
-	case isa.ModeS:
-		color = "30;106"
-	case isa.ModeM:
-		color = "30;103"
-	default:
-		color = "30"
+	if true {
+		switch cpu.Mode() {
+		case isa.ModeS:
+			color = "30;106" // black/bright cyan
+		case isa.ModeM:
+			color = "30;103" // black/bright yellow
+		default:
+			color = "30" // black/white
+		}
+	} else {
+		switch cpu.Mode() {
+		case isa.ModeS:
+			color = "1;32" // bright green
+		case isa.ModeM:
+			color = "1;35" // bright magenta
+		default:
+			color = "30" // black/white
+		}
 	}
 	fmt.Printf("\x1b[%sm", color)
 }
 
-func (cpu *CPU) colorOff() {
+func (cpu *CPU) ColorOff() {
 	if !cpuColor {
 		return
 	}
@@ -1294,7 +1216,7 @@ func (cpu *CPU) colorOff() {
 }
 
 func (cpu *CPU) trace(raw uint32, instr isa.Instr, msg string) {
-	cpu.colorOn()
+	cpu.ColorOn()
 
 	var line string
 	if raw&0b11 == 0b11 {
@@ -1316,6 +1238,6 @@ func (cpu *CPU) trace(raw uint32, instr isa.Instr, msg string) {
 		line += fmt.Sprintf(" # %s", msg)
 	}
 	fmt.Print(line)
-	cpu.colorOff()
+	cpu.ColorOff()
 	fmt.Println()
 }

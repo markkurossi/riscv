@@ -10,6 +10,7 @@ package memory
 import (
 	"encoding/binary"
 	"errors"
+	"runtime/debug"
 )
 
 var (
@@ -28,7 +29,7 @@ const (
 // starting from the address (i.e. addr and addr+n are on the same
 // page).
 func Avail(addr, n uint64) bool {
-	return (addr&0xfff)+n <= 0xfff
+	return (addr&0xfff)+n <= 0x1000
 }
 
 func Page(addr uint64) uint64 {
@@ -74,6 +75,9 @@ func (mem *Memory) Page(num uint64) ([]byte, error) {
 	RAMBasePage := mem.RAMBase / PageSize
 
 	if num < RAMBasePage || num >= RAMBasePage+uint64(mem.numPages) {
+		if false {
+			debug.PrintStack()
+		}
 		return nil, ErrInvalidAddr
 	}
 	addr := (num - RAMBasePage) * PageSize

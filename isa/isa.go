@@ -879,7 +879,7 @@ var Operands = map[Op]OpInfo{
 }
 
 const (
-	maxOpNameLen = 9
+	maxOpNameLen = 10
 )
 
 func (op Op) String() string {

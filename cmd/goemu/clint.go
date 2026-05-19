@@ -19,6 +19,7 @@ const (
 )
 
 type CLINT struct {
+	Hart  isa.Hart
 	Start uint64
 	End   uint64
 
@@ -33,7 +34,7 @@ func (clint *CLINT) Contains(paddr uint64) bool {
 
 func (clint *CLINT) load(paddr uint64) (uint64, error) {
 	if !clint.Contains(paddr) {
-		return 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, paddr, nil)
+		return 0, clint.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
 	}
 
 	var v uint64
@@ -60,7 +61,7 @@ func (clint *CLINT) load(paddr uint64) (uint64, error) {
 
 func (clint *CLINT) store(paddr, v uint64) error {
 	if !clint.Contains(paddr) {
-		return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
+		return clint.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 	}
 	ofs := paddr - clint.Start
 

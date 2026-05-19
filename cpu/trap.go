@@ -13,66 +13,55 @@ import (
 	"github.com/markkurossi/riscv/isa"
 )
 
-func (cpu *CPU) Trap(target isa.PrivilegeMode, cause, tval uint64,
-	err error) *isa.Trap {
+func (cpu *CPU) Trap(cause, tval uint64, err error) error {
+	var tvec uint64
 
-	switch target {
-	case isa.ModeM:
-		// 1. Get current mstatus
-		mstatus := cpu.CSR[CsrMstatus]
+	// Handler is determined by the medeleg (Machine Exception
+	// Delegation) register.
 
-		// 2. Save Current Mode (S=1) into MPP (bits 11-12)
-		mstatus = (mstatus & ^uint64(0x1800)) | (uint64(cpu.Mode()) << 11)
+	medeleg := cpu.CSR[CsrMedeleg]
+	if medeleg&(1<<cause) == 0 || cpu.Mode() == isa.ModeM {
+		// Trap to M-mode.
+		cpu.mstatus.SetMPP(cpu.Mode())
+		cpu.mstatus.SetMPIE(cpu.mstatus.MIE())
+		cpu.mstatus.SetMIE(false)
 
-		// 3. Save MIE into MPIE, then disable MIE
-		mie := (mstatus >> 3) & 0x1
-		mstatus = (mstatus & ^uint64(1<<7)) | (mie << 7) // MPIE = MIE
-		mstatus = (mstatus & ^uint64(1<<3))              // MIE = 0
-
-		// 4. Update CSR and CPU state
-		cpu.CSR[CsrMstatus] = mstatus
 		cpu.CSR[CsrMepc] = cpu.PC
 		cpu.CSR[CsrMcause] = cause
 		cpu.CSR[CsrMtval] = tval
 
-		return isa.NewTrap(target, cpu.PC, cause, tval, err)
+		tvec = cpu.CSR[CsrMtvec]
+	} else {
+		// Delegated to S-mode.
+		cpu.mstatus.SetSPP(cpu.Mode())
+		cpu.mstatus.SetSPIE(cpu.mstatus.SIE())
+		cpu.mstatus.SetSIE(false)
 
-	case isa.ModeS:
-		// Read directly from master register to avoid shadow mask stripping
-		mstatus := cpu.CSR[CsrMstatus]
-
-		// 1. Save current SIE (bit 1) into SPIE (bit 5)
-		sie := (mstatus >> 1) & 1
-		mstatus = (mstatus & ^uint64(1<<5)) | (sie << 5)
-
-		// 2. Clear SIE (bit 1) to globally disable interrupts on entry
-		mstatus &^= uint64(1 << 1)
-
-		// 3. Save current privilege mode into SPP (bit 8)
-		// ModeU (0) -> 0, ModeS (1) -> 1. We strip bit 0 of the current mode.
-		currentPriv := uint64(cpu.Mode() & 1)
-		mstatus = (mstatus & ^uint64(1<<8)) | (currentPriv << 8)
-
-		// 4. Save the modified master status register back
-		cpu.CSR[CsrMstatus] = mstatus
-
-		// 5. Update architectural exception tracking CSRs
 		cpu.CSR[CsrSepc] = cpu.PC
 		cpu.CSR[CsrScause] = cause
 		cpu.CSR[CsrStval] = tval
 
-		// 6. CRITICAL: Shift the CPU privilege mode to Supervisor
-		// mode now!  This ensures handleTrap reads the correct target
-		// execution environment.
+		tvec = cpu.CSR[CsrStvec]
 		cpu.SetMode(isa.ModeS)
-
-		return isa.NewTrap(target, cpu.PC, cause, tval, err)
-
-	default:
-		panic(42)
-		return isa.NewTrap(isa.ModeM, cpu.PC, isa.CauseBreakpoint, 0,
-			fmt.Errorf("trap: unexpected target mode %v", target))
 	}
+
+	// XXX check cpu.TrapHandler in user-mode emulator
+
+	mode := tvec & 0x3
+	base := tvec &^ 0x3
+
+	// Bit 63 indicates an asynchronous interrupt in RISC-V
+	isInterrupt := (cause >> 63) == 1
+
+	if mode == 1 && isInterrupt {
+		// Isolate the true cause index (clear the MSB interrupt flag)
+		causeIdx := cause &^ (uint64(1) << 63)
+		cpu.PC = base + (causeIdx * 4)
+	} else {
+		cpu.PC = base
+	}
+
+	return isa.NewTrap(cpu.PC, cause, tval, err)
 }
 
 func (cpu *CPU) HandleTrap(trap *isa.Trap) error {
@@ -96,16 +85,17 @@ func (cpu *CPU) HandleTrap(trap *isa.Trap) error {
 }
 
 func (cpu *CPU) Dump(epc uint64) {
-	fmt.Printf("CPU: 0 PID: %v IC: %v\n", cpu.PID, cpu.Instret)
+	fmt.Printf("CPU: 0 Mode: %v PID: %v IC: %v\n",
+		cpu.mode, cpu.PID, cpu.Instret)
 
 	if cpu.Symtab != nil {
-		entry := cpu.Symtab.Resolve(epc)
+		entry, mapped := cpu.FuncName(epc)
 		if entry != nil {
-			fmt.Printf("epc : %s+0x%x\n", entry.Name, epc-entry.Addr)
+			fmt.Printf("epc : %s+0x%x\n", entry.Name, mapped-entry.Addr)
 		}
-		entry = cpu.Symtab.Resolve(cpu.X[isa.Ra])
+		entry, mapped = cpu.FuncName(cpu.X[isa.Ra])
 		if entry != nil {
-			fmt.Printf(" ra : %s+0x%x\n", entry.Name, cpu.X[isa.Ra]-entry.Addr)
+			fmt.Printf(" ra : %s+0x%x\n", entry.Name, mapped-entry.Addr)
 		}
 	}
 

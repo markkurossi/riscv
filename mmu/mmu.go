@@ -48,7 +48,7 @@ type ROM interface {
 
 type MMU struct {
 	satp Satp
-	Mode isa.PrivilegeMode
+	Hart isa.Hart
 	Mem  *memory.Memory
 	ROM  ROM
 
@@ -269,8 +269,9 @@ func (pte PTE) PPN2() uint64 {
 // so we can do:
 //
 //	return (va >> (9 + 9*level)) & 0b111111111000
+
 func index(va uint64, level int) uint64 {
-	return (va >> (12 + 9*level)) & 0b111111111
+	return uint64((va >> (12 + (9 * level))) & 0x1FF)
 }
 
 type TLBEntry struct {
@@ -284,7 +285,7 @@ func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
 	if mmu.satp.Mode() == SatpModeBare {
 		return vaddr, nil
 	}
-	if mmu.Mode == isa.ModeM {
+	if mmu.Hart.Mode() == isa.ModeM {
 		return vaddr, nil
 	}
 
@@ -299,7 +300,7 @@ func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
 
 	addr, err := mmu.mapSlow(vaddr, vpn, access)
 	if err != nil {
-		if true {
+		if false {
 			// XXX kludge checks for ROM and low RAM addresses???
 			if vaddr < mmu.Mem.RAMBase ||
 				(mmu.Mem.RAMBase <= vaddr &&
@@ -318,6 +319,7 @@ func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
 func (mmu *MMU) mapSlow(vaddr, vpn uint64, access int) (uint64, error) {
 	page, flags, level, err := mmu.MapSv39(mmu.satp.PPN(), vaddr, access)
 	if err != nil {
+		fmt.Printf("mmu.MapSv39 failed: %v\n", err)
 		return 0, err
 	}
 
@@ -325,7 +327,7 @@ func (mmu *MMU) mapSlow(vaddr, vpn uint64, access int) (uint64, error) {
 
 	tlb.VPN = vpn
 	tlb.Page = page
-	tlb.Flags = flags
+	tlb.Flags = flags | PteV
 
 	switch level {
 	case 2:
@@ -346,6 +348,9 @@ func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 
 	base := root << 12
 
+	fmt.Printf("MMU.MapSv39: root=%x => base=%x, vaddr=%x\n",
+		root, base, vaddr)
+
 	for level := 2; level >= 0; level-- {
 		idx := index(vaddr, level)
 		pteAddr := base + idx*8
@@ -360,16 +365,16 @@ func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 
 			if access&AccessWrite != 0 {
 				return 0, 0, 0,
-					isa.NewTrap(0, 0, isa.CauseStorePageFault, vaddr, err)
+					mmu.Hart.Trap(isa.CauseStorePageFault, vaddr, err)
 			}
 			if access&AccessExec != 0 {
 				return 0, 0, 0,
-					isa.NewTrap(0, 0, isa.CauseInstPageFault, vaddr, err)
+					mmu.Hart.Trap(isa.CauseInstPageFault, vaddr, err)
 			}
 
 			// Default to load page fault.
 			return 0, 0, 0,
-				isa.NewTrap(0, 0, isa.CauseLoadPageFault, vaddr, err)
+				mmu.Hart.Trap(isa.CauseLoadPageFault, vaddr, err)
 		}
 		if pte.Leaf() {
 			return mmu.mapLeaf(pte, vaddr, level, access)
@@ -379,7 +384,7 @@ func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 		base = pte.PPN() << 12
 	}
 
-	return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, vaddr,
+	return 0, 0, 0, mmu.Hart.Trap(isa.CauseLoadPageFault, vaddr,
 		fmt.Errorf("no leaf page found"))
 }
 
@@ -425,47 +430,47 @@ func (mmu *MMU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 
 	// Check permissions.
 	if access&AccessRead != 0 && !readable {
-		return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, vaddr, ac)
+		return 0, 0, 0, mmu.Hart.Trap(isa.CauseLoadPageFault, vaddr, ac)
 	}
 	if access&AccessWrite != 0 && !pte.Writable() {
-		return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseStorePageFault, vaddr, ac)
+		return 0, 0, 0, mmu.Hart.Trap(isa.CauseStorePageFault, vaddr, ac)
 	}
 	if access&AccessExec != 0 && !pte.Executable() {
-		return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseInstPageFault, vaddr, ac)
+		return 0, 0, 0, mmu.Hart.Trap(isa.CauseInstPageFault, vaddr, ac)
 	}
 
 	isUserPage := pte.User()
 
-	if mmu.Mode == isa.ModeU && false {
+	if mmu.Hart.Mode() == isa.ModeU {
 		// User mode CANNOT access kernel pages (PteU == 0)
 		if !isUserPage {
 			if access&AccessExec != 0 {
-				return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseInstPageFault,
+				return 0, 0, 0, mmu.Hart.Trap(isa.CauseInstPageFault,
 					vaddr, ac.WithDesc("U-mode"))
 			}
 			if access&AccessWrite != 0 {
-				return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseStorePageFault,
+				return 0, 0, 0, mmu.Hart.Trap(isa.CauseStorePageFault,
 					vaddr, ac.WithDesc("U-mode"))
 			}
-			return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault,
+			return 0, 0, 0, mmu.Hart.Trap(isa.CauseLoadPageFault,
 				vaddr, ac.WithDesc("U-mode"))
 		}
-	} else if mmu.Mode == isa.ModeS && false {
+	} else if mmu.Hart.Mode() == isa.ModeS {
 		// Supervisor mode accessing a User Page (PteU == 1)
 		if isUserPage {
 			// Rule A: Supervisor mode can NEVER execute code from a User page
 			if access&AccessExec != 0 {
-				return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseInstPageFault,
+				return 0, 0, 0, mmu.Hart.Trap(isa.CauseInstPageFault,
 					vaddr, ac.WithDesc("S-mode exec user page"))
 			}
 			// Rule B: Supervisor data access is ONLY allowed if
 			// sstatus.SUM == 1
 			if !mmu.Sum {
 				if access&AccessWrite != 0 {
-					return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseStorePageFault,
+					return 0, 0, 0, mmu.Hart.Trap(isa.CauseStorePageFault,
 						vaddr, ac.WithDesc("S-mode user page"))
 				}
-				return 0, 0, 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault,
+				return 0, 0, 0, mmu.Hart.Trap(isa.CauseLoadPageFault,
 					vaddr, ac.WithDesc("S-mode user page"))
 			}
 		}
@@ -483,15 +488,15 @@ func (mmu *MMU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 	if misaligned {
 		if access&AccessWrite != 0 {
 			return 0, 0, 0,
-				isa.NewTrap(0, 0, isa.CauseStoreAddrMisaligned, vaddr, ac)
+				mmu.Hart.Trap(isa.CauseStoreAddrMisaligned, vaddr, ac)
 		}
 		if access&AccessExec != 0 {
 			return 0, 0, 0,
-				isa.NewTrap(0, 0, isa.CauseInstAddrMisaligned, vaddr, ac)
+				mmu.Hart.Trap(isa.CauseInstAddrMisaligned, vaddr, ac)
 		}
 		// Default to load fault.
 		return 0, 0, 0,
-			isa.NewTrap(0, 0, isa.CauseLoadAddrMisaligned, vaddr, ac)
+			mmu.Hart.Trap(isa.CauseLoadAddrMisaligned, vaddr, ac)
 	}
 
 	var page uint64
@@ -602,7 +607,7 @@ func (mmu *MMU) Load64(vaddr uint64) (uint64, error) {
 			return mmu.ROM.Load64(paddr)
 		}
 		if paddr-mmu.Mem.RAMBase >= uint64(len(mmu.Mem.RAM)) && true {
-			return 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, vaddr,
+			return 0, mmu.Hart.Trap(isa.CauseLoadPageFault, vaddr,
 				fmt.Errorf("mapped page out of range: vaddr=%x, paddr=%x",
 					vaddr, paddr))
 		}
@@ -685,7 +690,7 @@ func (mmu *MMU) Store32(vaddr, v uint64) error {
 }
 
 func (mmu *MMU) Store64(vaddr, v uint64) error {
-	if (vaddr&0xfff)+8 <= 0xfff {
+	if memory.Avail(vaddr, 8) {
 		paddr, err := mmu.Map(vaddr, AccessWrite)
 		if err != nil {
 			return err

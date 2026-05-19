@@ -148,11 +148,9 @@ func csrName(csr int) string {
 //      cpu.TrapToMMode(interruptID)
 //  }
 
-var count int
-
 func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
-	if cpu.Mode() < csr.Privilege() {
-		return 0, cpu.Trap(0, isa.CauseIllegalInstr, uint64(csr),
+	if cpu.Mode() < csr.Privilege() && false {
+		return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
 			fmt.Errorf("GetCSR(%x), mode=%v", csr, cpu.Mode()))
 	}
 	// Handle read-only CSRs here by returning the fixed or computed
@@ -161,6 +159,9 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 	var v uint64
 
 	switch csr {
+	case CsrMstatus:
+		v = uint64(cpu.mstatus)
+
 	case CsrMisa:
 		v = cpu.CSR[csr]
 		v |= isa.MisaMXL |
@@ -180,7 +181,7 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 	case CsrTime:
 		v = cpu.Now()
 
-	case CsrMvendorid:
+	// case CsrMvendorid:
 
 	case CsrMarchid:
 		v = 0x100
@@ -193,10 +194,7 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 	case CsrScountinhibit:
 
 	case CsrSstatus:
-		// Update the read mask to allow the SUM (bit 18) and MXR (bit
-		// 19) views to pass through
-		mask := uint64(0x00000000000de122) | (1 << 18) | (1 << 19)
-		v = cpu.CSR[CsrMstatus] & mask
+		v = uint64(cpu.mstatus & isa.SstatusMask)
 
 	case CsrSie:
 		mask := uint64((1 << 1) | (1 << 5) | (1 << 9))
@@ -213,8 +211,6 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 			v = cpu.CSR[csr]
 		}
 	}
-
-	// fmt.Printf("GetCSR(%x) => %b\n", csr, v)
 	return v, nil
 }
 
@@ -224,18 +220,21 @@ func (cpu *CPU) SetCSR(csr CSR, v uint64) error {
 
 func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 
-	if cpu.Mode() < csr.Privilege() {
-		return cpu.Trap(0, isa.CauseIllegalInstr, uint64(csr),
+	if cpu.Mode() < csr.Privilege() && false {
+		return cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
 			fmt.Errorf("SetCSR(%x)=%v, mode=%v", csr, v, cpu.Mode()))
 	}
 	if csr.ReadOnly() {
-		return cpu.Trap(0, isa.CauseIllegalInstr, uint64(csr),
+		return cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
 			fmt.Errorf("SetCSR(%x)=%v: read-only", csr, v))
 	}
 
 	// Handle read-only and functional CSRs here by ignoring update or
 	// by updating CPU state accordingly.
 	switch csr {
+	case CsrMstatus:
+		cpu.mstatus = isa.Mstatus(v)
+
 	case CsrMisa:
 		cpu.CSR[csr] = v
 
@@ -243,9 +242,8 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 		cpu.CSR[csr] = v
 
 	case CsrSstatus:
-		// Ensure bit 5 (1<<5) and bit 8 (1<<8) are preserved during writes
-		mask := uint64(0x00000000000de122) | (1 << 5) | (1 << 8) | (1 << 18) | (1 << 19)
-		cpu.CSR[CsrMstatus] = (cpu.CSR[CsrMstatus] & ^mask) | (v & mask)
+		cpu.mstatus = (cpu.mstatus & ^isa.SstatusMask) |
+			(isa.Mstatus(v) & isa.SstatusMask)
 
 	case CsrStimecmp:
 		cpu.CSR[csr] = v
@@ -274,6 +272,10 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 			cpu.tracef(raw, instr, "Satp: %v", satp)
 		}
 		if v != 0 {
+			cpu.tracef(raw, instr, "Satp: %v", satp)
+			cpu.DebugTrace = true
+		}
+		if v != 0 {
 			if false {
 				cpu.DebugTrace = true
 				cpu.MMU.Dump()
@@ -284,12 +286,9 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 		cpu.CSR[csr] = v
 	}
 
-	cpu.SyncCSR()
-
 	return nil
 }
 
-func (cpu *CPU) SyncCSR() {
-	cpu.MMU.Sum = (cpu.CSR[CsrMstatus]>>18)&1 == 1
-	cpu.MMU.Mxr = (cpu.CSR[CsrMstatus]>>19)&1 == 1
+func (cpu *CPU) Mstatus() isa.Mstatus {
+	return cpu.mstatus
 }

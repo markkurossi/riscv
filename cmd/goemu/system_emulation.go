@@ -37,32 +37,39 @@ const (
 func systemEmulation(params kernel.Params,
 	bios, kernel, initrd, symbols string) error {
 
+	core := &cpu.CPU{
+		Trace: params.CPUtrace,
+	}
+
 	mem := memory.New(memory.RAMBase, 0x20000000)
 	rom := &ROM{
+		Hart: core,
 		Segments: []mmu.ROM{
 			&UART{
+				Hart:  core,
 				Start: UARTBase,
 				End:   UARTBase + UARTSize,
 				Color: params.Color,
 			},
 			&CLINT{
+				Hart:  core,
 				Start: CLINTBase,
 				End:   CLINTBase + CLINTSize,
 			},
 			&PLIC{
+				Hart:  core,
 				Start: PLICBase,
 				End:   PLICBase + PLICSize,
 			},
 		},
 	}
 
-	core := &cpu.CPU{
-		Trace: params.CPUtrace,
-		MMU: &mmu.MMU{
-			Mem: mem,
-			ROM: rom,
-		},
+	core.MMU = &mmu.MMU{
+		Hart: core,
+		Mem:  mem,
+		ROM:  rom,
 	}
+
 	core.SetMode(isa.ModeM)
 	if len(symbols) > 0 {
 		sm, err := cpu.LoadSystemMap(symbols)
@@ -98,10 +105,6 @@ func systemEmulation(params kernel.Params,
 	core.X[isa.A1] = OfsDTB
 	core.PC = OfsBIOS
 
-	core.TrapHandler = func(core *cpu.CPU, trap *isa.Trap) (bool, error) {
-		return handleTrap(core, trap, mem)
-	}
-
 	return core.Run()
 }
 
@@ -112,6 +115,7 @@ var (
 )
 
 type ROM struct {
+	Hart     isa.Hart
 	Segments []mmu.ROM
 }
 
@@ -130,7 +134,7 @@ func (rom *ROM) Load8(paddr uint64) (uint8, error) {
 			return seg.Load8(paddr)
 		}
 	}
-	return 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, paddr, nil)
+	return 0, rom.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
 }
 
 func (rom *ROM) Load16(paddr uint64) (uint16, error) {
@@ -139,7 +143,7 @@ func (rom *ROM) Load16(paddr uint64) (uint16, error) {
 			return seg.Load16(paddr)
 		}
 	}
-	return 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, paddr, nil)
+	return 0, rom.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
 }
 
 func (rom *ROM) Load32(paddr uint64) (uint32, error) {
@@ -148,7 +152,7 @@ func (rom *ROM) Load32(paddr uint64) (uint32, error) {
 			return seg.Load32(paddr)
 		}
 	}
-	return 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, paddr, nil)
+	return 0, rom.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
 }
 
 func (rom *ROM) Load64(paddr uint64) (uint64, error) {
@@ -157,7 +161,7 @@ func (rom *ROM) Load64(paddr uint64) (uint64, error) {
 			return seg.Load64(paddr)
 		}
 	}
-	return 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, paddr, nil)
+	return 0, rom.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
 }
 
 func (rom *ROM) Store8(paddr, v uint64) error {
@@ -166,7 +170,7 @@ func (rom *ROM) Store8(paddr, v uint64) error {
 			return seg.Store8(paddr, v)
 		}
 	}
-	return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
+	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 }
 
 func (rom *ROM) Store16(paddr, v uint64) error {
@@ -175,7 +179,7 @@ func (rom *ROM) Store16(paddr, v uint64) error {
 			return seg.Store16(paddr, v)
 		}
 	}
-	return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
+	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 }
 
 func (rom *ROM) Store32(paddr, v uint64) error {
@@ -184,7 +188,7 @@ func (rom *ROM) Store32(paddr, v uint64) error {
 			return seg.Store32(paddr, v)
 		}
 	}
-	return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
+	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 }
 
 func (rom *ROM) Store64(paddr, v uint64) error {
@@ -193,167 +197,7 @@ func (rom *ROM) Store64(paddr, v uint64) error {
 			return seg.Store64(paddr, v)
 		}
 	}
-	return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
-}
-
-func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
-	bool, error) {
-
-	// If the high bit of cause is set, this is an asynchronous interrupt
-	if trap.Cause>>63 != 0 {
-		var tvec uint64
-		var err error
-
-		switch core.Mode() {
-		case isa.ModeS:
-			tvec, err = core.GetCSR(cpu.CsrStvec)
-		case isa.ModeM:
-			tvec, err = core.GetCSR(cpu.CsrMtvec)
-		}
-		if err != nil {
-			return false, err
-		}
-
-		if tvec == 0 {
-			return false, fmt.Errorf("unhandled %v mode trap %w",
-				core.Mode(), trap)
-		}
-
-		if false {
-			fmt.Printf("Interrupt: mode=%v, cause=%x, sp=%x, tp=%x, tvec=%x\n",
-				core.Mode(), trap.Cause, core.X[isa.Sp], core.X[isa.Tp], tvec)
-		}
-
-		mode := tvec & 0x3
-		base := tvec & ^uint64(0x3)
-
-		// Check if Vectored Interrupt mode is enabled (mode == 1)
-		if mode == 1 {
-			// PC jumps to base + (exception code * 4)
-			// Strip the interrupt bit (bit 63) to isolate the index
-			irqIndex := trap.Cause & 0xfff
-			core.PC = base + (irqIndex * 4)
-		} else {
-			// Direct mode (mode == 0): all traps jump directly to base
-			core.PC = base
-		}
-
-		return true, nil
-	}
-
-	if core.Trace {
-		fmt.Printf("goemu: mode: %v-mode trap: %v\n", core.Mode(), trap)
-		if trap.Err != nil {
-			fmt.Printf("  caused by: %v\n", trap.Err)
-		}
-	}
-
-	switch trap.Cause {
-	case isa.CauseBreakpoint:
-		var tvec uint64
-		var err error
-
-		switch core.Mode() {
-		case isa.ModeS:
-			tvec, err = core.GetCSR(cpu.CsrStvec)
-		case isa.ModeM:
-			tvec, err = core.GetCSR(cpu.CsrMtvec)
-		}
-		if err != nil {
-			return false, err
-		}
-
-		if tvec == 0 {
-			return false, fmt.Errorf("unhandled %v mode trap %w",
-				core.Mode(), trap)
-		}
-		core.PC = tvec
-
-		return true, nil
-
-	case isa.CauseEcallS:
-		var tvec uint64
-
-		switch trap.Target {
-		case isa.ModeS:
-			tvec = core.CSR[cpu.CsrStvec]
-		case isa.ModeM:
-			tvec = core.CSR[cpu.CsrMtvec]
-		default:
-			return false, fmt.Errorf("invalid target %v for trap %w",
-				trap.Target, trap)
-		}
-
-		// fmt.Printf("goemu: target=%v tvec=%x\n", trap.Target, tvec)
-
-		core.SetMode(trap.Target)
-		core.PC = tvec
-
-		return true, nil
-
-	case isa.CauseLoadPageFault, isa.CauseStorePageFault,
-		isa.CauseInstPageFault:
-
-		// Real hardware sets these before jumping to stvec:
-		err := core.SetCSR(cpu.CsrSepc, trap.PC) // faulting instruction PC
-		if err != nil {
-			return false, err
-		}
-		err = core.SetCSR(cpu.CsrScause, trap.Cause) // fault cause
-		if err != nil {
-			return false, err
-		}
-		err = core.SetCSR(cpu.CsrStval, trap.Tval) // faulting address
-		if err != nil {
-			return false, err
-		}
-
-		// Update sstatus: clear SPP (S-mode previous privilege),
-		// set it to current mode, disable SIE, save SIE to SPIE
-		sstatus, err := core.GetCSR(cpu.CsrSstatus)
-		if err != nil {
-			return false, err
-		}
-		spie := (sstatus >> 1) & 1 // save current SIE as SPIE
-		spp := uint64(0)
-		if core.Mode() == isa.ModeS {
-			spp = 1
-		}
-		sstatus &^= uint64(0x122)           // clear SPP, SPIE, SIE
-		sstatus |= (spie << 5) | (spp << 8) // set SPIE and SPP
-		core.SetCSR(cpu.CsrSstatus, sstatus)
-
-		// Switch to S-mode and jump to stvec
-		core.SetMode(isa.ModeS)
-		tvec, err := core.GetCSR(cpu.CsrStvec)
-		if err != nil {
-			return false, err
-		}
-		mode := tvec & 0x3
-		base := tvec &^ uint64(0x3)
-		if mode == 1 { // vectored mode
-			core.PC = base + (trap.Cause&0xff)*4
-		} else { // direct mode
-			core.PC = base
-		}
-
-		fmt.Printf("goemu: %v\n", trap)
-		if trap.Err != nil {
-			fmt.Printf("  in %v\n", trap.Err)
-		}
-		entry, _ := core.FuncName(trap.PC)
-		if entry != nil {
-			fmt.Printf("  function: %v\n", entry.Name)
-		}
-		entry, _ = core.FuncName(core.PC)
-		if entry != nil {
-			fmt.Printf("  handler : %v\n", entry.Name)
-		}
-
-		return true, nil
-	}
-
-	return false, nil
+	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 }
 
 func makeDTB(initrdSize uint64) []byte {
