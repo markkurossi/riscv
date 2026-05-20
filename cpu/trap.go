@@ -32,6 +32,7 @@ func (cpu *CPU) Trap(cause, tval uint64, err error) error {
 		cpu.CSR[CsrMtval] = tval
 
 		tvec = cpu.CSR[CsrMtvec]
+		cpu.SetMode(isa.ModeM)
 	} else {
 		// Delegated to S-mode.
 		cpu.mstatus.SetSPP(cpu.Mode())

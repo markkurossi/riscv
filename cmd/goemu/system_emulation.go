@@ -31,7 +31,7 @@ const (
 	CLINTSize = 0x10000
 
 	PLICBase = 0x0c000000
-	PLICSize = 0x04000000
+	PLICSize = 0x400000
 )
 
 func systemEmulation(params kernel.Params,

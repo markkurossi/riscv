@@ -325,9 +325,12 @@ func (mmu *MMU) mapSlow(vaddr, vpn uint64, access int) (uint64, error) {
 
 	tlb := &mmu.TLB[vpn&0xfff]
 
-	tlb.VPN = vpn
-	tlb.Page = page
-	tlb.Flags = flags | PteV
+	// Disable this to disable TLB.
+	if true {
+		tlb.VPN = vpn
+		tlb.Page = page
+		tlb.Flags = flags | PteV
+	}
 
 	switch level {
 	case 2:

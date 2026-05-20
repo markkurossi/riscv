@@ -323,7 +323,10 @@ func (cpu *CPU) loop() error {
 			if print {
 				switch entry.Name {
 				case "__delay":
-					os.Exit(1)
+					if true {
+						// cpu.MMU.Mem.Strings()
+						os.Exit(1)
+					}
 				}
 			}
 		}

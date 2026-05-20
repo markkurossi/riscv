@@ -278,7 +278,7 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 		if v != 0 {
 			if false {
 				cpu.DebugTrace = true
-				cpu.MMU.Dump()
+				// cpu.MMU.Dump()
 			}
 		}
 

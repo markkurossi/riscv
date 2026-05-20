@@ -8,6 +8,10 @@
 package memory
 
 import (
+	"fmt"
+)
+
+import (
 	"encoding/binary"
 	"errors"
 	"runtime/debug"
@@ -57,6 +61,22 @@ func New(base, size uint64) *Memory {
 		RAMBase:  base,
 		numPages: int(size / PageSize),
 	}
+}
+
+func (mem *Memory) Strings() {
+	fmt.Printf("*** strings ***\n")
+	for _, b := range mem.RAM {
+		switch b {
+		case '\t', '\n', '\r':
+			fmt.Printf("%c", b)
+
+		default:
+			if ' ' <= b && b <= '~' {
+				fmt.Printf("%c", b)
+			}
+		}
+	}
+	fmt.Printf("\n*** strings ***\n")
 }
 
 func (mem *Memory) Offset(paddr uint64) uint64 {
