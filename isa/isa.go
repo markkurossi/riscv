@@ -996,7 +996,7 @@ func (instr Instr) String() string {
 			return fmt.Sprintf("%v %v,%v,%v",
 				pad(instr.Op), instr.Rd, instr.Rs1, instr.Rs2)
 
-		case Addi, Addiw, Andi, Slli, Slliw, Slti, Sltiu, Srai, Sraiw,
+		case Addi, Addiw, Addw, Andi, Slli, Slliw, Slti, Sltiu, Srai, Sraiw,
 			Srli, Srliw, Ori, Xori:
 			// GroupOPIMM, GroupOPIMM32
 			return fmt.Sprintf("%v %v,%v,%d",
@@ -1013,6 +1013,8 @@ func (instr Instr) String() string {
 			// GroupSYSTEM
 		case Ebreak, Ecall, Sret, Mret, Wfi:
 			return pad(instr.Op)
+		case SfenceVMA:
+			return fmt.Sprintf("%v %v,%v", pad(instr.Op), instr.Rs1, instr.Rs2)
 
 		case Jal: // GroupJAL
 			return fmt.Sprintf("%v %d", pad(instr.Op), instr.Imm)
@@ -1054,7 +1056,7 @@ func (instr Instr) String() string {
 		case Csrrs, Csrrc, Csrrw:
 			return fmt.Sprintf("%v %v,%x,%v",
 				pad(instr.Op), instr.Rd, instr.Imm, instr.Rs1)
-		case Csrrwi, Csrrsi:
+		case Csrrwi, Csrrsi, Csrrci:
 			return fmt.Sprintf("%v %v,%x,%d",
 				pad(instr.Op), instr.Rd, instr.Imm, uint32(instr.Rs1))
 		}
