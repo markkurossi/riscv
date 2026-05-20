@@ -991,7 +991,7 @@ func (instr Instr) String() string {
 	if instr.Op != Invalid {
 		switch instr.Op {
 		case Add, And, Div, Divu, Divw, Mul, Mulhu, Mulw, Or, Rem, Remw,
-			Slt, Sll, Sltu, Srl, Sub, Xor:
+			Slt, Sll, Sltu, Srl, Sub, Subw, Xor:
 			// GroupOP, GroupOP32
 			return fmt.Sprintf("%v %v,%v,%v",
 				pad(instr.Op), instr.Rd, instr.Rs1, instr.Rs2)

@@ -166,7 +166,8 @@ func (cpu *CPU) Run() error {
 					if trap.Err != nil {
 						fmt.Printf("  caused by %v\n", trap.Err)
 					}
-					cpu.Dump(cpu.PC)
+					// XXX disassemble trap.PC
+					cpu.Dump(trap.PC)
 				}
 			} else {
 				return err
@@ -307,7 +308,7 @@ func (cpu *CPU) loop() error {
 			if mapped >= 0x80000000 && mapped < 0x80200000 {
 				print = false
 			}
-			if mapped > 0x80200000 && mapped < 0x100000000 {
+			if mapped >= 0x80200000 && mapped < 0x100000000 {
 				// Physical address during early boot (MMU off).
 				// Kernel is loaded at 0x80200000 physical = 0xffffffff80000000 virtual.
 				// delta = 0xffffffff80000000 - 0x80200000 = 0xffffffff7fe00000
@@ -801,8 +802,8 @@ func (cpu *CPU) loop() error {
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] - cpu.X[instr.Rs2]
 
 		case isa.Subw:
-			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1] -
-				cpu.X[instr.Rs2])))
+			cpu.X[instr.Rd] = uint64(int64(int32(uint32(cpu.X[instr.Rs1] -
+				cpu.X[instr.Rs2]))))
 
 		case isa.Xor:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] ^ cpu.X[instr.Rs2]

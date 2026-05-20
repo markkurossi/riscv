@@ -181,7 +181,7 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 	case CsrTime:
 		v = cpu.Now()
 
-	// case CsrMvendorid:
+	case CsrMvendorid:
 
 	case CsrMarchid:
 		v = 0x100

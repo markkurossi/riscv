@@ -18,6 +18,7 @@ func (cpu *CPU) Trap(cause, tval uint64, err error) error {
 
 	// Handler is determined by the medeleg (Machine Exception
 	// Delegation) register.
+	epc := cpu.PC
 
 	medeleg := cpu.CSR[CsrMedeleg]
 	if medeleg&(1<<cause) == 0 || cpu.Mode() == isa.ModeM {
@@ -61,7 +62,7 @@ func (cpu *CPU) Trap(cause, tval uint64, err error) error {
 		cpu.PC = base
 	}
 
-	return isa.NewTrap(cpu.PC, cause, tval, err)
+	return isa.NewTrap(epc, cause, tval, err)
 }
 
 func (cpu *CPU) HandleTrap(trap *isa.Trap) error {
