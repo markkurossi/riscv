@@ -271,16 +271,6 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 			cpu.traceFunc(cpu.PC)
 			cpu.tracef(raw, instr, "Satp: %v", satp)
 		}
-		if v != 0 {
-			cpu.tracef(raw, instr, "Satp: %v", satp)
-			cpu.DebugTrace = false
-		}
-		if v != 0 {
-			if false {
-				cpu.DebugTrace = true
-				// cpu.MMU.Dump()
-			}
-		}
 
 	default:
 		cpu.CSR[csr] = v
