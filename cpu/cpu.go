@@ -161,13 +161,19 @@ func (cpu *CPU) Run() error {
 			if trap, ok := errors.AsType[*isa.Trap](err); ok {
 				// The trap handler saved relevant CPU state and moved
 				// PC to trap handler. All done, let's continue
-				if true {
-					fmt.Printf("CPU: trap %v\n", trap)
-					if trap.Err != nil {
-						fmt.Printf("  caused by %v\n", trap.Err)
+				if false {
+					switch trap.Cause {
+					case isa.CauseEcallU, isa.CauseEcallS,
+						isa.CauseEcallVS, isa.CauseEcallM:
+
+					default:
+						fmt.Printf("CPU: trap %v\n", trap)
+						if trap.Err != nil {
+							fmt.Printf("  caused by %v\n", trap.Err)
+						}
+						cpu.Dump(trap.PC)
+						cpu.disassembleKernel(trap.PC)
 					}
-					// XXX disassemble trap.PC
-					cpu.Dump(trap.PC)
 				}
 			} else {
 				return err
@@ -298,37 +304,24 @@ func (cpu *CPU) loop() error {
 		cpu.Instret++
 
 		if cpuDebug || cpu.DebugTrace {
-			cpu.trace(raw, instr, "")
-		}
-		if (cpuDebug || cpu.DebugTrace) && cpu.Symtab != nil {
-			print := true
-			mapped := cpu.PC
-
-			// OpenSBI range: no kernel symbols here
-			if mapped >= 0x80000000 && mapped < 0x80200000 {
-				print = false
-			}
-			if mapped >= 0x80200000 && mapped < 0x100000000 {
-				// Physical address during early boot (MMU off).
-				// Kernel is loaded at 0x80200000 physical = 0xffffffff80000000 virtual.
-				// delta = 0xffffffff80000000 - 0x80200000 = 0xffffffff7fe00000
-				mapped = mapped - 0x200000 + 0xffffffff00000000
-			}
-			entry := cpu.Symtab.Resolve(mapped)
-			if print && entry != nil && entry != cpu.LastSymbol {
-				fmt.Printf("%8x:  %s+0x%x\n",
-					cpu.PC, entry.Name, mapped-entry.Addr)
-				cpu.LastSymbol = entry
-			}
-			if print {
-				switch entry.Name {
-				case "__delay":
-					if true {
-						// cpu.MMU.Mem.Strings()
-						os.Exit(1)
+			if cpu.Symtab != nil {
+				mapped, entry := cpu.kernelMap(cpu.PC)
+				if entry != nil && entry != cpu.LastSymbol {
+					fmt.Printf("%v  <%s+0x%x>:\n",
+						fmtAddr(cpu.PC), entry.Name, mapped-entry.Start)
+					cpu.LastSymbol = entry
+				}
+				if entry != nil {
+					switch entry.Name {
+					case "__delay":
+						if true {
+							// cpu.MMU.Mem.Strings()
+							os.Exit(1)
+						}
 					}
 				}
 			}
+			cpu.trace(raw, instr, "")
 		}
 
 		switch instr.Op {
@@ -482,8 +475,8 @@ func (cpu *CPU) loop() error {
 			if cpu.Trace {
 				cpu.traceFunc(cpu.PC)
 				cpu.tracef(raw, instr,
-					"cause=%v, a7=%x, a6=%x, a0=%x, a1=%x",
-					cause, cpu.X[isa.A7], cpu.X[isa.A6],
+					"a7=%x, a6=%x, a0=%x, a1=%x",
+					cpu.X[isa.A7], cpu.X[isa.A6],
 					cpu.X[isa.A0], cpu.X[isa.A1])
 			}
 
@@ -1175,7 +1168,7 @@ func (cpu *CPU) traceFunc(pc uint64) *SymEntry {
 	}
 
 	cpu.ColorOn()
-	fmt.Printf("%8x:  %s+0x%x", pc, entry.Name, mapped-entry.Addr)
+	fmt.Printf("%8x  <%s+0x%x>:", pc, entry.Name, mapped-entry.Start)
 	cpu.ColorOff()
 	fmt.Println()
 
@@ -1222,14 +1215,29 @@ func (cpu *CPU) ColorOff() {
 	fmt.Printf("\x1b[0m")
 }
 
+func fmtAddr(addr uint64) string {
+	if addr < 0x100000000 {
+		return fmt.Sprintf("  %08x", addr)
+	} else if addr >= 0xffffffff00000000 {
+		if false {
+			return fmt.Sprintf("+f%08x", uint32(addr))
+		} else {
+			return fmt.Sprintf("%16x", addr)
+		}
+	}
+	return fmt.Sprintf("%10x", addr)
+}
+
 func (cpu *CPU) trace(raw uint32, instr isa.Instr, msg string) {
 	cpu.ColorOn()
 
 	var line string
+
+	addr := fmtAddr(cpu.PC)
 	if raw&0b11 == 0b11 {
-		line = fmt.Sprintf("%8x:  %08x   %v", cpu.PC, raw, instr)
+		line = fmt.Sprintf("%s:  %08x   %v", addr, raw, instr)
 	} else {
-		line = fmt.Sprintf("%8x:  %04x       %v", cpu.PC, raw, instr)
+		line = fmt.Sprintf("%s:  %04x       %v", addr, raw, instr)
 	}
 	if len(msg) == 0 {
 		op, ok := isa.Operands[instr.Op]
