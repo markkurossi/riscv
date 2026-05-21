@@ -21,6 +21,10 @@ var (
 )
 
 const (
+	debugMMU = false
+)
+
+const (
 	AccessNone  = 0
 	AccessRead  = int(PteR)
 	AccessWrite = int(PteW)
@@ -390,7 +394,7 @@ func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 			}
 
 			var err error
-			if true {
+			if debugMMU {
 				err = fmt.Errorf("PTE not valid: %v", pte)
 			}
 
@@ -447,7 +451,7 @@ func (mmu *MMU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 
 	var ac *AccessContext
 
-	if false {
+	if debugMMU {
 		ac = &AccessContext{
 			Addr:   vaddr,
 			PTE:    pte,

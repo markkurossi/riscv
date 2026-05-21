@@ -52,6 +52,9 @@ func (hart hart) Trap(cause, tval uint64, err error) error {
 	return nil
 }
 
+func (hart hart) Shutdown() {
+}
+
 func (hart hart) ColorOn() {
 }
 
