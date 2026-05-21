@@ -231,7 +231,7 @@ func makeDTB(initrdSize uint64) []byte {
 
 	fdt.PropU32("#address-cells", 1)
 	fdt.PropU32("#size-cells", 0)
-	fdt.PropU32("timebase-frequency", 10000000)
+	fdt.PropU32("timebase-frequency", 100000000)
 
 	// -----------------------------------------------------------------
 	// CPU0
