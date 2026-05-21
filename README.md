@@ -22,24 +22,29 @@ devices.
 - RV64GC instruction set support
 - Machine, Supervisor, and User privilege modes
 - SV39 virtual memory and page tables
-- Linux syscall emulation
 - OpenSBI support
 - Linux kernel boot support
+- Linux syscall emulation mode
 - Device emulation:
   - NS16550A UART
   - PLIC interrupt controller
-  - CLINT / ACLINT timer and IPI devices
+  - ACLINT MSWI and MTIMER devices
+  - Syscon poweroff device
 - Symbol-aware traces and debugging support
 - Instruction-level execution tracing
 - Compressed instruction support
 
 ## Current status
 
-The emulator currently boots OpenSBI and Linux, reaches initramfs
-loading, initializes core devices, and is actively progressing toward
-stable userspace execution.
+The emulator now boots OpenSBI and Linux 6.x to a functional Buildroot
+shell. The machine supports privilege transitions, virtual memory,
+interrupts, timer devices, and enough platform hardware to run a Linux
+userspace environment.
 
-### Userspace
+Current development has shifted from "make Linux boot" to platform
+completeness, additional devices, and performance work.
+
+### Userspace emulation
 
 - [x] Standalone binaries
 - [x] Statically linked binaries
@@ -47,16 +52,19 @@ stable userspace execution.
 - [x] Basic Go binaries
 - [ ] Full Linux userspace compatibility
 
-### Linux boot
+### Linux system emulation
 
 - [x] OpenSBI boot
 - [x] Device Tree support
-- [x] Supervisor mode
+- [x] Machine/Supervisor/User privilege modes
 - [x] SV39 MMU
-- [x] Linux kernel boot
+- [x] Interrupt handling
+- [ ] ACLINT timer/IPI support
+- [ ] PLIC interrupt controller
 - [x] Initramfs loading
-- [ ] Stable userspace startup
-- [ ] Multiprocessor support
+- [x] Buildroot shell login
+- [x] System shutdown support
+- [ ] SMP support
 
 ## Quick start
 
@@ -81,7 +89,33 @@ OpenSBI v1.6
 [    0.000000] Linux version 6.18.7 (root@036cbf3b7083) (riscv64-linux-gcc.br_real (Buildroot 2021.11-18033-g83947c7bb6) 15.1.0, GNU ld (GNU Binutils) 2.44) #1 SMP Wed Apr  8 09:41:06 UTC 2026
 [    0.000000] Machine model: goemu,riscv-emulator
 ...
-[  139.479820] Freeing initrd memory: 9468K
+[   12.291753] Freeing initrd memory: 9468K
+[   18.570200] clk: Disabling unused clocks
+[   18.570327] PM: genpd: Disabling unused power domains
+[   18.570487] ALSA device list:
+[   18.570595]   No soundcards found.
+[   18.582016] Freeing unused kernel image (initmem) memory: 2428K
+[   18.582810] Run /init as init process
+...
+Welcome to Buildroot
+buildroot login: root
+login[79]: root login on 'console'
+# ls -la
+total 4
+drwx------    2 root     root            60 Apr 19 05:25 .
+drwxr-xr-x   18 root     root           420 May 18 05:41 ..
+-rw-------    1 root     root           192 Apr 19 05:25 .ash_history
+# uname -a
+Linux buildroot 6.18.7 #1 SMP Wed Apr  8 09:41:06 UTC 2026 riscv64 GNU/Linux
+# date
+Thu May 21 20:06:59 UTC 2026
+# halt
+...
+The system is going down NOW!
+Sent SIGTERM to all processes
+Sent SIGKILL to all processes
+Requesting system halt
+[   22.943205] reboot: System halted
 ```
 
 ## Architecture
@@ -96,10 +130,13 @@ OpenSBI v1.6
 |  - RV64GC CPU      |
 |  - MMU (SV39)      |
 |  - CSR subsystem   |
+|  - Trap handling   |
 +--------------------+
 | Devices            |
-| UART | PLIC        |
-| CLINT | VirtIO     |
+| UART               |
+| PLIC               |
+| ACLINT             |
+| Syscon             |
 +--------------------+
 ```
 
@@ -132,18 +169,21 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 
 ## Near term
 
- - [x] Stable Linux userspace startup
-   - [ ] Host terminal polling
-   - [ ] wfi sleep loop
-   - [ ] Add a VirtIO Block Device (virtio-blk)
+ - [ ] UART interrupt wiring in DTB
+ - [ ] Host terminal polling
+ - [ ] Proper wfi sleep behavior
+ - [ ] Add VirtIO block device (virtio-blk)
+ - [ ] Add VirtIO networking
  - [ ] Process-local page tables in emulator mode
  - [ ] Full syscall coverage in emulator mode
 
 ## Longer term
 
  - [ ] SMP support
- - [ ] VirtIO devices
+ - [ ] Additional VirtIO devices
  - [ ] Additional ISA extensions
+ - [ ] JIT experiments
+ - [ ] Performance optimizations
 
 # Appendix
 
