@@ -232,8 +232,7 @@ func (cpu *CPU) loop() error {
 						// lower mode, OR if in M-mode with MIE active
 						if currentMode < isa.ModeM ||
 							(currentMode == isa.ModeM && cpu.mstatus.MIE()) {
-							cause := 1<<63 | bit
-							return cpu.Trap(cause, 0, nil)
+							return cpu.Interrupt(isa.ModeM, bit)
 						}
 					} else {
 						// Delegated to S-mode Enabled if explicitly
@@ -241,8 +240,7 @@ func (cpu *CPU) loop() error {
 						// active
 						if currentMode < isa.ModeS ||
 							(currentMode == isa.ModeS && cpu.mstatus.SIE()) {
-							cause := 1<<63 | bit
-							return cpu.Trap(cause, 0, nil)
+							return cpu.Interrupt(isa.ModeS, bit)
 						}
 					}
 				}
@@ -481,6 +479,9 @@ func (cpu *CPU) loop() error {
 			}
 
 			return cpu.Trap(cause, 0, nil)
+
+		case isa.Wfi:
+			// XXX skip
 
 		case isa.Fld:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))

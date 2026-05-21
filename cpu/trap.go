@@ -66,6 +66,56 @@ func (cpu *CPU) Trap(cause, tval uint64, err error) error {
 	return isa.NewTrap(epc, cause, tval, err)
 }
 
+func (cpu *CPU) Interrupt(target isa.PrivilegeMode, cause uint64) error {
+
+	cause |= 1 << 63
+
+	var tvec uint64
+
+	epc := cpu.PC
+	switch target {
+	case isa.ModeM:
+		cpu.mstatus.SetMPP(cpu.Mode())
+		cpu.mstatus.SetMPIE(cpu.mstatus.MIE())
+		cpu.mstatus.SetMIE(false)
+
+		cpu.CSR[CsrMepc] = epc
+		cpu.CSR[CsrMcause] = cause
+		cpu.CSR[CsrMtval] = 0
+
+		tvec = cpu.CSR[CsrMtvec]
+		cpu.SetMode(isa.ModeM)
+
+	case isa.ModeS:
+		cpu.mstatus.SetSPP(cpu.Mode())
+		cpu.mstatus.SetSPIE(cpu.mstatus.SIE())
+		cpu.mstatus.SetSIE(false)
+
+		cpu.CSR[CsrSepc] = epc
+		cpu.CSR[CsrScause] = cause
+		cpu.CSR[CsrStval] = 0
+
+		tvec = cpu.CSR[CsrStvec]
+		cpu.SetMode(isa.ModeS)
+
+	default:
+		panic("invalid interrupt target")
+	}
+
+	mode := tvec & 0x3
+	base := tvec &^ 0x3
+
+	if mode == 1 {
+		// Isolate the true cause index (clear the MSB interrupt flag)
+		causeIdx := cause &^ (uint64(1) << 63)
+		cpu.PC = base + (causeIdx * 4)
+	} else {
+		cpu.PC = base
+	}
+
+	return isa.NewTrap(epc, cause, 0, nil)
+}
+
 func (cpu *CPU) HandleTrap(trap *isa.Trap) error {
 	if cpu.TrapHandler != nil {
 		ok, err := cpu.TrapHandler(cpu, trap)
