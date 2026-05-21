@@ -93,11 +93,11 @@ func (cpu *CPU) Dump(epc uint64) {
 	if cpu.Symtab != nil {
 		entry, mapped := cpu.FuncName(epc)
 		if entry != nil {
-			fmt.Printf("epc : %s+0x%x\n", entry.Name, mapped-entry.Addr)
+			fmt.Printf("epc : %s+0x%x\n", entry.Name, mapped-entry.Start)
 		}
 		entry, mapped = cpu.FuncName(cpu.X[isa.Ra])
 		if entry != nil {
-			fmt.Printf(" ra : %s+0x%x\n", entry.Name, mapped-entry.Addr)
+			fmt.Printf(" ra : %s+0x%x\n", entry.Name, mapped-entry.Start)
 		}
 	}
 
