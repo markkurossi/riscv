@@ -237,7 +237,8 @@ func (cpu *CPU) loop() error {
 						// lower mode, OR if in M-mode with MIE active
 						if currentMode < isa.ModeM ||
 							(currentMode == isa.ModeM && cpu.mstatus.MIE()) {
-							return cpu.Interrupt(isa.ModeM, bit)
+							cpu.Interrupt(isa.ModeM, bit)
+							continue
 						}
 					} else {
 						// Delegated to S-mode Enabled if explicitly
@@ -245,7 +246,8 @@ func (cpu *CPU) loop() error {
 						// active
 						if currentMode < isa.ModeS ||
 							(currentMode == isa.ModeS && cpu.mstatus.SIE()) {
-							return cpu.Interrupt(isa.ModeS, bit)
+							cpu.Interrupt(isa.ModeS, bit)
+							continue
 						}
 					}
 				}

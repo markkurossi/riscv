@@ -66,7 +66,7 @@ func (cpu *CPU) Trap(cause, tval uint64, err error) error {
 	return isa.NewTrap(epc, cause, tval, err)
 }
 
-func (cpu *CPU) Interrupt(target isa.PrivilegeMode, cause uint64) error {
+func (cpu *CPU) Interrupt(target isa.PrivilegeMode, cause uint64) {
 
 	cause |= 1 << 63
 
@@ -112,8 +112,6 @@ func (cpu *CPU) Interrupt(target isa.PrivilegeMode, cause uint64) error {
 	} else {
 		cpu.PC = base
 	}
-
-	return isa.NewTrap(epc, cause, 0, nil)
 }
 
 func (cpu *CPU) HandleTrap(trap *isa.Trap) error {
