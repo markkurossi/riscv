@@ -349,6 +349,24 @@ func (mmu *MMU) mapSlow(vaddr, vpn uint64, access int) (uint64, error) {
 func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 	uint64, PTEFlags, int, error) {
 
+	// XXX Check the RISC-V Specification:
+	//  - Volume II: RISC-V Privileged ISA Specification
+	//    - 12.1.3.1. Addressing and Memory Protection
+	//
+	// https://docs.riscv.org/reference/isa/priv/supervisor.html#translation
+	//
+	// The condition below is true and if we allow the direct mapping,
+	// the Linux boot succeeds. If we cause a page fault for the
+	// missing identity mapping, Linux dies in the page fault
+	// handling.
+	if vaddr&(1<<63) == 0 {
+		if false {
+			fmt.Printf("mapping user-space %x: mode=%v\n",
+				vaddr, mmu.Hart.Mode())
+		}
+		return vaddr, PteU | PteV, 0, nil
+	}
+
 	base := root << 12
 
 	for level := 2; level >= 0; level-- {
