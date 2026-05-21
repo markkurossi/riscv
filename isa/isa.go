@@ -596,18 +596,22 @@ var Operands = map[Op]OpInfo{
 	},
 	Csrrw: OpInfo{
 		Name: "csrrw",
+		Desc: "CSR Read and Write",
 	},
 	Csrrs: OpInfo{
 		Name: "csrrs",
+		Desc: "CSR Read and Set",
 	},
 	Csrrc: OpInfo{
 		Name: "csrrc",
 	},
 	Csrrwi: OpInfo{
 		Name: "csrrwi",
+		Desc: "CSR Read and Write Immediate",
 	},
 	Csrrsi: OpInfo{
 		Name: "csrrsi",
+		Desc: "CSR Read and Set Immediate",
 	},
 	Csrrci: OpInfo{
 		Name: "csrrci",
