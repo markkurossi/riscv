@@ -9,6 +9,7 @@ package mmu
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 
 	"github.com/markkurossi/riscv/isa"
@@ -319,7 +320,12 @@ func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
 func (mmu *MMU) mapSlow(vaddr, vpn uint64, access int) (uint64, error) {
 	page, flags, level, err := mmu.MapSv39(mmu.satp.PPN(), vaddr, access)
 	if err != nil {
-		fmt.Printf("mmu.MapSv39 failed: %v\n", err)
+		if trap, ok := errors.AsType[*isa.Trap](err); ok && false {
+			fmt.Printf("mmu.MapSv39 failed: %v\n", trap)
+			if trap.Err != nil {
+				fmt.Printf("  caused by %v\n", trap.Err)
+			}
+		}
 		return 0, err
 	}
 
@@ -349,24 +355,6 @@ func (mmu *MMU) mapSlow(vaddr, vpn uint64, access int) (uint64, error) {
 func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 	uint64, PTEFlags, int, error) {
 
-	// XXX Check the RISC-V Specification:
-	//  - Volume II: RISC-V Privileged ISA Specification
-	//    - 12.1.3.1. Addressing and Memory Protection
-	//
-	// https://docs.riscv.org/reference/isa/priv/supervisor.html#translation
-	//
-	// The condition below is true and if we allow the direct mapping,
-	// the Linux boot succeeds. If we cause a page fault for the
-	// missing identity mapping, Linux dies in the page fault
-	// handling.
-	if vaddr&(1<<63) == 0 {
-		if false {
-			fmt.Printf("mapping user-space %x: mode=%v\n",
-				vaddr, mmu.Hart.Mode())
-		}
-		return vaddr, PteU | PteV, 0, nil
-	}
-
 	base := root << 12
 
 	for level := 2; level >= 0; level-- {
@@ -376,6 +364,31 @@ func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 		pte := PTE(bo.Uint64(mmu.Mem.RAM[mmu.Mem.Offset(pteAddr):]))
 
 		if !pte.Valid() {
+
+			// XXX Check the RISC-V Specification:
+			//  - Volume II: RISC-V Privileged ISA Specification
+			//    - 12.1.3.1. Addressing and Memory Protection
+			//
+			// https://docs.riscv.org/reference/isa/priv/supervisor.html#translation
+			//
+			// The condition below is true and if we allow the direct mapping,
+			// the Linux boot succeeds. If we cause a page fault for the
+			// missing identity mapping, Linux dies in the page fault
+			// handling.
+			if mmu.Hart.Mode() == isa.ModeS && vaddr&(1<<63) == 0 &&
+				!mmu.Hart.Mstatus().SUM() {
+				if false {
+					fmt.Printf("%v-mode: %x, pte=%v, level=%v\n",
+						mmu.Hart.Mode(), vaddr, pte, level)
+				} else if false {
+					fmt.Printf("%v-mode: SUM=%v, MXR=%v\n",
+						mmu.Hart.Mode(),
+						mmu.Hart.Mstatus().SUM(),
+						mmu.Hart.Mstatus().MXR())
+				}
+				return vaddr, PteU | PteV, 0, nil
+			}
+
 			var err error
 			if true {
 				err = fmt.Errorf("PTE not valid: %v", pte)
@@ -475,7 +488,7 @@ func (mmu *MMU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 		}
 	} else if mmu.Hart.Mode() == isa.ModeS {
 		// Supervisor mode accessing a User Page (PteU == 1)
-		if isUserPage {
+		if isUserPage && false /* XXX is the flag wrong way? */ {
 			// Rule A: Supervisor mode can NEVER execute code from a User page
 			if access&AccessExec != 0 {
 				return 0, 0, 0, mmu.Hart.Trap(isa.CauseInstPageFault,
@@ -664,7 +677,13 @@ func (mmu *MMU) Store8(vaddr, v uint64) error {
 	if paddr < mmu.Mem.RAMBase {
 		return mmu.ROM.Store8(paddr, v)
 	}
-	mmu.Mem.RAM[mmu.Mem.Offset(paddr)] = byte(v)
+	if mmu.Mem.Contains(paddr) {
+		mmu.Mem.RAM[mmu.Mem.Offset(paddr)] = byte(v)
+	} else {
+		return fmt.Errorf("%v-mode: MMU.Store(%x, %x): addr out of bounds [%x...%x[",
+			mmu.Hart.Mode(), paddr, v,
+			mmu.Mem.RAMBase, mmu.Mem.RAMBase+uint64(len(mmu.Mem.RAM)))
+	}
 	return nil
 }
 

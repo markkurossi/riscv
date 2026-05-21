@@ -63,6 +63,10 @@ func New(base, size uint64) *Memory {
 	}
 }
 
+func (mem *Memory) Contains(addr uint64) bool {
+	return addr >= mem.RAMBase && addr-mem.RAMBase <= uint64(len(mem.RAM))
+}
+
 func (mem *Memory) Strings() {
 	fmt.Printf("*** strings ***\n")
 	for _, b := range mem.RAM {
