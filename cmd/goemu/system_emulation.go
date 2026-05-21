@@ -444,10 +444,17 @@ func makeDTB(initrdSize uint64) []byte {
 	// ---------------------------------------------------------------------
 	fdt.BeginNode("poweroff")
 	fdt.PropStr("compatible", "syscon-poweroff")
-	fdt.PropU32("regmap", 3)     // References phandle 3 (our syscon node above)
-	fdt.PropU32("offset", 0x0)   // Write to register offset 0
-	fdt.PropU32("value", 0x5555) // The magic value Linux will write to signal poweroff
-	fdt.EndNode()                // poweroff
+
+	// References phandle 3 (our syscon node above)
+	fdt.PropU32("regmap", 3)
+
+	// Write to register offset 0
+	fdt.PropU32("offset", 0x0)
+
+	// The magic value Linux will write to signal poweroff
+	fdt.PropU32("value", PoweroffMagic)
+
+	fdt.EndNode()
 
 	fdt.EndNode() // Close the "soc" node wrapper
 

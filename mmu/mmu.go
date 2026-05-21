@@ -445,12 +445,16 @@ func (ac *AccessContext) WithDesc(desc string) *AccessContext {
 func (mmu *MMU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 	uint64, PTEFlags, int, error) {
 
-	ac := &AccessContext{
-		Addr:   vaddr,
-		PTE:    pte,
-		Access: access,
-		SUM:    mmu.Sum,
-		MXR:    mmu.Mxr,
+	var ac *AccessContext
+
+	if false {
+		ac = &AccessContext{
+			Addr:   vaddr,
+			PTE:    pte,
+			Access: access,
+			SUM:    mmu.Sum,
+			MXR:    mmu.Mxr,
+		}
 	}
 
 	readable := pte.Readable()

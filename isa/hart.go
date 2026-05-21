@@ -10,6 +10,7 @@ type Hart interface {
 	Mode() PrivilegeMode
 	Mstatus() Mstatus
 	Trap(cause, tval uint64, err error) error
+	Shutdown()
 	ColorOn()
 	ColorOff()
 }

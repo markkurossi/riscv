@@ -43,14 +43,6 @@ func main() {
 		FSRoot:   *fsroot,
 	}
 
-	if len(*bios) > 0 || len(*kern) > 0 {
-		err := systemEmulation(params, *bios, *kern, *initrd, *symbols)
-		if err != nil {
-			log.Fatal(err)
-		}
-		return
-	}
-
 	if *objdump {
 		disassemble(flag.Args())
 		return
@@ -66,6 +58,14 @@ func main() {
 			log.Fatal("could not start CPU profile: ", err)
 		}
 		defer pprof.StopCPUProfile()
+	}
+
+	if len(*bios) > 0 || len(*kern) > 0 {
+		err := systemEmulation(params, *bios, *kern, *initrd, *symbols)
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
 	}
 
 	for _, arg := range flag.Args() {

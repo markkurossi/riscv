@@ -109,9 +109,8 @@ type CPU struct {
 	X [32]uint64
 	F [32]float64
 
-	mode              isa.PrivilegeMode
-	InterruptsPending bool
-	LastTimer         uint64
+	mode     isa.PrivilegeMode
+	shutdown bool
 
 	CSR     [4096]uint64
 	mstatus isa.Mstatus
@@ -155,7 +154,7 @@ func (cpu *CPU) SetMode(mode isa.PrivilegeMode) {
 func (cpu *CPU) Run() error {
 	cpu.StartTime = time.Now()
 
-	for {
+	for !cpu.shutdown {
 		err := cpu.loop()
 		if err != nil {
 			if trap, ok := errors.AsType[*isa.Trap](err); ok {
@@ -180,6 +179,12 @@ func (cpu *CPU) Run() error {
 			}
 		}
 	}
+
+	return nil
+}
+
+func (cpu *CPU) Shutdown() {
+	cpu.shutdown = true
 }
 
 func (cpu *CPU) loop() error {
@@ -244,6 +249,10 @@ func (cpu *CPU) loop() error {
 						}
 					}
 				}
+			}
+			if cpu.shutdown {
+				// Jump to trampoline to terminate the CPU loop.
+				return nil
 			}
 		}
 

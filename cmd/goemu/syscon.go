@@ -8,9 +8,12 @@ package main
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/markkurossi/riscv/isa"
+)
+
+const (
+	PoweroffMagic = 0x555
 )
 
 type Syscon struct {
@@ -43,25 +46,25 @@ func (syscon *Syscon) Store8(paddr, v uint64) error {
 	if paddr < syscon.Start {
 		return syscon.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 	}
-	fmt.Printf("Syscon: 0x%x = 0x%x\n", paddr, v)
-	os.Exit(0)
+	fmt.Printf("Syscon.Store8: 0x%x = 0x%x\n", paddr, v)
+	syscon.Hart.Shutdown()
 	return nil
 }
 
 func (syscon *Syscon) Store16(paddr, v uint64) error {
-	fmt.Printf("Syscon: 0x%x = 0x%02x\n", paddr, v)
-	os.Exit(0)
+	fmt.Printf("Syscon.Store16: 0x%x = 0x%02x\n", paddr, v)
+	syscon.Hart.Shutdown()
 	return nil
 }
 
 func (syscon *Syscon) Store32(paddr, v uint64) error {
-	fmt.Printf("Syscon: 0x%x = 0x%04x\n", paddr, v)
-	os.Exit(0)
+	fmt.Printf("Syscon.Store32: 0x%x = 0x%04x\n", paddr, v)
+	syscon.Hart.Shutdown()
 	return nil
 }
 
 func (syscon *Syscon) Store64(paddr, v uint64) error {
-	fmt.Printf("Syscon: 0x%x = 0x%08x\n", paddr, v)
-	os.Exit(0)
+	fmt.Printf("Syscon.Store64: 0x%x = 0x%08x\n", paddr, v)
+	syscon.Hart.Shutdown()
 	return nil
 }
