@@ -13,6 +13,7 @@ import (
 )
 
 type PLIC struct {
+	Hart  isa.Hart
 	Start uint64
 	End   uint64
 }
@@ -23,7 +24,7 @@ func (plic *PLIC) Contains(paddr uint64) bool {
 
 func (plic *PLIC) Load8(paddr uint64) (uint8, error) {
 	if paddr < plic.Start {
-		return 0, isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
+		return 0, plic.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 	}
 	return 0, nil
 }
@@ -42,7 +43,7 @@ func (plic *PLIC) Load64(paddr uint64) (uint64, error) {
 
 func (plic *PLIC) Store8(paddr, v uint64) error {
 	if paddr < plic.Start {
-		return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
+		return plic.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 	}
 	fmt.Printf("PLIC: 0x%x = 0x%x\n", paddr, v)
 	return nil

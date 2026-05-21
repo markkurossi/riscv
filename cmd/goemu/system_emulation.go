@@ -27,42 +27,57 @@ const (
 	UARTBase = 0x10000000
 	UARTSize = 256
 
+	SysconBase = 0x10000100
+	SysconSize = 256
+
 	CLINTBase = 0x2000000
 	CLINTSize = 0x10000
 
 	PLICBase = 0x0c000000
-	PLICSize = 0x04000000
+	PLICSize = 0x400000
 )
 
 func systemEmulation(params kernel.Params,
 	bios, kernel, initrd, symbols string) error {
 
+	core := &cpu.CPU{
+		Trace: params.CPUtrace,
+	}
+
 	mem := memory.New(memory.RAMBase, 0x20000000)
 	rom := &ROM{
+		Hart: core,
 		Segments: []mmu.ROM{
 			&UART{
+				Hart:  core,
 				Start: UARTBase,
 				End:   UARTBase + UARTSize,
 				Color: params.Color,
 			},
+			&Syscon{
+				Hart:  core,
+				Start: SysconBase,
+				End:   SysconBase + SysconSize,
+			},
 			&CLINT{
+				Hart:  core,
 				Start: CLINTBase,
 				End:   CLINTBase + CLINTSize,
 			},
 			&PLIC{
+				Hart:  core,
 				Start: PLICBase,
 				End:   PLICBase + PLICSize,
 			},
 		},
 	}
 
-	core := &cpu.CPU{
-		Trace: params.CPUtrace,
-		MMU: &mmu.MMU{
-			Mem: mem,
-			ROM: rom,
-		},
+	core.MMU = &mmu.MMU{
+		Hart: core,
+		Mem:  mem,
+		ROM:  rom,
 	}
+
 	core.SetMode(isa.ModeM)
 	if len(symbols) > 0 {
 		sm, err := cpu.LoadSystemMap(symbols)
@@ -84,12 +99,15 @@ func systemEmulation(params kernel.Params,
 	}
 	copy(mem.RAM[mem.Offset(OfsKernel):], data)
 
-	data, err = os.ReadFile(initrd)
-	if err != nil {
-		return fmt.Errorf("failed to read initrd: %w", err)
+	var initrdSize uint64
+	if len(initrd) > 0 {
+		data, err = os.ReadFile(initrd)
+		if err != nil {
+			return fmt.Errorf("failed to read initrd: %w", err)
+		}
+		initrdSize = uint64(len(data))
+		copy(mem.RAM[mem.Offset(OfsInitrd):], data)
 	}
-	initrdSize := uint64(len(data))
-	copy(mem.RAM[mem.Offset(OfsInitrd):], data)
 
 	dtb := makeDTB(initrdSize)
 	copy(mem.RAM[mem.Offset(OfsDTB):], dtb)
@@ -97,10 +115,6 @@ func systemEmulation(params kernel.Params,
 	core.X[isa.A0] = 0
 	core.X[isa.A1] = OfsDTB
 	core.PC = OfsBIOS
-
-	core.TrapHandler = func(core *cpu.CPU, trap *isa.Trap) (bool, error) {
-		return handleTrap(core, trap, mem)
-	}
 
 	return core.Run()
 }
@@ -112,6 +126,7 @@ var (
 )
 
 type ROM struct {
+	Hart     isa.Hart
 	Segments []mmu.ROM
 }
 
@@ -130,7 +145,7 @@ func (rom *ROM) Load8(paddr uint64) (uint8, error) {
 			return seg.Load8(paddr)
 		}
 	}
-	return 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, paddr, nil)
+	return 0, rom.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
 }
 
 func (rom *ROM) Load16(paddr uint64) (uint16, error) {
@@ -139,7 +154,7 @@ func (rom *ROM) Load16(paddr uint64) (uint16, error) {
 			return seg.Load16(paddr)
 		}
 	}
-	return 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, paddr, nil)
+	return 0, rom.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
 }
 
 func (rom *ROM) Load32(paddr uint64) (uint32, error) {
@@ -148,7 +163,7 @@ func (rom *ROM) Load32(paddr uint64) (uint32, error) {
 			return seg.Load32(paddr)
 		}
 	}
-	return 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, paddr, nil)
+	return 0, rom.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
 }
 
 func (rom *ROM) Load64(paddr uint64) (uint64, error) {
@@ -157,7 +172,7 @@ func (rom *ROM) Load64(paddr uint64) (uint64, error) {
 			return seg.Load64(paddr)
 		}
 	}
-	return 0, isa.NewTrap(0, 0, isa.CauseLoadPageFault, paddr, nil)
+	return 0, rom.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
 }
 
 func (rom *ROM) Store8(paddr, v uint64) error {
@@ -166,7 +181,7 @@ func (rom *ROM) Store8(paddr, v uint64) error {
 			return seg.Store8(paddr, v)
 		}
 	}
-	return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
+	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 }
 
 func (rom *ROM) Store16(paddr, v uint64) error {
@@ -175,7 +190,7 @@ func (rom *ROM) Store16(paddr, v uint64) error {
 			return seg.Store16(paddr, v)
 		}
 	}
-	return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
+	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 }
 
 func (rom *ROM) Store32(paddr, v uint64) error {
@@ -184,7 +199,7 @@ func (rom *ROM) Store32(paddr, v uint64) error {
 			return seg.Store32(paddr, v)
 		}
 	}
-	return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
+	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 }
 
 func (rom *ROM) Store64(paddr, v uint64) error {
@@ -193,143 +208,7 @@ func (rom *ROM) Store64(paddr, v uint64) error {
 			return seg.Store64(paddr, v)
 		}
 	}
-	return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
-}
-
-func handleTrap(core *cpu.CPU, trap *isa.Trap, mem *memory.Memory) (
-	bool, error) {
-
-	// If the high bit of cause is set, this is an asynchronous interrupt
-	if trap.Cause>>63 != 0 {
-		var tvec uint64
-
-		switch core.Mode() {
-		case isa.ModeS:
-			tvec = core.GetCSR(cpu.CsrStvec)
-		case isa.ModeM:
-			tvec = core.GetCSR(cpu.CsrMtvec)
-		}
-
-		if tvec == 0 {
-			return false, fmt.Errorf("unhandled %v mode trap %w",
-				core.Mode(), trap)
-		}
-
-		if false {
-			fmt.Printf("Interrupt: mode=%v, cause=%x, sp=%x, tp=%x, tvec=%x\n",
-				core.Mode(), trap.Cause, core.X[isa.Sp], core.X[isa.Tp], tvec)
-		}
-
-		mode := tvec & 0x3
-		base := tvec & ^uint64(0x3)
-
-		// Check if Vectored Interrupt mode is enabled (mode == 1)
-		if mode == 1 {
-			// PC jumps to base + (exception code * 4)
-			// Strip the interrupt bit (bit 63) to isolate the index
-			irqIndex := trap.Cause & 0xfff
-			core.PC = base + (irqIndex * 4)
-		} else {
-			// Direct mode (mode == 0): all traps jump directly to base
-			core.PC = base
-		}
-
-		return true, nil
-	}
-
-	if core.Trace {
-		fmt.Printf("goemu: mode: %v-mode trap: %v\n", core.Mode(), trap)
-		if trap.Err != nil {
-			fmt.Printf("  caused by: %v\n", trap.Err)
-		}
-	}
-
-	switch trap.Cause {
-	case isa.CauseBreakpoint:
-		var tvec uint64
-
-		switch core.Mode() {
-		case isa.ModeS:
-			tvec = core.GetCSR(cpu.CsrStvec)
-		case isa.ModeM:
-			tvec = core.GetCSR(cpu.CsrMtvec)
-		}
-
-		if tvec == 0 {
-			return false, fmt.Errorf("unhandled %v mode trap %w",
-				core.Mode(), trap)
-		}
-		core.PC = tvec
-
-		return true, nil
-
-	case isa.CauseEcallS:
-		var tvec uint64
-		switch trap.Target {
-		case isa.ModeS:
-			tvec = core.GetCSR(cpu.CsrStvec)
-		case isa.ModeM:
-			tvec = core.GetCSR(cpu.CsrMtvec)
-		default:
-			return false, fmt.Errorf("invalid target %v for trap %w",
-				trap.Target, trap)
-		}
-
-		// fmt.Printf("goemu: target=%v tvec=%x\n", trap.Target, tvec)
-
-		core.SetMode(trap.Target)
-		core.PC = tvec
-
-		return true, nil
-
-	case isa.CauseLoadPageFault, isa.CauseStorePageFault,
-		isa.CauseInstPageFault:
-
-		// Real hardware sets these before jumping to stvec:
-		core.SetCSR(cpu.CsrSepc, trap.PC)      // faulting instruction PC
-		core.SetCSR(cpu.CsrScause, trap.Cause) // fault cause
-		core.SetCSR(cpu.CsrStval, trap.Tval)   // faulting address
-
-		// Update sstatus: clear SPP (S-mode previous privilege),
-		// set it to current mode, disable SIE, save SIE to SPIE
-		sstatus := core.GetCSR(cpu.CsrSstatus)
-		spie := (sstatus >> 1) & 1 // save current SIE as SPIE
-		spp := uint64(0)
-		if core.Mode() == isa.ModeS {
-			spp = 1
-		}
-		sstatus &^= uint64(0x122)           // clear SPP, SPIE, SIE
-		sstatus |= (spie << 5) | (spp << 8) // set SPIE and SPP
-		core.SetCSR(cpu.CsrSstatus, sstatus)
-
-		// Switch to S-mode and jump to stvec
-		core.SetMode(isa.ModeS)
-		tvec := core.GetCSR(cpu.CsrStvec)
-		mode := tvec & 0x3
-		base := tvec &^ uint64(0x3)
-		if mode == 1 { // vectored mode
-			core.PC = base + (trap.Cause&0xff)*4
-		} else { // direct mode
-			core.PC = base
-		}
-
-		fmt.Printf("goemu: %v\n", trap)
-		if trap.Err != nil {
-			fmt.Printf("  in %v\n", trap.Err)
-		}
-		entry, _ := core.FuncName(trap.PC)
-		if entry != nil {
-			fmt.Printf("  function: %v\n", entry.Name)
-		}
-		entry, _ = core.FuncName(core.PC)
-		if entry != nil {
-			fmt.Printf("  handler : %v\n", entry.Name)
-		}
-
-		return true, nil
-	}
-
-	return false, nil
+	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 }
 
 func makeDTB(initrdSize uint64) []byte {
@@ -344,7 +223,7 @@ func makeDTB(initrdSize uint64) []byte {
 	fdt.BeginNode("")
 
 	fdt.PropStr("model", "goemu,riscv-emulator")
-	fdt.PropStr("compatible", "riscv-virtio")
+	fdt.PropStr("compatible", "riscv,virtio")
 
 	// 64-bit addresses/sizes
 	fdt.PropU32("#address-cells", 2)
@@ -360,7 +239,7 @@ func makeDTB(initrdSize uint64) []byte {
 
 	fdt.PropU32("#address-cells", 1)
 	fdt.PropU32("#size-cells", 0)
-	fdt.PropU32("timebase-frequency", 10000000)
+	fdt.PropU32("timebase-frequency", 100000000)
 
 	// -----------------------------------------------------------------
 	// CPU0
@@ -430,6 +309,15 @@ func makeDTB(initrdSize uint64) []byte {
 	fdt.PropTabU32("reg", &tab[0], 4)
 
 	fdt.EndNode() // memory
+
+	// ---------------------------------------------------------------------
+	// SoC Peripherals Bus (Crucial wrapper for OpenSBI probing!)
+	// ---------------------------------------------------------------------
+	fdt.BeginNode("soc")
+	fdt.PropStr("compatible", "simple-bus")
+	fdt.PropU32("#address-cells", 2)
+	fdt.PropU32("#size-cells", 2)
+	fdt.Prop("ranges", nil, 0) // Allows pass-through address mapping to root
 
 	// ---------------------------------------------------------------------
 	// CLINT
@@ -529,11 +417,39 @@ func makeDTB(initrdSize uint64) []byte {
 	fdt.PropU32("reg-shift", 0)
 	fdt.PropU32("reg-io-width", 1)
 
-	// UART interrupt comes from PLIC
-	tab = [8]uint32{2, 10} // phandle=2 (PLIC), irq source=10
-	fdt.PropTabU32("interrupts-extended", &tab[0], 2)
+	if false {
+		// UART interrupt comes from PLIC
+		tab = [8]uint32{2, 10} // phandle=2 (PLIC), irq source=10
+		fdt.PropTabU32("interrupts-extended", &tab[0], 2)
+	}
 
 	fdt.EndNode() // uart
+
+	// ---------------------------------------------------------------------
+	// 1. Generic Syscon Register Block
+	// ---------------------------------------------------------------------
+	fdt.BeginNodeNum("syscon", SysconBase)
+	// "syscon" and "simple-mfd" force Linux to initialize it as a multi-function register array
+	fdt.PropTabStr("compatible", "syscon", "simple-mfd")
+	regData := [4]uint32{
+		uint32(SysconBase >> 32), uint32(SysconBase),
+		uint32(SysconSize >> 32), uint32(SysconSize),
+	}
+	fdt.PropTabU32("reg", &regData[0], 4)
+	fdt.PropU32("phandle", 3) // Assign a unique phandle to reference this block
+	fdt.EndNode()             // syscon
+
+	// ---------------------------------------------------------------------
+	// 2. Syscon Poweroff Controller (S-Mode Kernel Driver)
+	// ---------------------------------------------------------------------
+	fdt.BeginNode("poweroff")
+	fdt.PropStr("compatible", "syscon-poweroff")
+	fdt.PropU32("regmap", 3)     // References phandle 3 (our syscon node above)
+	fdt.PropU32("offset", 0x0)   // Write to register offset 0
+	fdt.PropU32("value", 0x5555) // The magic value Linux will write to signal poweroff
+	fdt.EndNode()                // poweroff
+
+	fdt.EndNode() // Close the "soc" node wrapper
 
 	// ---------------------------------------------------------------------
 	// chosen
@@ -547,22 +463,25 @@ func makeDTB(initrdSize uint64) []byte {
 		// "earlycon=sbi console=ttyS0,115200 lpj=1000000",
 		// "earlycon=sbi console=ttyS0,115200",
 		"earlycon=sbi console=ttyS0,115200 init=/init",
+		//"earlycon=uart8250,mmio,0x10000000 console=ttyS0,115200 root=/dev/ram0 rw init=/init norandmaps",
 	)
 
-	// Linux expects these properties to define the physical address
-	// boundaries of the ramdisk
-	tab = [8]uint32{
-		uint32(OfsInitrd >> 32),
-		uint32(OfsInitrd),
-	}
-	fdt.PropTabU32("linux,initrd-start", &tab[0], 2)
+	if initrdSize > 0 {
+		// Linux expects these properties to define the physical
+		// address boundaries of the ramdisk
+		tab = [8]uint32{
+			uint32(OfsInitrd >> 32),
+			uint32(OfsInitrd),
+		}
+		fdt.PropTabU32("linux,initrd-start", &tab[0], 2)
 
-	initrdEnd := OfsInitrd + initrdSize
-	tab = [8]uint32{
-		uint32(initrdEnd >> 32),
-		uint32(initrdEnd),
+		initrdEnd := OfsInitrd + initrdSize
+		tab = [8]uint32{
+			uint32(initrdEnd >> 32),
+			uint32(initrdEnd),
+		}
+		fdt.PropTabU32("linux,initrd-end", &tab[0], 2)
 	}
-	fdt.PropTabU32("linux,initrd-end", &tab[0], 2)
 
 	fdt.PropStr("stdout-path", "/uart@10000000:115200n8")
 

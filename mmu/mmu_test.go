@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/memory"
 )
 
@@ -37,9 +38,30 @@ func makeMem() (*memory.Memory, Satp, uint64) {
 	}
 }
 
+type hart struct{}
+
+func (hart hart) Mode() isa.PrivilegeMode {
+	return isa.ModeM
+}
+
+func (hart hart) Mstatus() isa.Mstatus {
+	return 0
+}
+
+func (hart hart) Trap(cause, tval uint64, err error) error {
+	return nil
+}
+
+func (hart hart) ColorOn() {
+}
+
+func (hart hart) ColorOff() {
+}
+
 func makeTestMMU() (*MMU, uint64) {
 	mem, satp, count := makeMem()
 	return &MMU{
+		Hart: hart{},
 		satp: satp,
 		Mem:  mem,
 	}, count

@@ -8,8 +8,13 @@
 package memory
 
 import (
+	"fmt"
+)
+
+import (
 	"encoding/binary"
 	"errors"
+	"runtime/debug"
 )
 
 var (
@@ -28,7 +33,7 @@ const (
 // starting from the address (i.e. addr and addr+n are on the same
 // page).
 func Avail(addr, n uint64) bool {
-	return (addr&0xfff)+n <= 0xfff
+	return (addr&0xfff)+n <= 0x1000
 }
 
 func Page(addr uint64) uint64 {
@@ -58,6 +63,26 @@ func New(base, size uint64) *Memory {
 	}
 }
 
+func (mem *Memory) Contains(addr uint64) bool {
+	return addr >= mem.RAMBase && addr-mem.RAMBase <= uint64(len(mem.RAM))
+}
+
+func (mem *Memory) Strings() {
+	fmt.Printf("*** strings ***\n")
+	for _, b := range mem.RAM {
+		switch b {
+		case '\t', '\n', '\r':
+			fmt.Printf("%c", b)
+
+		default:
+			if ' ' <= b && b <= '~' {
+				fmt.Printf("%c", b)
+			}
+		}
+	}
+	fmt.Printf("\n*** strings ***\n")
+}
+
 func (mem *Memory) Offset(paddr uint64) uint64 {
 	return paddr - mem.RAMBase
 }
@@ -74,6 +99,9 @@ func (mem *Memory) Page(num uint64) ([]byte, error) {
 	RAMBasePage := mem.RAMBase / PageSize
 
 	if num < RAMBasePage || num >= RAMBasePage+uint64(mem.numPages) {
+		if false {
+			debug.PrintStack()
+		}
 		return nil, ErrInvalidAddr
 	}
 	addr := (num - RAMBasePage) * PageSize

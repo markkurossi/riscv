@@ -7,15 +7,21 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/markkurossi/riscv/isa"
 )
 
 type UART struct {
+	Hart  isa.Hart
 	Start uint64
 	End   uint64
 	Color bool
+
+	Output         []byte
+	CaptureEnabled bool
+	CaptureDelay   uint64
 
 	// Interrupt Enable Register
 	EIR uint8
@@ -34,14 +40,43 @@ func (uart *UART) Contains(paddr uint64) bool {
 	return paddr >= uart.Start && paddr < uart.End
 }
 
+var input = []byte(`
+
+
+root
+ls -la
+uname -a
+date
+halt
+`)
+
 func (uart *UART) Load8(paddr uint64) (uint8, error) {
 	if paddr < uart.Start {
-		return 0, isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
+		return 0, uart.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 	}
 	switch paddr - uart.Start {
+	case 0:
+		var v byte
+		if len(input) > 0 {
+			v = input[0]
+			input = input[1:]
+		}
+		return v, nil
+
 	case 5:
-		// Return 0x20 (Transmitter Empty) + 0x40 (Transmitter Idle).
-		return 0x60, nil
+		if false {
+			// Return 0x20 (Transmitter Empty) + 0x40 (Transmitter Idle).
+			return 0x60, nil
+		}
+		var status byte = 0x60
+		if uart.CaptureEnabled && len(input) > 0 {
+			uart.CaptureDelay++
+			if uart.CaptureDelay > 5 {
+				uart.CaptureDelay = 0
+				status |= 0x01 // Data ready
+			}
+		}
+		return status, nil
 	}
 	return 0, nil
 }
@@ -60,14 +95,30 @@ func (uart *UART) Load64(paddr uint64) (uint64, error) {
 
 func (uart *UART) Store8(paddr, v uint64) error {
 	if paddr < uart.Start {
-		return isa.NewTrap(0, 0, isa.CauseStorePageFault, paddr, nil)
+		return uart.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 	}
 	switch paddr - uart.Start {
 	case 0:
 		if uart.Color {
-			fmt.Printf("\x1b[106;30m%c\x1b[0m", byte(v))
+			uart.Hart.ColorOn()
+			fmt.Printf("%c", byte(v))
+			uart.Hart.ColorOff()
 		} else {
 			fmt.Printf("%c", byte(v))
+		}
+
+		if !uart.CaptureEnabled {
+			uart.Output = append(uart.Output, byte(v))
+			sig := []byte("buildroot login: ")
+
+			l := len(uart.Output)
+			if l > len(sig) {
+				uart.Output = uart.Output[l-len(sig):]
+			}
+
+			if bytes.Equal(uart.Output, sig) {
+				uart.CaptureEnabled = true
+			}
 		}
 
 	case 1:

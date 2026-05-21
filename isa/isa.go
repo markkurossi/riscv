@@ -12,6 +12,37 @@ import (
 	"fmt"
 )
 
+const (
+	MisaA uint64 = 1 << iota // Atomic extension
+	MisaB                    // B extension
+	MisaC                    // Compressed extension
+	MisaD                    // Double-precision floating-point extension
+	MisaE                    // RV32E/64E base ISA
+	MisaF                    // Single-precision floating-point extension
+	MisaG                    // Reserved
+	MisaH                    // Hypervisor extension
+	MisaI                    // RV32I/64I base ISA
+	MisaJ                    // Reserved
+	MisaK                    // Reserved
+	MisaL                    // Reserved
+	MisaM                    // Integer Multiply/Divide extension
+	MisaN                    // Tentatively reserved for User-Level Interrupts extension
+	MisaO                    // Reserved
+	MisaP                    // Tentatively reserved for Packed-SIMD extension
+	MisaQ                    // Quad-precision floating-point extension
+	MisaR                    // Reserved
+	MisaS                    // Supervisor mode implemented
+	MisaT                    // Reserved
+	MisaU                    // User mode implemented
+	MisaV                    // Vector extension
+	MisaW                    // Reserved
+	MisaX                    // Non-standard extensions present
+	MisaY                    // Reserved
+	MisaZ                    // Reserved
+
+	MisaMXL uint64 = 2 << 62
+)
+
 type PrivilegeMode uint8
 
 const (
@@ -565,18 +596,22 @@ var Operands = map[Op]OpInfo{
 	},
 	Csrrw: OpInfo{
 		Name: "csrrw",
+		Desc: "CSR Read and Write",
 	},
 	Csrrs: OpInfo{
 		Name: "csrrs",
+		Desc: "CSR Read and Set",
 	},
 	Csrrc: OpInfo{
 		Name: "csrrc",
 	},
 	Csrrwi: OpInfo{
 		Name: "csrrwi",
+		Desc: "CSR Read and Write Immediate",
 	},
 	Csrrsi: OpInfo{
 		Name: "csrrsi",
+		Desc: "CSR Read and Set Immediate",
 	},
 	Csrrci: OpInfo{
 		Name: "csrrci",
@@ -848,7 +883,7 @@ var Operands = map[Op]OpInfo{
 }
 
 const (
-	maxOpNameLen = 9
+	maxOpNameLen = 10
 )
 
 func (op Op) String() string {
@@ -960,12 +995,12 @@ func (instr Instr) String() string {
 	if instr.Op != Invalid {
 		switch instr.Op {
 		case Add, And, Div, Divu, Divw, Mul, Mulhu, Mulw, Or, Rem, Remw,
-			Slt, Sll, Sltu, Srl, Sub, Xor:
+			Slt, Sll, Sltu, Srl, Sub, Subw, Xor:
 			// GroupOP, GroupOP32
 			return fmt.Sprintf("%v %v,%v,%v",
 				pad(instr.Op), instr.Rd, instr.Rs1, instr.Rs2)
 
-		case Addi, Addiw, Andi, Slli, Slliw, Slti, Sltiu, Srai, Sraiw,
+		case Addi, Addiw, Addw, Andi, Slli, Slliw, Slti, Sltiu, Srai, Sraiw,
 			Srli, Srliw, Ori, Xori:
 			// GroupOPIMM, GroupOPIMM32
 			return fmt.Sprintf("%v %v,%v,%d",
@@ -982,6 +1017,8 @@ func (instr Instr) String() string {
 			// GroupSYSTEM
 		case Ebreak, Ecall, Sret, Mret, Wfi:
 			return pad(instr.Op)
+		case SfenceVMA:
+			return fmt.Sprintf("%v %v,%v", pad(instr.Op), instr.Rs1, instr.Rs2)
 
 		case Jal: // GroupJAL
 			return fmt.Sprintf("%v %d", pad(instr.Op), instr.Imm)
@@ -1023,7 +1060,7 @@ func (instr Instr) String() string {
 		case Csrrs, Csrrc, Csrrw:
 			return fmt.Sprintf("%v %v,%x,%v",
 				pad(instr.Op), instr.Rd, instr.Imm, instr.Rs1)
-		case Csrrwi, Csrrsi:
+		case Csrrwi, Csrrsi, Csrrci:
 			return fmt.Sprintf("%v %v,%x,%d",
 				pad(instr.Op), instr.Rd, instr.Imm, uint32(instr.Rs1))
 		}

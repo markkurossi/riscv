@@ -24,9 +24,14 @@ var (
 )
 
 type SymEntry struct {
-	Addr uint64
-	Type rune
-	Name string
+	Start uint64
+	End   uint64
+	Type  rune
+	Name  string
+}
+
+func (entry *SymEntry) Contains(addr uint64) bool {
+	return entry.Start <= addr && addr < entry.End
 }
 
 type SystemMap struct {
@@ -41,6 +46,7 @@ func LoadSystemMap(file string) (*SystemMap, error) {
 	defer f.Close()
 
 	result := new(SystemMap)
+	var last *SymEntry
 
 	reader := bufio.NewReader(f)
 	for {
@@ -59,11 +65,17 @@ func LoadSystemMap(file string) (*SystemMap, error) {
 				} else {
 					t = rune(parts[1][0])
 				}
-				result.Entries = append(result.Entries, &SymEntry{
-					Addr: addr,
-					Type: t,
-					Name: strings.TrimSpace(parts[2]),
-				})
+				entry := &SymEntry{
+					Start: addr,
+					End:   addr,
+					Type:  t,
+					Name:  strings.TrimSpace(parts[2]),
+				}
+				result.Entries = append(result.Entries, entry)
+				if last != nil {
+					last.End = addr
+				}
+				last = entry
 			}
 		} else {
 			if err == io.EOF {
@@ -84,13 +96,14 @@ func (sm *SystemMap) Resolve(addr uint64) *SymEntry {
 			return sm.Entries[start]
 		}
 		mid := (end-start)/2 + start
-		midAddr := sm.Entries[mid].Addr
+		entry := sm.Entries[mid]
 
-		if addr < midAddr {
+		if entry.Contains(addr) {
+			return entry
+		}
+
+		if addr < entry.Start {
 			end = mid
-		} else if addr == midAddr || mid+1 >= end ||
-			addr < sm.Entries[mid+1].Addr {
-			return sm.Entries[mid]
 		} else {
 			start = mid
 		}
