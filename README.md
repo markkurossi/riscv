@@ -132,7 +132,10 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 
 ## Near term
 
- - [ ] Stable Linux userspace startup
+ - [x] Stable Linux userspace startup
+   - [ ] Host terminal polling
+   - [ ] wfi sleep loop
+   - [ ] Add a VirtIO Block Device (virtio-blk)
  - [ ] Process-local page tables in emulator mode
  - [ ] Full syscall coverage in emulator mode
 

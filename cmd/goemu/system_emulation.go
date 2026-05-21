@@ -27,6 +27,9 @@ const (
 	UARTBase = 0x10000000
 	UARTSize = 256
 
+	SysconBase = 0x10000100
+	SysconSize = 256
+
 	CLINTBase = 0x2000000
 	CLINTSize = 0x10000
 
@@ -50,6 +53,11 @@ func systemEmulation(params kernel.Params,
 				Start: UARTBase,
 				End:   UARTBase + UARTSize,
 				Color: params.Color,
+			},
+			&Syscon{
+				Hart:  core,
+				Start: SysconBase,
+				End:   SysconBase + SysconSize,
 			},
 			&CLINT{
 				Hart:  core,
@@ -215,7 +223,7 @@ func makeDTB(initrdSize uint64) []byte {
 	fdt.BeginNode("")
 
 	fdt.PropStr("model", "goemu,riscv-emulator")
-	fdt.PropStr("compatible", "riscv-virtio")
+	fdt.PropStr("compatible", "riscv,virtio")
 
 	// 64-bit addresses/sizes
 	fdt.PropU32("#address-cells", 2)
@@ -301,6 +309,15 @@ func makeDTB(initrdSize uint64) []byte {
 	fdt.PropTabU32("reg", &tab[0], 4)
 
 	fdt.EndNode() // memory
+
+	// ---------------------------------------------------------------------
+	// SoC Peripherals Bus (Crucial wrapper for OpenSBI probing!)
+	// ---------------------------------------------------------------------
+	fdt.BeginNode("soc")
+	fdt.PropStr("compatible", "simple-bus")
+	fdt.PropU32("#address-cells", 2)
+	fdt.PropU32("#size-cells", 2)
+	fdt.Prop("ranges", nil, 0) // Allows pass-through address mapping to root
 
 	// ---------------------------------------------------------------------
 	// CLINT
@@ -407,6 +424,32 @@ func makeDTB(initrdSize uint64) []byte {
 	}
 
 	fdt.EndNode() // uart
+
+	// ---------------------------------------------------------------------
+	// 1. Generic Syscon Register Block
+	// ---------------------------------------------------------------------
+	fdt.BeginNodeNum("syscon", SysconBase)
+	// "syscon" and "simple-mfd" force Linux to initialize it as a multi-function register array
+	fdt.PropTabStr("compatible", "syscon", "simple-mfd")
+	regData := [4]uint32{
+		uint32(SysconBase >> 32), uint32(SysconBase),
+		uint32(SysconSize >> 32), uint32(SysconSize),
+	}
+	fdt.PropTabU32("reg", &regData[0], 4)
+	fdt.PropU32("phandle", 3) // Assign a unique phandle to reference this block
+	fdt.EndNode()             // syscon
+
+	// ---------------------------------------------------------------------
+	// 2. Syscon Poweroff Controller (S-Mode Kernel Driver)
+	// ---------------------------------------------------------------------
+	fdt.BeginNode("poweroff")
+	fdt.PropStr("compatible", "syscon-poweroff")
+	fdt.PropU32("regmap", 3)     // References phandle 3 (our syscon node above)
+	fdt.PropU32("offset", 0x0)   // Write to register offset 0
+	fdt.PropU32("value", 0x5555) // The magic value Linux will write to signal poweroff
+	fdt.EndNode()                // poweroff
+
+	fdt.EndNode() // Close the "soc" node wrapper
 
 	// ---------------------------------------------------------------------
 	// chosen

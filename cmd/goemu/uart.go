@@ -40,13 +40,13 @@ func (uart *UART) Contains(paddr uint64) bool {
 	return paddr >= uart.Start && paddr < uart.End
 }
 
-var input = []byte{
-	'\n', '\n', '\n',
-	'r', 'o', 'o', 't', '\n',
-	'\n',
-	'l', 's', ' ', '-', 'l', 'a', '\n',
-	'h', 'a', 'l', 't', '\n',
-}
+var input = []byte(`
+
+
+root
+ls -la
+poweroff
+`)
 
 func (uart *UART) Load8(paddr uint64) (uint8, error) {
 	if paddr < uart.Start {
@@ -69,7 +69,7 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 		var status byte = 0x60
 		if uart.CaptureEnabled && len(input) > 0 {
 			uart.CaptureDelay++
-			if uart.CaptureDelay > 10 {
+			if uart.CaptureDelay > 5 {
 				uart.CaptureDelay = 0
 				status |= 0x01 // Data ready
 			}
