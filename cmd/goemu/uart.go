@@ -45,7 +45,9 @@ var input = []byte(`
 
 root
 ls -la
-poweroff
+uname -a
+date
+halt
 `)
 
 func (uart *UART) Load8(paddr uint64) (uint8, error) {
