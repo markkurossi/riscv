@@ -400,9 +400,11 @@ func makeDTB(initrdSize uint64) []byte {
 	fdt.PropU32("reg-shift", 0)
 	fdt.PropU32("reg-io-width", 1)
 
-	// UART interrupt comes from PLIC
-	tab = [8]uint32{2, 10} // phandle=2 (PLIC), irq source=10
-	fdt.PropTabU32("interrupts-extended", &tab[0], 2)
+	if false {
+		// UART interrupt comes from PLIC
+		tab = [8]uint32{2, 10} // phandle=2 (PLIC), irq source=10
+		fdt.PropTabU32("interrupts-extended", &tab[0], 2)
+	}
 
 	fdt.EndNode() // uart
 
