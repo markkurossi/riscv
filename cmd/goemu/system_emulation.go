@@ -30,6 +30,9 @@ const (
 	SysconBase = 0x10000100
 	SysconSize = 256
 
+	RTCBase = 0x10100000
+	RTCSize = 0x1000
+
 	CLINTBase = 0x2000000
 	CLINTSize = 0x10000
 
@@ -58,6 +61,11 @@ func systemEmulation(params kernel.Params,
 				Hart:  core,
 				Start: SysconBase,
 				End:   SysconBase + SysconSize,
+			},
+			&GoldfishRTC{
+				Hart:  core,
+				Start: RTCBase,
+				End:   RTCBase + RTCSize,
 			},
 			&CLINT{
 				Hart:  core,
@@ -455,6 +463,25 @@ func makeDTB(initrdSize uint64) []byte {
 	fdt.PropU32("value", PoweroffMagic)
 
 	fdt.EndNode()
+
+	// ---------------------------------------------------------------------
+	// Google Goldfish RTC (Real-Time Clock)
+	// ---------------------------------------------------------------------
+	fdt.BeginNodeNum("rtc", RTCBase)
+	fdt.PropStr("compatible", "google,goldfish-rtc")
+
+	// Map to physical address 0x10100000 with a size of 0x1000 (4KB page)
+	regData = [4]uint32{
+		uint32(RTCBase >> 32), uint32(RTCBase),
+		uint32(RTCSize >> 32), uint32(RTCSize),
+	}
+	fdt.PropTabU32("reg", &regData[0], 4)
+
+	// Connect to PLIC (phandle=2) as Interrupt Source Source Pin 11
+	rtcInterrupts := [2]uint32{2, 11}
+	fdt.PropTabU32("interrupts-extended", &rtcInterrupts[0], 2)
+
+	fdt.EndNode() // rtc
 
 	fdt.EndNode() // Close the "soc" node wrapper
 
