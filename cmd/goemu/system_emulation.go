@@ -128,7 +128,12 @@ func systemEmulation(params kernel.Params,
 
 	go uart.Run()
 
-	return core.Run()
+	err = core.Run()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("CPU: instret: %v\n", core.Instret)
+	return nil
 }
 
 var (
