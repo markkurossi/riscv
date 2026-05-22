@@ -5,16 +5,8 @@
 </p>
 
 <p align="center">
-Building a Linux-capable RV64GC RISC-V machine from scratch in Go,
-including CPU emulation, virtual memory, privilege modes, and hardware
-devices.
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/ISA-RV64GC-blue">
-  <img src="https://img.shields.io/badge/Linux-Booting-success">
-  <img src="https://img.shields.io/badge/Language-Go-00ADD8">
-  <img src="https://img.shields.io/badge/License-MIT-green">
+Linux-capable RV64GC RISC-V emulator written in Go with SV39 virtual
+memory, privilege modes, and device emulation.
 </p>
 
 ## Features
@@ -170,7 +162,7 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 ## Near term
 
  - [ ] UART interrupt wiring in DTB
- - [ ] Host terminal polling
+ - [x] Host terminal polling
  - [ ] Proper wfi sleep behavior
  - [ ] Add VirtIO block device (virtio-blk)
  - [ ] Add VirtIO networking
@@ -205,13 +197,7 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 
 ## Internal roadmap
 
- - [x] Verify DTB (dtbtool etc.)
-   - [x] CPU.Dump() at mret: is dtb passed to Linux?
-   - [x] Check DTB format with dtbtool
- - [x] Walk page table and check what is at pc=ffffffff80026824
-   - [x] Check Linux sources
  - [ ] Draw architecture diagram of traps
- - [ ] Study interrupts
  - [x] Interrupt check in loop
  - [ ] Create CLINT device in CPU and fix ROM to write to right fields
  - [ ] Does Image have a PE header? Does it also contain System.map?
@@ -230,17 +216,6 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
  - [x] sfence.vma must clear MMU's TLB entries
  - [x] Remove `Raw uint32` from `Instr`?
 
-## Step 1 - Basics
-
-Run statically and dynamically linked simple C applications. Provide
-basic support for simple Go programs.
-
- - [x] Compressed instructions
- - [x] Support for most common 64-bit instructions
- - [x] Run standalone binaries
- - [x] Run statically linked, single-threaded binaries
- - [x] Run dynamically linked, single-threaded binaries
-
 ## Step 2 - MMU and Linux syscalls
 
  - [x] MMU with page tables
@@ -252,8 +227,8 @@ basic support for simple Go programs.
 
 ## Step 3 - Supervisor mode
 
- - [ ] Supervisor mode
- - [ ] Boot Linux kernel
+ - [x] Supervisor mode
+ - [x] Boot Linux kernel
 
 ## Emulator Example
 
@@ -358,6 +333,32 @@ exceptions, `mideleg` for interrupts).
    they occurred in). The table still holds true because Deleg
    implicitly evaluates to false if Mode == M.
 
+### M and S mode trap CSR blocks
+
+The full M-mode trap CSR block is:
+
+| CSR        | Address | Purpose                                              |
+|------------|---------|------------------------------------------------------|
+| `mstatus`  | `0x300` | Global status (MPP, MIE, MPIE, etc.)                 |
+| `mtvec`    | `0x305` | Trap vector base address                             |
+| `mscratch` | `0x340` | Scratch register for M-mode handler                  |
+| `mepc`     | `0x341` | PC of trapping instruction                           |
+| `mcause`   | `0x342` | Exception/interrupt cause code                       |
+| `mtval`    | `0x343` | Trap value (faulting address, bad instruction, etc.) |
+| `mip`      | `0x344` | Machine interrupt pending                            |
+
+And the S-mode equivalents (for completeness):
+
+| CSR        | Address | Purpose                             |
+|------------|---------|-------------------------------------|
+| `sstatus`  | `0x100` | Subset of mstatus visible to S-mode |
+| `stvec`    | `0x105` | S-mode trap vector                  |
+| `sscratch` | `0x140` | Scratch for S-mode handler          |
+| `sepc`     | `0x141` | S-mode exception PC                 |
+| `scause`   | `0x142` | S-mode cause                        |
+| `stval`    | `0x143` | S-mode trap value                   |
+| `sip`      | `0x144` | S-mode interrupt pending            |
+
 ### MMU
 
 | Mode | PTE (U, R, W, X)   | SUM      | MXR      | Read    | Store   | Exec |
@@ -446,3 +447,91 @@ exceptions, `mideleg` for interrupts).
 +--------------------------------+
 
 ```
+
+### The Boot Sequence
+
+1. **Prepare the DTB (Device Tree Blob):** This is a small data
+   structure that tells Linux "The UART is at 0x10000000 and I have
+   512MB of RAM."
+2. **Load the Image:** Put the Linux `Image` binary at `0x80200000`.
+3. **Set Initial Registers:**
+   * `a0 = 0` (The Hart ID)
+   * `a1 = 0x82000000` (Address of the DTB)
+   * `PC = 0x80200000`
+
+
+# Device Tree Blob (DTB)
+
+The canonical documentation for the Device Tree Blob (DTB) format is
+the **Devicetree Specification**, currently maintained by
+[Devicetree.org](https://www.devicetree.org). Specifically, **Chapter
+5: Flattened Devicetree (DTB) Format** contains the exact memory
+layout.
+
+The DTB (also known as a Flattened Devicetree or FDT) is a linear,
+pointerless data structure. When loaded into memory, it must follow a
+specific sequence of blocks.
+
+### 1. High-Level Memory Layout
+
+A DTB file consists of four main sections, which must appear in the
+following order:
+
+1. **fdt_header**: A fixed-size header containing magic numbers and offsets.
+2. **memory reservation block**: A list of memory areas the kernel must not use.
+3. **structure block**: The actual tree (nodes and properties) encoded as a series of tokens.
+4. **strings block**: All property names are stored here as null-terminated strings to save space.
+
+---
+
+### 2. The Header (`fdt_header`)
+
+The header is the "entry point" for any parser. **Note:** All fields
+are 32-bit integers stored in **Big-Endian** format.
+
+| Field           | Offset | Description                                    |
+| ---             | ---    | ---                                            |
+| magic           | 0x00   | The constant 0xd00dfeed                        |
+| totalsize       | 0x04   | Total size of the DTB in bytes                 |
+| off_dt_struct   | 0x08   | Offset from header to Structure Block          |
+| off_dt_strings  | 0x0C   | Offset from header to Strings Block.           |
+| off_mem_rsvmap  | 0x10   | Offset from header to Memory Reservation Block |
+| version         | 0x14   | Format version (standard is `17`)              |
+| last_comp_ver   | 0x18   | Last compatible version (usually `16`)         |
+| boot_cpuid_phys | 0x1C   | Physical ID of the system's boot CPU           |
+| size_dt_strings | 0x20   | Length of the Strings Block in bytes           |
+| size_dt_struct  | 0x24   | Length of the Structure Block in bytes         |
+
+---
+
+### 3. Structure Block (The "Tree")
+
+The tree is parsed as a stream of tokens. Each token is a 32-bit
+Big-Endian integer:
+
+* **`FDT_BEGIN_NODE` (0x00000001)**: Followed by the null-terminated name of the node (padded to 4-byte alignment).
+* **`FDT_END_NODE` (0x00000002)**: No data follows.
+* **`FDT_PROP` (0x00000003)**: Followed by:
+1. `uint32 len`: Length of the property's value.
+2. `uint32 nameoff`: Offset within the **Strings Block** for the property name.
+3. `data`: The actual value bytes (padded to 4-byte alignment).
+
+
+* **`FDT_NOP` (0x00000004)**: Ignored.
+* **`FDT_END` (0x00000009)**: Ends the entire structure block.
+
+### 4. Implementation Notes
+
+The emulator is targeting RISC-V, note:
+
+1. **Endianness**: emulator's internal memory is Little-Endian (RISC-V
+   standard), but the DTB is **strictly Big-Endian**. Use
+   `binary.BigEndian` to read the header and tokens.
+2. **Alignment**: Every section and property value must be aligned to
+   a **4-byte boundary**. If a node name is "uart", it takes 4 bytes +
+   1 null terminator = 5 bytes; you must skip 3 padding bytes before
+   the next token.
+3. **Passing to Linux**: The RISC-V ABI requires qthe **physical
+   address** of the DTB header to be stored into register **`a1`**.
+
+> **Canonical URL**: You can find the latest stable version (v0.4) of the full specification here: [https://www.devicetree.org/specifications/](https://www.devicetree.org/specifications/)
