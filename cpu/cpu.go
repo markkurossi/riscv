@@ -1173,6 +1173,15 @@ func (cpu *CPU) loop() error {
 		case isa.FcvtWUD:
 			cpu.X[instr.Rd] = uint64(uint32(cpu.F[instr.Rs1]))
 
+		case isa.FsgnjD:
+			v := math.Float64bits(cpu.F[instr.Rs1])
+			b := math.Float64bits(cpu.F[instr.Rs2])
+
+			v &^= 1 << 63
+			v |= b & (1 << 63)
+
+			cpu.F[instr.Rd] = math.Float64frombits(v)
+
 		default:
 			cpu.tracef(raw, instr, "not implemented")
 			cpu.Dump(cpu.PC)

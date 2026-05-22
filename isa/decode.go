@@ -891,6 +891,10 @@ func Decode(raw uint32) (Instr, error) {
 			instr.Op = FmvWX
 		case 0b1111001:
 			instr.Op = FmvDX
+
+		case 0b0010001:
+			instr.Op = FsgnjD
+
 		default:
 			return instr, fmt.Errorf("OP-FP: funct7=%07b", funct7)
 		}
