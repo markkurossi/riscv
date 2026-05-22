@@ -14,11 +14,18 @@ import (
 )
 
 func (cpu *CPU) Trap(cause, tval uint64, err error) error {
+	epc := cpu.PC
+
+	cpu.trap(epc, cause, tval, err)
+
+	return isa.NewTrap(epc, cause, tval, err)
+}
+
+func (cpu *CPU) trap(epc, cause, tval uint64, err error) {
 	var tvec uint64
 
 	// Handler is determined by the medeleg (Machine Exception
 	// Delegation) register.
-	epc := cpu.PC
 
 	medeleg := cpu.CSR[CsrMedeleg]
 	if medeleg&(1<<cause) == 0 || cpu.Mode() == isa.ModeM {
@@ -27,7 +34,7 @@ func (cpu *CPU) Trap(cause, tval uint64, err error) error {
 		cpu.mstatus.SetMPIE(cpu.mstatus.MIE())
 		cpu.mstatus.SetMIE(false)
 
-		cpu.CSR[CsrMepc] = cpu.PC
+		cpu.CSR[CsrMepc] = epc
 		cpu.CSR[CsrMcause] = cause
 		cpu.CSR[CsrMtval] = tval
 
@@ -39,7 +46,7 @@ func (cpu *CPU) Trap(cause, tval uint64, err error) error {
 		cpu.mstatus.SetSPIE(cpu.mstatus.SIE())
 		cpu.mstatus.SetSIE(false)
 
-		cpu.CSR[CsrSepc] = cpu.PC
+		cpu.CSR[CsrSepc] = epc
 		cpu.CSR[CsrScause] = cause
 		cpu.CSR[CsrStval] = tval
 
@@ -62,8 +69,6 @@ func (cpu *CPU) Trap(cause, tval uint64, err error) error {
 	} else {
 		cpu.PC = base
 	}
-
-	return isa.NewTrap(epc, cause, tval, err)
 }
 
 func (cpu *CPU) Interrupt(target isa.PrivilegeMode, cause uint64) {

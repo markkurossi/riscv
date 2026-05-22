@@ -493,7 +493,8 @@ func (cpu *CPU) loop() error {
 					cpu.X[isa.A0], cpu.X[isa.A1])
 			}
 
-			return cpu.Trap(cause, 0, nil)
+			cpu.trap(cpu.PC, cause, 0, nil)
+			continue
 
 		case isa.Wfi:
 			// XXX skip
