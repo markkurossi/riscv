@@ -51,7 +51,7 @@ func LoadSystemMap(file string) (*SystemMap, error) {
 	reader := bufio.NewReader(f)
 	for {
 		arr, err := reader.ReadBytes('\n')
-		if arr != nil && len(arr) > 0 {
+		if len(arr) > 0 {
 			parts := strings.Split(string(arr), " ")
 			if len(parts) >= 3 {
 				addr, err := strconv.ParseUint(parts[0], 16, 64)
@@ -60,7 +60,7 @@ func LoadSystemMap(file string) (*SystemMap, error) {
 					continue
 				}
 				var t rune
-				if len(parts[1]) < 0 {
+				if len(parts[1]) == 0 {
 					t = '?'
 				} else {
 					t = rune(parts[1][0])

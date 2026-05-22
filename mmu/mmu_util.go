@@ -82,7 +82,7 @@ func (mmu *MMU) Dump() error {
 	if mode == SatpModeBare {
 		fmt.Printf("bare mode")
 	} else if mode != SatpModeSv39 {
-		fmt.Errorf("unsupported mode %v", mode)
+		return fmt.Errorf("unsupported mode %v", mode)
 	}
 	page := mmu.satp.PPN() << 12
 
