@@ -794,6 +794,17 @@ func Decode(raw uint32) (Instr, error) {
 					funct7, funct3, raw)
 			}
 
+		case 0b11100:
+			switch funct3 {
+			case 2:
+				instr.Op = AmomaxuW
+			case 3:
+				instr.Op = AmomaxuD
+			default:
+				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
+					funct7, funct3, raw)
+			}
+
 		default:
 			return instr, fmt.Errorf("AMO/%05b: raw=%08x", funct5, raw)
 		}

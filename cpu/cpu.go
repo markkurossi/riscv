@@ -1031,6 +1031,38 @@ func (cpu *CPU) loop() error {
 			}
 			cpu.X[instr.Rd] = uint64(int64(int32(v)))
 
+		case isa.AmomaxuD:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.MMU.Load64(addr)
+			if err != nil {
+				return err
+			}
+			t := cpu.X[instr.Rs2]
+			if v > t {
+				t = v
+			}
+			err = cpu.MMU.Store64(addr, t)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = v
+
+		case isa.AmomaxuW:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.MMU.Load32(addr)
+			if err != nil {
+				return err
+			}
+			t := uint32(cpu.X[instr.Rs2])
+			if v > t {
+				t = v
+			}
+			err = cpu.MMU.Store32(addr, uint64(t))
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = uint64(v)
+
 		case isa.LrW:
 			addr := cpu.X[instr.Rs1]
 			v, err := cpu.MMU.Load32(addr)
