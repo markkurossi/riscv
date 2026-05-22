@@ -128,13 +128,15 @@ type CPU struct {
 	// Instruction count
 	Instret uint64
 
+	StartTime time.Time
+	Runtime   time.Duration
+
 	MMU *mmu.MMU
 
 	TrapHandler TrapHandler
 	Symtab      Symtab
 
 	lastDescOp isa.Op
-	StartTime  time.Time
 	DebugTrace bool
 	LastSymbol *SymEntry
 }
@@ -179,6 +181,7 @@ func (cpu *CPU) Run() error {
 			}
 		}
 	}
+	cpu.Runtime = time.Since(cpu.StartTime)
 
 	// Halt all memory-mapped devices.
 	return cpu.MMU.ROM.Halt()

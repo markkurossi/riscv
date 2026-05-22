@@ -9,6 +9,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/markkurossi/gofdt"
 	"github.com/markkurossi/riscv/cpu"
@@ -132,7 +133,9 @@ func systemEmulation(params kernel.Params,
 	if err != nil {
 		return err
 	}
-	fmt.Printf("CPU: instret: %v\n", core.Instret)
+	fmt.Printf("CPU: instret: %v, runtime: %v, MIPS: %.2f\n",
+		core.Instret, core.Runtime,
+		float64(core.Instret/1000000.0)/float64(core.Runtime/time.Second))
 	return nil
 }
 
