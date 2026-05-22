@@ -16,6 +16,11 @@ import (
 	"golang.org/x/term"
 )
 
+// Inside your UART when a byte arrives or an event triggers:
+//
+//   plic.Pending |= (1 << UART_IRQ_NUMBER) // usually IRQ 10 or 1
+//   plic.ReevaluateInterrupts()
+
 type UART struct {
 	Hart  isa.Hart
 	Start uint64

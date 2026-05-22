@@ -55,10 +55,10 @@ func (clint *CLINT) load(paddr uint64) (uint64, error) {
 		v = clint.Mtime
 
 	default:
-		fmt.Printf("CLINT: load: unknown register %x\n", ofs)
+		fmt.Printf("CLINT: load: unknown register %x\r\n", ofs)
 	}
 
-	fmt.Printf("CLINT.load(0x%x) => 0x%x\n", ofs, v)
+	fmt.Printf("CLINT.load(0x%x) => 0x%x\r\n", ofs, v)
 
 	return v, nil
 }
@@ -69,7 +69,7 @@ func (clint *CLINT) store(paddr, v uint64) error {
 	}
 	ofs := paddr - clint.Start
 
-	fmt.Printf("CLINT.store(0x%x, 0x%x)\n", ofs, v)
+	fmt.Printf("CLINT.store(0x%x, 0x%x)\r\n", ofs, v)
 
 	switch ofs {
 	case ClintOfsMsip:
@@ -82,7 +82,7 @@ func (clint *CLINT) store(paddr, v uint64) error {
 		clint.Mtime = v
 
 	default:
-		fmt.Printf("CLINT: store: unknown register %x = %x\n", ofs, v)
+		fmt.Printf("CLINT: store: unknown register %x = %x\r\n", ofs, v)
 	}
 
 	return nil

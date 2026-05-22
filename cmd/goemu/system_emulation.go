@@ -395,8 +395,8 @@ func makeDTB(initrdSize uint64) []byte {
 	fdt.PropU32("#interrupt-cells", 1)
 	fdt.Prop("interrupt-controller", nil, 0)
 
-	// Number of interrupt sources supported
-	fdt.PropU32("riscv,ndev", 32)
+	// Number of interrupt sources supported. This is defined in PLIC.
+	fdt.PropU32("riscv,ndev", MaxInterrupts)
 
 	// PLIC phandle
 	fdt.PropU32("phandle", 2)
@@ -510,8 +510,9 @@ func makeDTB(initrdSize uint64) []byte {
 		// "console=ttyS0,115200 earlycon=uart8250,mmio,0x10000000,115200 keep_bootcon lpj=1000000",
 		// "earlycon=sbi console=ttyS0,115200 lpj=1000000",
 		// "earlycon=sbi console=ttyS0,115200",
-		"earlycon=sbi console=ttyS0,115200 init=/init",
 		//"earlycon=uart8250,mmio,0x10000000 console=ttyS0,115200 root=/dev/ram0 rw init=/init norandmaps",
+
+		"earlycon=sbi console=ttyS0,115200 init=/init",
 	)
 
 	if initrdSize > 0 {
