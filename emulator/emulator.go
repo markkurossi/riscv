@@ -50,6 +50,9 @@ func New(params kernel.Params) (*Emulator, error) {
 		return nil, err
 	}
 	page, err := mem.AllocPage()
+	if err != nil {
+		return nil, err
+	}
 	satp := mmu.NewSATP(mmu.SatpModeSv39, page)
 
 	mmapStart := uint64(0x4000000000)

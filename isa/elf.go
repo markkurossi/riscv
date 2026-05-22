@@ -134,6 +134,9 @@ func DecodeELF(file string) error {
 			}
 			raw = bo.Uint32(data[:4])
 			instr, err = Decode(raw)
+			if err != nil {
+				return err
+			}
 			size = 4
 		} else {
 			if len(data) < 2 {
@@ -141,6 +144,9 @@ func DecodeELF(file string) error {
 			}
 			raw = uint32(bo.Uint16(data[:2]))
 			instr, err = DecodeC(uint16(raw))
+			if err != nil {
+				return err
+			}
 			size = 2
 		}
 		var line string
