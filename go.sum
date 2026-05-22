@@ -1,2 +1,6 @@
 github.com/markkurossi/gofdt v0.0.0-20260510205141-e016428818d8 h1:jyhX9QKINPwAoEV7Vger7mkoY4GmMn0n98B6jv8A2Kw=
 github.com/markkurossi/gofdt v0.0.0-20260510205141-e016428818d8/go.mod h1:E8PSn4N3UfIDrBsF7/gSyFm2I/QLFTpSEUytl9K7OXk=
+golang.org/x/sys v0.44.0 h1:ildZl3J4uzeKP07r2F++Op7E9B29JRUy+a27EibtBTQ=
+golang.org/x/sys v0.44.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+golang.org/x/term v0.43.0 h1:S4RLU2sB31O/NCl+zFN9Aru9A/Cq2aqKpTZJ6B+DwT4=
+golang.org/x/term v0.43.0/go.mod h1:lrhlHNdQJHO+1qVYiHfFKVuVioJIheAc3fBSMFYEIsk=

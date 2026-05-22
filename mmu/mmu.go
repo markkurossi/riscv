@@ -40,6 +40,7 @@ const (
 )
 
 type ROM interface {
+	Halt() error
 	Contains(paddr uint64) bool
 	Load8(padr uint64) (uint8, error)
 	Load16(padr uint64) (uint16, error)

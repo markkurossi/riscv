@@ -22,6 +22,10 @@ type Syscon struct {
 	End   uint64
 }
 
+func (syscon *Syscon) Halt() error {
+	return nil
+}
+
 func (syscon *Syscon) Contains(paddr uint64) bool {
 	return paddr >= syscon.Start && paddr < syscon.End
 }

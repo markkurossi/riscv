@@ -18,6 +18,10 @@ type PLIC struct {
 	End   uint64
 }
 
+func (plic *PLIC) Halt() error {
+	return nil
+}
+
 func (plic *PLIC) Contains(paddr uint64) bool {
 	return paddr >= plic.Start && paddr < plic.End
 }
@@ -45,21 +49,21 @@ func (plic *PLIC) Store8(paddr, v uint64) error {
 	if paddr < plic.Start {
 		return plic.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 	}
-	fmt.Printf("PLIC: 0x%x = 0x%x\n", paddr, v)
+	fmt.Printf("PLIC: 0x%x = 0x%x\r\n", paddr, v)
 	return nil
 }
 
 func (plic *PLIC) Store16(paddr, v uint64) error {
-	fmt.Printf("PLIC: 0x%x = 0x%02x\n", paddr, v)
+	fmt.Printf("PLIC: 0x%x = 0x%02x\r\n", paddr, v)
 	return nil
 }
 
 func (plic *PLIC) Store32(paddr, v uint64) error {
-	fmt.Printf("PLIC: 0x%x = 0x%04x\n", paddr, v)
+	fmt.Printf("PLIC: 0x%x = 0x%04x\r\n", paddr, v)
 	return nil
 }
 
 func (plic *PLIC) Store64(paddr, v uint64) error {
-	fmt.Printf("PLIC: 0x%x = 0x%08x\n", paddr, v)
+	fmt.Printf("PLIC: 0x%x = 0x%08x\r\n", paddr, v)
 	return nil
 }

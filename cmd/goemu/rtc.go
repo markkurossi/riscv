@@ -18,6 +18,10 @@ type GoldfishRTC struct {
 	End   uint64
 }
 
+func (rtc *GoldfishRTC) Halt() error {
+	return nil
+}
+
 func (rtc *GoldfishRTC) Contains(paddr uint64) bool {
 	return paddr >= rtc.Start && paddr < rtc.End
 }

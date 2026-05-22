@@ -7,10 +7,13 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
+	"os"
+	"sync"
+	"sync/atomic"
 
 	"github.com/markkurossi/riscv/isa"
+	"golang.org/x/term"
 )
 
 type UART struct {
@@ -19,9 +22,11 @@ type UART struct {
 	End   uint64
 	Color bool
 
-	Output         []byte
-	CaptureEnabled bool
-	CaptureDelay   uint64
+	oldState *term.State
+
+	m          sync.Mutex
+	inputAvail atomic.Bool
+	input      []byte
 
 	// Interrupt Enable Register
 	EIR uint8
@@ -36,19 +41,37 @@ type UART struct {
 	MCR uint8
 }
 
+func (uart *UART) Run() {
+	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		fmt.Printf("term.MakeRaw: %v\n", err)
+		return
+	}
+	uart.oldState = oldState
+
+	var buf [1]byte
+
+	for {
+		n, err := os.Stdin.Read(buf[:])
+		if err != nil {
+			break
+		}
+		uart.m.Lock()
+		uart.input = append(uart.input, buf[:n]...)
+		uart.m.Unlock()
+
+		uart.inputAvail.Store(true)
+	}
+}
+
+func (uart *UART) Halt() error {
+	term.Restore(int(os.Stdin.Fd()), uart.oldState)
+	return nil
+}
+
 func (uart *UART) Contains(paddr uint64) bool {
 	return paddr >= uart.Start && paddr < uart.End
 }
-
-var input = []byte(`
-
-
-root
-ls -la
-uname -a
-date
-halt
-`)
 
 func (uart *UART) Load8(paddr uint64) (uint8, error) {
 	if paddr < uart.Start {
@@ -57,24 +80,26 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 	switch paddr - uart.Start {
 	case 0:
 		var v byte
-		if len(input) > 0 {
-			v = input[0]
-			input = input[1:]
+
+		uart.m.Lock()
+		if len(uart.input) > 0 {
+			v = uart.input[0]
+			uart.input = uart.input[1:]
+			if len(uart.input) == 0 {
+				uart.inputAvail.Store(false)
+			}
 		}
+		uart.m.Unlock()
+
 		return v, nil
 
 	case 5:
-		if false {
-			// Return 0x20 (Transmitter Empty) + 0x40 (Transmitter Idle).
-			return 0x60, nil
-		}
+		// Transmitter Empty (0x20)  + Transmitter Idle (0x40).
 		var status byte = 0x60
-		if uart.CaptureEnabled && len(input) > 0 {
-			uart.CaptureDelay++
-			if uart.CaptureDelay > 5 {
-				uart.CaptureDelay = 0
-				status |= 0x01 // Data ready
-			}
+
+		if uart.inputAvail.Load() {
+			// Data ready.
+			status |= 0x01
 		}
 		return status, nil
 	}
@@ -105,20 +130,6 @@ func (uart *UART) Store8(paddr, v uint64) error {
 			uart.Hart.ColorOff()
 		} else {
 			fmt.Printf("%c", byte(v))
-		}
-
-		if !uart.CaptureEnabled {
-			uart.Output = append(uart.Output, byte(v))
-			sig := []byte("buildroot login: ")
-
-			l := len(uart.Output)
-			if l > len(sig) {
-				uart.Output = uart.Output[l-len(sig):]
-			}
-
-			if bytes.Equal(uart.Output, sig) {
-				uart.CaptureEnabled = true
-			}
 		}
 
 	case 1:

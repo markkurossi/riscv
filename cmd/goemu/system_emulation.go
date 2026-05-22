@@ -47,16 +47,18 @@ func systemEmulation(params kernel.Params,
 		Trace: params.CPUtrace,
 	}
 
+	uart := &UART{
+		Hart:  core,
+		Start: UARTBase,
+		End:   UARTBase + UARTSize,
+		Color: params.Color,
+	}
+
 	mem := memory.New(memory.RAMBase, 0x20000000)
 	rom := &ROM{
 		Hart: core,
 		Segments: []mmu.ROM{
-			&UART{
-				Hart:  core,
-				Start: UARTBase,
-				End:   UARTBase + UARTSize,
-				Color: params.Color,
-			},
+			uart,
 			&Syscon{
 				Hart:  core,
 				Start: SysconBase,
@@ -124,6 +126,8 @@ func systemEmulation(params kernel.Params,
 	core.X[isa.A1] = OfsDTB
 	core.PC = OfsBIOS
 
+	go uart.Run()
+
 	return core.Run()
 }
 
@@ -136,6 +140,16 @@ var (
 type ROM struct {
 	Hart     isa.Hart
 	Segments []mmu.ROM
+}
+
+func (rom *ROM) Halt() error {
+	for _, seg := range rom.Segments {
+		err := seg.Halt()
+		if err != nil {
+			fmt.Printf("halt: %v\n", err)
+		}
+	}
+	return nil
 }
 
 func (rom *ROM) Contains(paddr uint64) bool {

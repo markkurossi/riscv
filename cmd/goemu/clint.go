@@ -28,6 +28,10 @@ type CLINT struct {
 	Mtime    uint64
 }
 
+func (clint *CLINT) Halt() error {
+	return nil
+}
+
 func (clint *CLINT) Contains(paddr uint64) bool {
 	return paddr >= clint.Start && paddr < clint.End
 }

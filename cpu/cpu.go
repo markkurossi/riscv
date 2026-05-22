@@ -175,12 +175,13 @@ func (cpu *CPU) Run() error {
 					}
 				}
 			} else {
-				return err
+				return fmt.Errorf("CPU: panic: %w", err)
 			}
 		}
 	}
 
-	return nil
+	// Halt all memory-mapped devices.
+	return cpu.MMU.ROM.Halt()
 }
 
 func (cpu *CPU) Shutdown() {
