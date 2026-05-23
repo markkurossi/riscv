@@ -31,5 +31,5 @@ run-image:
         done
 
 run-ls:
-	@echo "The ls -l emulator"
-	@./goemu -fsroot image image/bin/ls -l goemu
+	@echo "The ls -l bin/busybox"
+	@./goemu -fsroot image image/bin/ls -l bin/busybox

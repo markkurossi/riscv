@@ -528,7 +528,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		if err != nil {
 			return Error(ErrnoEFAULT), nil
 		}
-		fi, err := os.Stat(pathname)
+		fi, err := os.Stat(proc.Kernel.MakePath(pathname))
 		if err != nil {
 			return Error(ErrnoEIO), nil
 		}

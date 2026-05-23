@@ -6,9 +6,16 @@
 
 #include <stdio.h>
 #include <unistd.h>
+#include <sys/reboot.h>
+#include <linux/reboot.h>
 
 int
 main(int argc, char *argv[], char *env[])
 {
-  return reboot(0xfee1dead, 0x28121969, 0x4321fedc, 0);
+  int result = reboot(LINUX_REBOOT_CMD_POWER_OFF);
+
+  if (result < 0)
+    perror("reboot failed");
+
+  return result;
 }
