@@ -213,7 +213,6 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 
 ## Internal roadmap
 
- - [ ] Draw architecture diagram of traps
  - [x] Interrupt check in loop
  - [ ] Create CLINT device in CPU and fix ROM to write to right fields
  - [ ] Does Image have a PE header? Does it also contain System.map?

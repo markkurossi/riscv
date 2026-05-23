@@ -182,15 +182,17 @@ func (plic *PLIC) ClaimInterrupt(contextID uint32) uint32 {
 	var highestPriority uint32 = 0
 	var claimedSource uint32 = 0
 
-	// Walk through all configured interrupt sources
+	// Walk through all configured interrupt sources.
 	for sourceID := uint32(1); sourceID <= MaxInterrupts; sourceID++ {
-		// Check if the source is enabled for this context AND is actively pending
+		// Check if the source is enabled for this context AND is
+		// actively pending.
 		isPending := (plic.Pending & (1 << sourceID)) != 0
 		isEnabled := (plic.Enables[contextID] & (1 << sourceID)) != 0
 
 		if isPending && isEnabled {
 			priority := plic.Priorities[sourceID]
-			// Only consider it if it strictly exceeds the context's current threshold
+			// Only consider it if it strictly exceeds the context's
+			// current threshold.
 			if priority > plic.Contexts[contextID].Threshold {
 				if priority > highestPriority {
 					highestPriority = priority
@@ -201,17 +203,10 @@ func (plic *PLIC) ClaimInterrupt(contextID uint32) uint32 {
 	}
 
 	if claimedSource != 0 {
-		// Hardware handshake: clear the pending state atomically upon claiming
+		// Hardware handshake: clear the pending state atomically upon
+		// claiming.
 		plic.Pending &^= (1 << claimedSource)
-
-		// Since we're clearing the active line, de-assert the CPU's
-		// external interrupt line (The CPU loop will re-evaluate
-		// later if another pending line remains)
-		if contextID == 1 { // S-mode
-			// XXX plic.Hart.ClearInterrupt(isa.MIP_SEIP)
-		} else { // M-mode
-			// XXX plic.Hart.ClearInterrupt(isa.MIP_MEIP)
-		}
+		plic.ReevaluateInterrupts()
 	}
 
 	return claimedSource
@@ -222,14 +217,31 @@ func (plic *PLIC) CompleteInterrupt(contextID uint32, sourceID uint32) {
 		return // Invalid source ID complete request
 	}
 
-	// In physical silicon, this unmasks the target line inside the PLIC gateway routing.
-	// Now that the handler loop is completely clear, we re-evaluate if any other enabled
-	// interrupts are sitting in the pipeline waiting for their turn.
+	// In physical silicon, this unmasks the target line inside the
+	// PLIC gateway routing.  Now that the handler loop is completely
+	// clear, we re-evaluate if any other enabled interrupts are
+	// sitting in the pipeline waiting for their turn.
 	plic.ReevaluateInterrupts()
 }
 
 func (plic *PLIC) ReevaluateInterrupts() {
-	// Re-evaluate S-Mode interrupts (Context 1)
+	// 1. Re-evaluate M-Mode interrupts (Context 0)
+	mModeSignaled := false
+	for sourceID := uint32(1); sourceID <= MaxInterrupts; sourceID++ {
+		isPending := (plic.Pending & (1 << sourceID)) != 0
+		isEnabled := (plic.Enables[0] & (1 << sourceID)) != 0
+		if isPending && isEnabled && plic.Priorities[sourceID] > plic.Contexts[0].Threshold {
+			mModeSignaled = true
+			break
+		}
+	}
+	if mModeSignaled {
+		plic.Hart.SetInterrupt(isa.IntMEIP)
+	} else {
+		plic.Hart.ClearInterrupt(isa.IntMEIP)
+	}
+
+	// 2. Re-evaluate S-Mode interrupts (Context 1)
 	sModeSignaled := false
 	for sourceID := uint32(1); sourceID <= MaxInterrupts; sourceID++ {
 		isPending := (plic.Pending & (1 << sourceID)) != 0
@@ -239,10 +251,9 @@ func (plic *PLIC) ReevaluateInterrupts() {
 			break
 		}
 	}
-
 	if sModeSignaled {
-		// plic.Hart.SetInterrupt(isa.MIP_SEIP) // Pull Supervisor External Interrupt pin HIGH
+		plic.Hart.SetInterrupt(isa.IntSEIP)
 	} else {
-		// plic.Hart.ClearInterrupt(isa.MIP_SEIP) // Keep it LOW
+		plic.Hart.ClearInterrupt(isa.IntSEIP)
 	}
 }

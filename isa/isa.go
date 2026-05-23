@@ -10,6 +10,7 @@ package isa
 
 import (
 	"fmt"
+	"strings"
 )
 
 const (
@@ -65,6 +66,73 @@ func (m PrivilegeMode) String() string {
 		return name
 	}
 	return fmt.Sprintf("{PrivilegeMode %d}", int(m))
+}
+
+// XXX Thise are interrupt cause code.
+//
+// Bit  Name   Meaning
+// ─────────────────────────────────────────
+//
+//		0   USIP   User Software Interrupt (mip only, pending)
+//		1   SSIP   Supervisor Software Interrupt
+//		2   —      reserved
+//		3   MSIP   Machine Software Interrupt
+//		4   UTIP   User Timer Interrupt
+//		5   STIP   Supervisor Timer Interrupt
+//		6   —      reserved
+//		7   MTIP   Machine Timer Interrupt
+//		8   UEIP   User External Interrupt
+//		9   SEIP   Supervisor External Interrupt
+//	   10   —      reserved
+//	   11   MEIP   Machine External Interrupt
+//	   12   —      reserved (SGEIP in hypervisor ext)
+//	   13+  —      platform-defined / reserved
+const (
+	IntUSIP = 1 << iota
+	IntSSIP
+	_
+	IntMSIP
+	IntUTIP
+	IntSTIP
+	_
+	IntMTIP
+	IntUEIP
+	IntSEIP
+	_
+	IntMEIP
+)
+
+func intString(v uint64) string {
+	var result []string
+	if v&IntMEIP != 0 {
+		result = append(result, "MEIP")
+	}
+	if v&IntSEIP != 0 {
+		result = append(result, "SEIP")
+	}
+	if v&IntUEIP != 0 {
+		result = append(result, "UEIP")
+	}
+	if v&IntMTIP != 0 {
+		result = append(result, "MTIP")
+	}
+
+	if v&IntSTIP != 0 {
+		result = append(result, "STIP")
+	}
+	if v&IntUTIP != 0 {
+		result = append(result, "UTIP")
+	}
+	if v&IntMSIP != 0 {
+		result = append(result, "MSIP")
+	}
+	if v&IntSSIP != 0 {
+		result = append(result, "SSIP")
+	}
+	if v&IntUSIP != 0 {
+		result = append(result, "USIP")
+	}
+	return strings.Join(result, ",")
 }
 
 // Group defines instruction groups.

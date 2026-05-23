@@ -14,7 +14,7 @@ import (
 	"math"
 	"math/bits"
 	"os"
-	"strings"
+	"sync"
 	"time"
 
 	"github.com/markkurossi/riscv/isa"
@@ -31,73 +31,6 @@ const (
 	cpuDebug = false
 	cpuColor = false
 )
-
-// XXX Thise are interrupt cause code.
-//
-// Bit  Name   Meaning
-// ─────────────────────────────────────────
-//
-//		0   USIP   User Software Interrupt (mip only, pending)
-//		1   SSIP   Supervisor Software Interrupt
-//		2   —      reserved
-//		3   MSIP   Machine Software Interrupt
-//		4   UTIP   User Timer Interrupt
-//		5   STIP   Supervisor Timer Interrupt
-//		6   —      reserved
-//		7   MTIP   Machine Timer Interrupt
-//		8   UEIP   User External Interrupt
-//		9   SEIP   Supervisor External Interrupt
-//	   10   —      reserved
-//	   11   MEIP   Machine External Interrupt
-//	   12   —      reserved (SGEIP in hypervisor ext)
-//	   13+  —      platform-defined / reserved
-const (
-	IntUSIP = 1 << iota
-	IntSSIP
-	_
-	IntMSIP
-	IntUTIP
-	IntSTIP
-	_
-	IntMTIP
-	IntUEIP
-	IntSEIP
-	_
-	IntMEIP
-)
-
-func intString(v uint64) string {
-	var result []string
-	if v&IntMEIP != 0 {
-		result = append(result, "MEIP")
-	}
-	if v&IntSEIP != 0 {
-		result = append(result, "SEIP")
-	}
-	if v&IntUEIP != 0 {
-		result = append(result, "UEIP")
-	}
-	if v&IntMTIP != 0 {
-		result = append(result, "MTIP")
-	}
-
-	if v&IntSTIP != 0 {
-		result = append(result, "STIP")
-	}
-	if v&IntUTIP != 0 {
-		result = append(result, "UTIP")
-	}
-	if v&IntMSIP != 0 {
-		result = append(result, "MSIP")
-	}
-	if v&IntSSIP != 0 {
-		result = append(result, "SSIP")
-	}
-	if v&IntUSIP != 0 {
-		result = append(result, "USIP")
-	}
-	return strings.Join(result, ",")
-}
 
 type TrapHandler func(cpu *CPU, trap *isa.Trap) (bool, error)
 
@@ -125,8 +58,11 @@ type CPU struct {
 		Instr isa.Instr
 	}
 
-	// Instruction count
+	// Instruction count.
 	Instret uint64
+
+	m sync.Mutex
+	c *sync.Cond
 
 	StartTime time.Time
 	Runtime   time.Duration
@@ -139,6 +75,18 @@ type CPU struct {
 	lastDescOp isa.Op
 	DebugTrace bool
 	LastSymbol *SymEntry
+}
+
+func New(mem *memory.Memory) *CPU {
+	cpu := &CPU{
+		MMU: &mmu.MMU{
+			Mem: mem,
+		},
+	}
+	cpu.c = sync.NewCond(&cpu.m)
+	cpu.MMU.Hart = cpu
+
+	return cpu
 }
 
 func (cpu *CPU) Now() uint64 {
@@ -213,10 +161,10 @@ func (cpu *CPU) loop() error {
 			now := cpu.Now()
 
 			if now > stimecmp {
-				mip |= IntSTIP
+				mip |= isa.IntSTIP
 			} else {
 				// Clear it if the time comparison drops below threshold
-				mip &^= IntSTIP
+				mip &^= isa.IntSTIP
 			}
 			// CRITICAL: Write back the updated bit mask into the
 			// backing storage slice
@@ -1200,6 +1148,19 @@ func (cpu *CPU) loop() error {
 		}
 		cpu.PC += uint64(size)
 	}
+}
+
+func (cpu *CPU) ClearInterrupt(mask uint64) {
+	cpu.m.Lock()
+	cpu.CSR[CsrMip] &^= mask
+	cpu.m.Unlock()
+}
+
+func (cpu *CPU) SetInterrupt(mask uint64) {
+	cpu.m.Lock()
+	cpu.CSR[CsrMip] |= mask
+	cpu.m.Unlock()
+	cpu.c.Signal()
 }
 
 func (cpu *CPU) FuncName(pc uint64) (*SymEntry, uint64) {

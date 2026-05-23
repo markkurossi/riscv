@@ -27,6 +27,7 @@ const (
 
 	UARTBase = 0x10000000
 	UARTSize = 256
+	UARTIRQ  = 10
 
 	SysconBase = 0x10000100
 	SysconSize = 256
@@ -44,21 +45,30 @@ const (
 func systemEmulation(params kernel.Params,
 	bios, kernel, initrd, symbols string) error {
 
-	core := &cpu.CPU{
-		Trace: params.CPUtrace,
+	mem := memory.New(memory.RAMBase, 0x20000000)
+
+	core := cpu.New(mem)
+	core.Trace = params.CPUtrace
+
+	plic := &PLIC{
+		Hart:  core,
+		Start: PLICBase,
+		End:   PLICBase + PLICSize,
 	}
 
 	uart := &UART{
 		Hart:  core,
 		Start: UARTBase,
 		End:   UARTBase + UARTSize,
+		Plic:  plic,
+		IRQ:   UARTIRQ,
 		Color: params.Color,
 	}
 
-	mem := memory.New(memory.RAMBase, 0x20000000)
 	rom := &ROM{
 		Hart: core,
 		Segments: []mmu.ROM{
+			plic,
 			uart,
 			&Syscon{
 				Hart:  core,
@@ -75,19 +85,9 @@ func systemEmulation(params kernel.Params,
 				Start: CLINTBase,
 				End:   CLINTBase + CLINTSize,
 			},
-			&PLIC{
-				Hart:  core,
-				Start: PLICBase,
-				End:   PLICBase + PLICSize,
-			},
 		},
 	}
-
-	core.MMU = &mmu.MMU{
-		Hart: core,
-		Mem:  mem,
-		ROM:  rom,
-	}
+	core.MMU.ROM = rom
 
 	core.SetMode(isa.ModeM)
 	if len(symbols) > 0 {
@@ -447,9 +447,9 @@ func makeDTB(initrdSize uint64) []byte {
 	fdt.PropU32("reg-shift", 0)
 	fdt.PropU32("reg-io-width", 1)
 
-	if false {
+	if true {
 		// UART interrupt comes from PLIC
-		tab = [8]uint32{2, 10} // phandle=2 (PLIC), irq source=10
+		tab = [8]uint32{2, UARTIRQ} // phandle=2 (PLIC), irq source=UARTIRQ
 		fdt.PropTabU32("interrupts-extended", &tab[0], 2)
 	}
 

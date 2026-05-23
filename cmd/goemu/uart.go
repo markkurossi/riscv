@@ -25,6 +25,8 @@ type UART struct {
 	Hart  isa.Hart
 	Start uint64
 	End   uint64
+	Plic  *PLIC
+	IRQ   uint32
 	Color bool
 
 	oldState *term.State
@@ -33,17 +35,15 @@ type UART struct {
 	inputAvail atomic.Bool
 	input      []byte
 
-	// Interrupt Enable Register
-	EIR uint8
+	// Registers
+	EIR uint8 // Interrupt Enable Register.
+	FCR uint8 // FIFO Control Register.
+	LCR uint8 // Line Control Register.
+	MCR uint8 // Modem Control Register.
 
-	// FIFO Control Register
-	FCR uint8
-
-	// Line Control Register
-	LCR uint8
-
-	// Modem Control Register
-	MCR uint8
+	// Bit 0: Receiver Data Available
+	// Bit 1: Transmitter Holding Register Empty
+	isrPending uint8
 }
 
 func (uart *UART) Run() {
@@ -63,9 +63,21 @@ func (uart *UART) Run() {
 		}
 		uart.m.Lock()
 		uart.input = append(uart.input, buf[:n]...)
+		if (uart.EIR & 0x01) != 0 {
+			uart.isrPending |= 0x01 // Receiver data available
+			if uart.Plic != nil {
+				uart.Plic.Pending |= (1 << uart.IRQ)
+				uart.Plic.ReevaluateInterrupts()
+			}
+		}
 		uart.m.Unlock()
 
 		uart.inputAvail.Store(true)
+
+		if uart.Plic != nil && (uart.EIR&0x01) != 0 {
+			uart.Plic.Pending |= (1 << UARTIRQ)
+			uart.Plic.ReevaluateInterrupts()
+		}
 	}
 }
 
@@ -92,11 +104,53 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 			uart.input = uart.input[1:]
 			if len(uart.input) == 0 {
 				uart.inputAvail.Store(false)
+				uart.isrPending &^= 0x01 // Clear receiver interrupt flag
+
+				if uart.isrPending == 0 && uart.Plic != nil {
+					uart.Plic.Pending &^= (1 << UARTIRQ)
+					uart.Plic.ReevaluateInterrupts()
+				}
 			}
 		}
 		uart.m.Unlock()
 
 		return v, nil
+
+	case 1:
+		// Return Interrupt Enable Register
+		return uart.EIR, nil
+
+	case 2:
+		// Interrupt Identification Register (IIR)
+		uart.m.Lock()
+		defer uart.m.Unlock()
+
+		// 16550A standard values: FIFO enabled (0xC0)
+		var iir byte = 0xC0
+
+		if (uart.isrPending & 0x02) != 0 {
+			// Transmitter Holding Register Empty has priority or is active
+			iir |= 0x02
+			// Reading the IIR register automatically clears the THRE interrupt status!
+			uart.isrPending &^= 0x02
+
+			// If no other conditions remain, lower the PLIC line
+			if uart.isrPending == 0 && uart.Plic != nil {
+				uart.Plic.Pending &^= (1 << uart.IRQ)
+				uart.Plic.ReevaluateInterrupts()
+			}
+			return iir, nil
+		}
+
+		if uart.inputAvail.Load() {
+			// Received Data Available interrupt (0x04)
+			iir |= 0x04
+			return iir, nil
+		}
+
+		// Bit 0 is 1 if NO interrupt is pending
+		iir |= 0x01
+		return iir, nil
 
 	case 5:
 		// Transmitter Empty (0x20)  + Transmitter Idle (0x40).
@@ -136,6 +190,17 @@ func (uart *UART) Store8(paddr, v uint64) error {
 		} else {
 			fmt.Printf("%c", byte(v))
 		}
+
+		uart.m.Lock()
+		// Check if Transmitter Holding Register Ready Interrupt is enabled
+		if (uart.EIR & 0x02) != 0 {
+			uart.isrPending |= 0x02 // Mark THRE interrupt active internally
+			if uart.Plic != nil {
+				uart.Plic.Pending |= (1 << uart.IRQ)
+				uart.Plic.ReevaluateInterrupts()
+			}
+		}
+		uart.m.Unlock()
 
 	case 1:
 		uart.EIR = byte(v)
