@@ -20,13 +20,20 @@ import (
 var (
 	bo = binary.LittleEndian
 
+	// ErrInvalidAddr is returned when an invalid address request is
+	// made.
 	ErrInvalidAddr = errors.New("invalid address")
+
+	// ErrOutOfMemory is returned when the system rans out of memory.
 	ErrOutOfMemory = errors.New("out of memory")
 )
 
 const (
+	// PageSize defines the system page size in bytes.
 	PageSize = 4096
-	RAMBase  = 0x80000000
+
+	// RAMBase defines the RAM base address.
+	RAMBase = 0x80000000
 )
 
 // Avail tests if the page of the address addr has n bytes of data
@@ -36,14 +43,17 @@ func Avail(addr, n uint64) bool {
 	return (addr&0xfff)+n <= 0x1000
 }
 
+// Page returns the page number from and address.
 func Page(addr uint64) uint64 {
 	return addr >> 12
 }
 
+// PageOffset returns the address' byte-offset within the page.
 func PageOffset(addr uint64) int {
 	return int(addr & 0xfff)
 }
 
+// Memory implements physical memory.
 type Memory struct {
 	RAM      []byte
 	RAMBase  uint64
@@ -51,8 +61,10 @@ type Memory struct {
 	nextPage int
 }
 
+// New creates a new memory of size bytes starting at the base
+// address.
 func New(base, size uint64) *Memory {
-	if size&0xfff != 0 {
+	if size%PageSize != 0 {
 		panic("memory size is not multiple of page size")
 	}
 
@@ -63,10 +75,40 @@ func New(base, size uint64) *Memory {
 	}
 }
 
+// Contains tests if the memory contains the address.
 func (mem *Memory) Contains(addr uint64) bool {
 	return addr >= mem.RAMBase && addr-mem.RAMBase <= uint64(len(mem.RAM))
 }
 
+// Offset returns the address' offset in the Memory.RAM array.
+func (mem *Memory) Offset(paddr uint64) uint64 {
+	return paddr - mem.RAMBase
+}
+
+// AllocPage allocates a new page and returns its page number.
+func (mem *Memory) AllocPage() (uint64, error) {
+	if mem.nextPage >= mem.numPages {
+		return 0, ErrOutOfMemory
+	}
+	mem.nextPage++
+	return mem.RAMBase/PageSize + uint64(mem.nextPage-1), nil
+}
+
+// Page returns a slice to the memory page num.
+func (mem *Memory) Page(num uint64) ([]byte, error) {
+	RAMBasePage := mem.RAMBase / PageSize
+
+	if num < RAMBasePage || num >= RAMBasePage+uint64(mem.numPages) {
+		if false {
+			debug.PrintStack()
+		}
+		return nil, ErrInvalidAddr
+	}
+	addr := (num - RAMBasePage) * PageSize
+	return mem.RAM[addr : addr+PageSize], nil
+}
+
+// Strings prints all ASCII characters from the memory.
 func (mem *Memory) Strings() {
 	fmt.Printf("*** strings ***\n")
 	for _, b := range mem.RAM {
@@ -81,29 +123,4 @@ func (mem *Memory) Strings() {
 		}
 	}
 	fmt.Printf("\n*** strings ***\n")
-}
-
-func (mem *Memory) Offset(paddr uint64) uint64 {
-	return paddr - mem.RAMBase
-}
-
-func (mem *Memory) AllocPage() (uint64, error) {
-	if mem.nextPage >= mem.numPages {
-		return 0, ErrOutOfMemory
-	}
-	mem.nextPage++
-	return mem.RAMBase/PageSize + uint64(mem.nextPage-1), nil
-}
-
-func (mem *Memory) Page(num uint64) ([]byte, error) {
-	RAMBasePage := mem.RAMBase / PageSize
-
-	if num < RAMBasePage || num >= RAMBasePage+uint64(mem.numPages) {
-		if false {
-			debug.PrintStack()
-		}
-		return nil, ErrInvalidAddr
-	}
-	addr := (num - RAMBasePage) * PageSize
-	return mem.RAM[addr : addr+PageSize], nil
 }
