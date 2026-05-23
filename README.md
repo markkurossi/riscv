@@ -177,7 +177,7 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 
 ## Near term
 
- - [ ] UART interrupt wiring in DTB
+ - [x] UART interrupt wiring in DTB
  - [x] Host terminal polling
  - [ ] Proper wfi sleep behavior
  - [ ] Add VirtIO block device (virtio-blk)
