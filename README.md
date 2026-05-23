@@ -209,7 +209,7 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 | 32-bit decode cache    |  0.684 |  7.327 | 1m20.509s |  87.64 |    0.225 |
 | Ld/Sd TLB fastpath     |  0.603 |  6.327 | 1m10.533s | 101.49 |    0.195 |
 | Optimized Instr struct |  0.385 |  4.022 | 0m44.167s | 159.65 |    0.124 |
-| Interrupts             |  0.418 |  4.357 | 0m49.469s | 147.38 |    0.134 |
+| Interrupts             |  0.416 |  4.321 | 0m49.085s | 148.61 |    0.134 |
 
 ## Internal roadmap
 

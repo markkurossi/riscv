@@ -16,17 +16,30 @@ import (
 func (cpu *CPU) Trap(cause, tval uint64, err error) error {
 	epc := cpu.PC
 
-	cpu.trap(epc, cause, tval, err)
+	if ierr := cpu.trap(epc, cause, tval, err); ierr != nil {
+		return ierr
+	}
 
 	return isa.NewTrap(epc, cause, tval, err)
 }
 
-func (cpu *CPU) trap(epc, cause, tval uint64, err error) {
-	var tvec uint64
+func (cpu *CPU) trap(epc, cause, tval uint64, err error) error {
+
+	if cpu.TrapHandler != nil {
+		t := isa.NewTrap(epc, cause, tval, nil)
+		handled, err := cpu.TrapHandler(cpu, t)
+		if err != nil {
+			return err
+		}
+		if handled {
+			return nil
+		}
+		return t
+	}
 
 	// Handler is determined by the medeleg (Machine Exception
 	// Delegation) register.
-
+	var tvec uint64
 	medeleg := cpu.CSR[CsrMedeleg]
 	if medeleg&(1<<cause) == 0 || cpu.Mode() == isa.ModeM {
 		// Trap to M-mode.
@@ -54,8 +67,6 @@ func (cpu *CPU) trap(epc, cause, tval uint64, err error) {
 		cpu.SetMode(isa.ModeS)
 	}
 
-	// XXX check cpu.TrapHandler in user-mode emulator
-
 	mode := tvec & 0x3
 	base := tvec &^ 0x3
 
@@ -69,6 +80,8 @@ func (cpu *CPU) trap(epc, cause, tval uint64, err error) {
 	} else {
 		cpu.PC = base
 	}
+
+	return nil
 }
 
 func (cpu *CPU) Interrupt(target isa.PrivilegeMode, cause uint64) {

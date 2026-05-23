@@ -338,6 +338,9 @@ func (cpu *CPU) loop() error {
 		}
 
 		switch instr.Op {
+		case isa.Invalid:
+			return fmt.Errorf("invalid instruction: %v", instr.Op)
+
 		case isa.Add:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] + cpu.X[instr.Rs2]
 
@@ -493,7 +496,10 @@ func (cpu *CPU) loop() error {
 					cpu.X[isa.A0], cpu.X[isa.A1])
 			}
 
-			cpu.trap(cpu.PC, cause, 0, nil)
+			err = cpu.trap(cpu.PC, cause, 0, nil)
+			if err != nil {
+				return err
+			}
 			continue
 
 		case isa.Wfi:

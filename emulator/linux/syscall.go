@@ -569,7 +569,11 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		if proc.Kernel.Profile {
 			return Error(ErrnoEINTR), ErrProfile
 		}
-		ktracef(proc, "     val=%v, instret=%v\n", a0, proc.CPU.Instret)
+		runtime := time.Since(proc.CPU.StartTime)
+		runtimeS := float64(runtime) / float64(time.Second)
+		ktracef(proc, "     val=%v, instret=%v, runtime=%v, MIPS=%.2f\n",
+			a0, proc.CPU.Instret, runtime,
+			float64(proc.CPU.Instret)/runtimeS/1000000.0)
 		os.Exit(int(a0))
 
 	case 96: // set_tid_address
