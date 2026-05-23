@@ -53,10 +53,26 @@ completeness, additional devices, and performance work.
 - [x] Interrupt handling
 - [ ] ACLINT timer/IPI support
 - [ ] PLIC interrupt controller
+- [ ] Parse kernel PE32+ header: load address, symbols
+- [ ] VirtIO
 - [x] Initramfs loading
 - [x] Buildroot shell login
 - [x] System shutdown support
 - [ ] SMP support
+
+## [OASIS VirtIO (Virtual I/O)](https://www.oasis-open.org/standard/virtio-v1-1/)
+
+| Device                        | Linux Driver   | Device ID |
+| :-----                        | :----          | -----:    |
+| Block Device                  | virtio_blk     | 2         |
+| 9P Transport                  | 9pnet_virtio   | 9         |
+| Network Card                  | virtio_net     | 1         |
+| Entropy Source / RNG          | virtio_rng     | 4         |
+| Cryptographic Accelerator     | virtio_crypto  | 20        |
+| Persistent Error Storage      | virtio_pstore  | 22        |
+| Graphics Adapter / GPU        | virtio_gpu     | 16        |
+| Input Subsystem               | virtio_input   | 18        |
+| Console / Multi-Stream Serial | virtio_console | 3         |
 
 ## Quick start
 
