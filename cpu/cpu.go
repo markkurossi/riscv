@@ -151,6 +151,7 @@ func (cpu *CPU) loop() error {
 	var codePagenum uint64
 	var codePage []byte
 
+dispatch:
 	for {
 		var instr isa.Instr
 		var err error
@@ -192,7 +193,7 @@ func (cpu *CPU) loop() error {
 						if currentMode < isa.ModeM ||
 							(currentMode == isa.ModeM && cpu.mstatus.MIE()) {
 							cpu.Interrupt(isa.ModeM, bit)
-							continue
+							continue dispatch
 						}
 					} else {
 						// Delegated to S-mode Enabled if explicitly
@@ -201,7 +202,7 @@ func (cpu *CPU) loop() error {
 						if currentMode < isa.ModeS ||
 							(currentMode == isa.ModeS && cpu.mstatus.SIE()) {
 							cpu.Interrupt(isa.ModeS, bit)
-							continue
+							continue dispatch
 						}
 					}
 				}
