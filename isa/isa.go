@@ -102,7 +102,7 @@ const (
 	IntMEIP
 )
 
-func intString(v uint64) string {
+func IntString(v uint64) string {
 	var result []string
 	if v&IntMEIP != 0 {
 		result = append(result, "MEIP")
