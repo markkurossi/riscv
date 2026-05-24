@@ -488,8 +488,6 @@ func (emu *Emulator) Run(argv []string, envp []string) error {
 	emu.Process.AllocFD(os.Stdout)
 	emu.Process.AllocFD(os.Stderr)
 
-	emu.Process.CPU.PID = emu.Process.PID
-
 	return emu.CPU.Run()
 }
 

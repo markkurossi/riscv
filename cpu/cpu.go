@@ -35,8 +35,6 @@ const (
 type TrapHandler func(cpu *CPU, trap *isa.Trap) (bool, error)
 
 type CPU struct {
-	PID uint64 // XXX how is this set? This is an usermode emulator field.
-
 	Trace bool
 
 	X [32]uint64
@@ -58,11 +56,12 @@ type CPU struct {
 		Instr isa.Instr
 	}
 
-	// Instruction count.
+	Time    uint64
 	Instret uint64
 
-	m sync.Mutex
-	c *sync.Cond
+	m    sync.Mutex
+	c    *sync.Cond
+	wfiC chan uint64
 
 	StartTime time.Time
 	Runtime   time.Duration
@@ -82,6 +81,7 @@ func New(mem *memory.Memory) *CPU {
 		MMU: &mmu.MMU{
 			Mem: mem,
 		},
+		wfiC: make(chan uint64),
 	}
 	cpu.c = sync.NewCond(&cpu.m)
 	cpu.MMU.Hart = cpu
@@ -90,7 +90,7 @@ func New(mem *memory.Memory) *CPU {
 }
 
 func (cpu *CPU) Now() uint64 {
-	return cpu.Instret
+	return cpu.Time
 }
 
 func (cpu *CPU) Mode() isa.PrivilegeMode {
@@ -102,6 +102,8 @@ func (cpu *CPU) SetMode(mode isa.PrivilegeMode) {
 }
 
 func (cpu *CPU) Run() error {
+	go cpu.wfiWakeup()
+
 	cpu.StartTime = time.Now()
 
 	for !cpu.shutdown {
@@ -130,6 +132,8 @@ func (cpu *CPU) Run() error {
 		}
 	}
 	cpu.Runtime = time.Since(cpu.StartTime)
+
+	cpu.wfiC <- 0
 
 	// Halt all memory-mapped devices.
 	return cpu.MMU.ROM.Halt()
@@ -160,14 +164,12 @@ func (cpu *CPU) loop() error {
 			stimecmp := cpu.CSR[CsrStimecmp]
 			now := cpu.Now()
 
-			if now > stimecmp {
+			if now >= stimecmp {
 				mip |= isa.IntSTIP
 			} else {
 				// Clear it if the time comparison drops below threshold
 				mip &^= isa.IntSTIP
 			}
-			// CRITICAL: Write back the updated bit mask into the
-			// backing storage slice
 			cpu.CSR[CsrMip] = mip
 
 			mie := cpu.CSR[CsrMie]
@@ -263,12 +265,13 @@ func (cpu *CPU) loop() error {
 		}
 
 		cpu.Instret++
+		cpu.Time++
 
 		if cpuDebug || cpu.DebugTrace {
 			if cpu.Symtab != nil {
 				mapped, entry := cpu.kernelMap(cpu.PC)
 				if entry != nil && entry != cpu.LastSymbol {
-					fmt.Printf("%v  <%s+0x%x>:\n",
+					fmt.Printf("%v  <%s+0x%x>:\r\n",
 						fmtAddr(cpu.PC), entry.Name, mapped-entry.Start)
 					cpu.LastSymbol = entry
 				}
@@ -451,7 +454,28 @@ func (cpu *CPU) loop() error {
 			continue
 
 		case isa.Wfi:
-			// XXX skip
+			// Calculate delay to the next stimecmp interrupt.
+
+			var delay uint64
+			stimecmp := cpu.CSR[CsrStimecmp]
+			now := cpu.Now()
+
+			if stimecmp > now {
+				delay = stimecmp - now
+			} else {
+				// Timer interrupt due, the interrupt handling loop at
+				// the beginning of this function will handle it.
+				break
+			}
+			// XXX we assume cpu time (MIPS) == time.Duration == ns.
+			cpu.wfiC <- delay
+
+			// Wait for interrupt.
+			cpu.m.Lock()
+			for cpu.CSR[CsrMip] == 0 && cpu.Now() < stimecmp {
+				cpu.c.Wait()
+			}
+			cpu.m.Unlock()
 
 		case isa.Fld:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
@@ -1150,6 +1174,20 @@ func (cpu *CPU) loop() error {
 	}
 }
 
+func (cpu *CPU) wfiWakeup() {
+	for delay := range cpu.wfiC {
+		if delay == 0 {
+			break
+		}
+		<-time.After(time.Duration(delay))
+		cpu.m.Lock()
+		cpu.Time += delay
+
+		cpu.m.Unlock()
+		cpu.c.Broadcast()
+	}
+}
+
 func (cpu *CPU) ClearInterrupt(mask uint64) {
 	cpu.m.Lock()
 	cpu.CSR[CsrMip] &^= mask
@@ -1160,7 +1198,7 @@ func (cpu *CPU) SetInterrupt(mask uint64) {
 	cpu.m.Lock()
 	cpu.CSR[CsrMip] |= mask
 	cpu.m.Unlock()
-	cpu.c.Signal()
+	cpu.c.Broadcast()
 }
 
 func (cpu *CPU) FuncName(pc uint64) (*SymEntry, uint64) {
@@ -1195,7 +1233,7 @@ func (cpu *CPU) traceFunc(pc uint64) *SymEntry {
 	cpu.ColorOn()
 	fmt.Printf("%8x  <%s+0x%x>:", pc, entry.Name, mapped-entry.Start)
 	cpu.ColorOff()
-	fmt.Println()
+	fmt.Print("\r\n")
 
 	return entry
 }
@@ -1279,5 +1317,5 @@ func (cpu *CPU) trace(raw uint32, instr isa.Instr, msg string) {
 	}
 	fmt.Print(line)
 	cpu.ColorOff()
-	fmt.Println()
+	fmt.Print("\r\n")
 }

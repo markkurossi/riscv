@@ -741,7 +741,6 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 		// is always 32 bits so the +4 below works.
 		child := proc.Kernel.NewProcess(proc)
 		child.CPU = &cpu.CPU{
-			PID:         child.PID,
 			PC:          proc.CPU.PC + 4,
 			MMU:         proc.CPU.MMU,
 			TrapHandler: proc.CPU.TrapHandler,

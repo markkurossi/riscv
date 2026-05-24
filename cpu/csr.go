@@ -64,6 +64,7 @@ const (
 	CsrTinfo         = 0x7a4
 	CsrCycle         = 0xc00
 	CsrTime          = 0xc01
+	CsrInstret       = 0xc02
 	CsrSenvcfg       = 0xda0
 	CsrMvendorid     = 0xf11
 	CsrMarchid       = 0xf12
@@ -180,6 +181,9 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 
 	case CsrTime:
 		v = cpu.Now()
+
+	case CsrInstret:
+		v = cpu.Instret
 
 	case CsrMvendorid:
 
