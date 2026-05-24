@@ -24,6 +24,7 @@ const (
 	debugMMU = false
 )
 
+// Memory access flags.
 const (
 	AccessNone  = 0
 	AccessRead  = int(PteR)
@@ -31,6 +32,7 @@ const (
 	AccessExec  = int(PteX)
 )
 
+// Supervisor Address Translation and Protection (SATP) modes.
 const (
 	SatpModeBare = 0
 	SatpModeSv39 = 8
@@ -39,6 +41,7 @@ const (
 	SatpModeSv64 = 11
 )
 
+// ROM implements a memory-mapped device.
 type ROM interface {
 	Halt() error
 	Contains(paddr uint64) bool

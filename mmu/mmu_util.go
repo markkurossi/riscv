@@ -77,6 +77,7 @@ func (mmu *MMU) CopyToUser(vaddr uint64, data []byte) error {
 	return nil
 }
 
+// Dump prints page table mappings.
 func (mmu *MMU) Dump() error {
 	mode := mmu.satp.Mode()
 	if mode == SatpModeBare {
