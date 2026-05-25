@@ -8,9 +8,19 @@ package cpu
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/markkurossi/riscv/isa"
 )
+
+func (cpu *CPU) disassembleFunction(name string) {
+	entry := cpu.Symtab.Lookup(name)
+	if entry == nil {
+		return
+	}
+
+	cpu.disassembleKernel(entry.Start)
+}
 
 func (cpu *CPU) kernelMap(vaddr uint64) (uint64, *SymEntry) {
 	// XXX resolve the offsets from cpu.Mem.
@@ -58,23 +68,26 @@ func (cpu *CPU) kernelToPhysical(vaddr uint64) uint64 {
 func (cpu *CPU) disassembleKernel(vaddr uint64) {
 	_, entry := cpu.kernelMap(vaddr)
 	if entry == nil {
+		log.Printf("vaddr %x not in kernel map\r\n", vaddr)
 		return
 	}
 	mem := cpu.MMU.Mem
 
 	start := cpu.kernelToPhysical(entry.Start)
 	if start < mem.RAMBase || start-mem.RAMBase > uint64(len(mem.RAM)) {
+		log.Printf("entry start %x outside of RAM range\r\n", start)
 		return
 	}
 
 	end := cpu.kernelToPhysical(entry.End)
 	if end < mem.RAMBase || end-mem.RAMBase > uint64(len(mem.RAM)) {
+		log.Printf("entry end %x outside of RAM range\r\n", end)
 		return
 	}
 
-	fmt.Printf("Disassembly of exception function:\r\n")
+	log.Printf("Disassembly of exception function:\r\n")
 
-	fmt.Printf("%v <%s>:\r\n", fmtAddr(entry.Start), entry.Name)
+	log.Printf("%v <%s>:\r\n", fmtAddr(entry.Start), entry.Name)
 
 	var size uint64
 	for i := start; i < end; i += size {
@@ -92,22 +105,23 @@ func (cpu *CPU) disassembleKernel(vaddr uint64) {
 			size = 2
 		}
 		if err != nil {
-			fmt.Printf("disassembleKernel: %v\r\n", err)
+			log.Printf("disassembleKernel: %v\r\n", err)
 			return
 		}
 
 		pc := entry.Start + i - start
 
 		addr := fmtAddr(pc)
+		var line string
 		if size == 4 {
-			fmt.Printf("%s:  %08x   %v", addr, raw, instr)
+			line = fmt.Sprintf("%s:  %08x   %v", addr, raw, instr)
 		} else {
-			fmt.Printf("%s:  %04x       %v", addr, raw, instr)
+			line = fmt.Sprintf("%s:  %04x       %v", addr, raw, instr)
 		}
 		if vaddr == pc {
-			fmt.Printf("\t# offending instruction")
+			line += fmt.Sprintf("\t# offending instruction")
 		}
-		fmt.Printf("\r\n")
+		log.Printf("%s\r\n", line)
 	}
-	fmt.Printf("End of exception function disassembly\r\n")
+	log.Printf("End of exception function disassembly\r\n")
 }

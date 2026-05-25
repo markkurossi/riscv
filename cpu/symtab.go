@@ -17,6 +17,7 @@ import (
 
 type Symtab interface {
 	Resolve(addr uint64) *SymEntry
+	Lookup(name string) *SymEntry
 }
 
 var (
@@ -108,4 +109,13 @@ func (sm *SystemMap) Resolve(addr uint64) *SymEntry {
 			start = mid
 		}
 	}
+}
+
+func (sm *SystemMap) Lookup(name string) *SymEntry {
+	for _, entry := range sm.Entries {
+		if entry.Name == name {
+			return entry
+		}
+	}
+	return nil
 }
