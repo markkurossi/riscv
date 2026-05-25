@@ -61,7 +61,6 @@ type CPU struct {
 
 	m          sync.Mutex
 	c          *sync.Cond
-	wfiC       chan uint64
 	wfiTimeout bool
 
 	StartTime time.Time
@@ -82,7 +81,6 @@ func New(mem *memory.Memory) *CPU {
 		MMU: &mmu.MMU{
 			Mem: mem,
 		},
-		wfiC: make(chan uint64),
 	}
 	cpu.c = sync.NewCond(&cpu.m)
 	cpu.MMU.Hart = cpu
@@ -103,8 +101,6 @@ func (cpu *CPU) SetMode(mode isa.PrivilegeMode) {
 }
 
 func (cpu *CPU) Run() error {
-	go cpu.wfiWakeup()
-
 	cpu.StartTime = time.Now()
 
 	for !cpu.shutdown {
@@ -133,8 +129,6 @@ func (cpu *CPU) Run() error {
 		}
 	}
 	cpu.Runtime = time.Since(cpu.StartTime)
-
-	cpu.wfiC <- 0
 
 	// Halt all memory-mapped devices.
 	return cpu.MMU.ROM.Halt()
@@ -1180,20 +1174,6 @@ dispatch:
 				instr, raw)
 		}
 		cpu.PC += uint64(size)
-	}
-}
-
-func (cpu *CPU) wfiWakeup() {
-	for delay := range cpu.wfiC {
-		if delay == 0 {
-			break
-		}
-		<-time.After(time.Duration(delay))
-		cpu.m.Lock()
-		cpu.Time += delay
-
-		cpu.m.Unlock()
-		cpu.c.Broadcast()
 	}
 }
 
