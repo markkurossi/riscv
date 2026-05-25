@@ -72,9 +72,9 @@ func (cpu *CPU) disassembleKernel(vaddr uint64) {
 		return
 	}
 
-	fmt.Printf("Disassembly of exception function:\n")
+	fmt.Printf("Disassembly of exception function:\r\n")
 
-	fmt.Printf("%v <%s>:\n", fmtAddr(entry.Start), entry.Name)
+	fmt.Printf("%v <%s>:\r\n", fmtAddr(entry.Start), entry.Name)
 
 	var size uint64
 	for i := start; i < end; i += size {
@@ -92,7 +92,7 @@ func (cpu *CPU) disassembleKernel(vaddr uint64) {
 			size = 2
 		}
 		if err != nil {
-			fmt.Printf("disassembleKernel: %v\n", err)
+			fmt.Printf("disassembleKernel: %v\r\n", err)
 			return
 		}
 
@@ -107,7 +107,7 @@ func (cpu *CPU) disassembleKernel(vaddr uint64) {
 		if vaddr == pc {
 			fmt.Printf("\t# offending instruction")
 		}
-		fmt.Println()
+		fmt.Printf("\r\n")
 	}
-	fmt.Printf("End of exception function disassembly\n")
+	fmt.Printf("End of exception function disassembly\r\n")
 }
