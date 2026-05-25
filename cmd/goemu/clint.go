@@ -36,14 +36,29 @@ func (clint *CLINT) Contains(paddr uint64) bool {
 	return paddr >= clint.Start && paddr < clint.End
 }
 
+// Tick explicitly syncs the CLINT internal counter with the main engine clock
+// and re-evaluates the Machine Timer Interrupt (MTIP) line status.
+func (clint *CLINT) Tick(now uint64) {
+	clint.Mtime = now
+
+	// Check if the timer threshold has been reached or passed
+	if clint.Mtime >= clint.Mtimecmp {
+		// Assert Machine Timer Interrupt Pending (Bit 7 of mip)
+		clint.Hart.SetInterrupt(isa.IntMTIP)
+	} else {
+		// Clear the line if the deadline was moved forward into the future
+		clint.Hart.ClearInterrupt(isa.IntMTIP)
+	}
+}
+
 func (clint *CLINT) load(paddr uint64) (uint64, error) {
 	if !clint.Contains(paddr) {
 		return 0, clint.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
 	}
 
+	ofs := paddr - clint.Start
 	var v uint64
 
-	ofs := paddr - clint.Start
 	switch ofs {
 	case ClintOfsMsip:
 		v = clint.Msip
@@ -52,13 +67,29 @@ func (clint *CLINT) load(paddr uint64) (uint64, error) {
 		v = clint.Mtimecmp
 
 	case ClintOfsMtime:
+		// Dynamic sync before read ensures OpenSBI gets the exact current time
+		clint.Mtime = clint.Hart.Now()
 		v = clint.Mtime
 
 	default:
-		fmt.Printf("CLINT: load: unknown register %x\r\n", ofs)
+		// Support split 32-bit register window accesses commonly used by kernels
+		if ofs >= ClintOfsMtimecmp && ofs < ClintOfsMtimecmp+8 {
+			v = clint.Mtimecmp
+			if ofs&4 != 0 {
+				v >>= 32
+			}
+		} else if ofs >= ClintOfsMtime && ofs < ClintOfsMtime+8 {
+			clint.Mtime = clint.Hart.Now()
+			v = clint.Mtime
+			if ofs&4 != 0 {
+				v >>= 32
+			}
+		} else {
+			fmt.Printf("CLINT: load: unknown register %x\r\n", ofs)
+		}
 	}
 
-	fmt.Printf("CLINT.load(0x%x) => 0x%x\r\n", ofs, v)
+	fmt.Printf("CLINT.load(%x): %x\r\n", ofs, v)
 
 	return v, nil
 }
@@ -69,23 +100,47 @@ func (clint *CLINT) store(paddr, v uint64) error {
 	}
 	ofs := paddr - clint.Start
 
-	fmt.Printf("CLINT.store(0x%x, 0x%x)\r\n", ofs, v)
+	fmt.Printf("CLINT.store(%x): %x\r\n", ofs, v)
 
 	switch ofs {
 	case ClintOfsMsip:
 		clint.Msip = v
+		if clint.Msip&1 != 0 {
+			clint.Hart.SetInterrupt(isa.IntMSIP) // Machine Software Interrupt (Bit 3)
+		} else {
+			clint.Hart.ClearInterrupt(isa.IntMSIP)
+		}
 
 	case ClintOfsMtimecmp:
 		clint.Mtimecmp = v
+		clint.Tick(clint.Hart.Now())
 
 	case ClintOfsMtime:
 		clint.Mtime = v
+		clint.Tick(clint.Mtime)
 
 	default:
-		fmt.Printf("CLINT: store: unknown register %x = %x\r\n", ofs, v)
+		// Handle partial 32-bit lower/upper sub-word register writes
+		if ofs >= ClintOfsMtimecmp && ofs < ClintOfsMtimecmp+8 {
+			clint.Mtimecmp = updateRegisterHalf(clint.Mtimecmp, ofs, v)
+			clint.Tick(clint.Hart.Now())
+		} else if ofs >= ClintOfsMtime && ofs < ClintOfsMtime+8 {
+			clint.Mtime = updateRegisterHalf(clint.Mtime, ofs, v)
+			clint.Tick(clint.Mtime)
+		} else {
+			fmt.Printf("CLINT: store: unknown register %x = %x\r\n", ofs, v)
+		}
 	}
 
 	return nil
+}
+
+// Helper to merge 32-bit aligned MMIO writes into our 64-bit fields safely
+func updateRegisterHalf(current uint64, offset uint64, val uint64) uint64 {
+	if offset&4 != 0 {
+		return (current & 0xffffffff) | (val << 32)
+	}
+	return (current & 0xffffffff00000000) | (val & 0xffffffff)
 }
 
 func (clint *CLINT) Load8(paddr uint64) (uint8, error) {
@@ -113,25 +168,21 @@ func (clint *CLINT) Load32(paddr uint64) (uint32, error) {
 }
 
 func (clint *CLINT) Load64(paddr uint64) (uint64, error) {
-	v, err := clint.load(paddr)
-	if err != nil {
-		return 0, err
-	}
-	return v, nil
+	return clint.load(paddr)
 }
 
-func (clint *CLINT) Store8(paddr, v uint64) error {
+func (clint *CLINT) Store8(paddr uint64, v uint64) error {
 	return clint.store(paddr, v)
 }
 
-func (clint *CLINT) Store16(paddr, v uint64) error {
+func (clint *CLINT) Store16(paddr uint64, v uint64) error {
 	return clint.store(paddr, v)
 }
 
-func (clint *CLINT) Store32(paddr, v uint64) error {
+func (clint *CLINT) Store32(paddr uint64, v uint64) error {
 	return clint.store(paddr, v)
 }
 
-func (clint *CLINT) Store64(paddr, v uint64) error {
+func (clint *CLINT) Store64(paddr uint64, v uint64) error {
 	return clint.store(paddr, v)
 }
