@@ -59,9 +59,10 @@ type CPU struct {
 	Time    uint64
 	Instret uint64
 
-	m    sync.Mutex
-	c    *sync.Cond
-	wfiC chan uint64
+	m          sync.Mutex
+	c          *sync.Cond
+	wfiC       chan uint64
+	wfiTimeout bool
 
 	StartTime time.Time
 	Runtime   time.Duration
@@ -157,10 +158,13 @@ dispatch:
 		var err error
 		var size int
 
+		cpu.Time++
 		cpu.X[isa.Zero] = 0
 
 		// Check interrupts every 64 instructions.
 		if cpu.Instret&0x3f == 0 {
+			cpu.Time = uint64(time.Since(cpu.StartTime).Nanoseconds()) / 10
+
 			mip := cpu.CSR[CsrMip]
 			stimecmp := cpu.CSR[CsrStimecmp]
 			now := cpu.Now()
@@ -266,7 +270,6 @@ dispatch:
 		}
 
 		cpu.Instret++
-		cpu.Time++
 
 		if cpuDebug || cpu.DebugTrace {
 			if cpu.Symtab != nil {
@@ -457,23 +460,28 @@ dispatch:
 		case isa.Wfi:
 			// Calculate delay to the next stimecmp interrupt.
 
-			var delay uint64
 			stimecmp := cpu.CSR[CsrStimecmp]
 			now := cpu.Now()
 
-			if stimecmp > now {
-				delay = stimecmp - now
-			} else {
-				// Timer interrupt due, the interrupt handling loop at
-				// the beginning of this function will handle it.
+			if stimecmp == 0xffffffffffffffff || now >= stimecmp {
 				break
 			}
-			// XXX we assume cpu time (MIPS) == time.Duration == ns.
-			cpu.wfiC <- delay
+			cpu.m.Lock()
+			cpu.wfiTimeout = false
+			cpu.m.Unlock()
+
+			delay := time.Duration(stimecmp - now)
+			go func() {
+				time.Sleep(delay)
+				cpu.m.Lock()
+				cpu.wfiTimeout = true
+				cpu.c.Broadcast()
+				cpu.m.Unlock()
+			}()
 
 			// Wait for interrupt.
 			cpu.m.Lock()
-			for cpu.CSR[CsrMip] == 0 && cpu.Now() < stimecmp {
+			for cpu.CSR[CsrMip] == 0 && !cpu.wfiTimeout {
 				cpu.c.Wait()
 			}
 			cpu.m.Unlock()
