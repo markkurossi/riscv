@@ -92,6 +92,11 @@ func (cpu *CPU) Now() uint64 {
 	return cpu.Time
 }
 
+func (cpu *CPU) syncTime() uint64 {
+	cpu.Time = uint64(time.Since(cpu.StartTime).Nanoseconds()) / 10
+	return cpu.Time
+}
+
 func (cpu *CPU) Mode() isa.PrivilegeMode {
 	return cpu.mode
 }
@@ -152,22 +157,27 @@ dispatch:
 		var err error
 		var size int
 
+		// Ensure monotonic clock, this is slower than real clock so
+		// we won't jump forward.
 		cpu.Time++
+
+		// Ensure zero=zero.
 		cpu.X[isa.Zero] = 0
 
-		// Check interrupts every 64 instructions.
-		if cpu.Instret&0x3f == 0 {
-			cpu.Time = uint64(time.Since(cpu.StartTime).Nanoseconds()) / 10
+		// Check interrupts every 64 instructions or if any interrupts
+		// are pending. The loop below will not trigger interrupts if
+		// they are pending but not enabled.
+		// XXX consider moving CsrMip and CsrMie to local variables.
+		if cpu.Instret&0x3f == 0 || cpu.CSR[CsrMip] != 0 {
+			// Sync time to wall clock.
+			now := cpu.syncTime()
 
 			mip := cpu.CSR[CsrMip]
 			stimecmp := cpu.CSR[CsrStimecmp]
-			now := cpu.Now()
 
+			// Check timer interrupts.
 			if now >= stimecmp {
 				mip |= isa.IntSTIP
-			} else {
-				// Clear it if the time comparison drops below threshold
-				mip &^= isa.IntSTIP
 			}
 			cpu.CSR[CsrMip] = mip
 
@@ -176,6 +186,7 @@ dispatch:
 
 			if pending != 0 {
 				mideleg := cpu.CSR[CsrMideleg]
+				currentMode := cpu.Mode()
 
 				// Check each pending interrupt, highest priority first
 				for _, bit := range []uint64{11, 9, 7, 5, 3, 1} {
@@ -183,11 +194,9 @@ dispatch:
 						continue
 					}
 
-					currentMode := cpu.Mode()
-
 					if mideleg&(1<<bit) == 0 {
 						// Handle in M-mode Enabled if explicitly in a
-						// lower mode, OR if in M-mode with MIE active
+						// lower mode, OR if in M-mode with MIE active.
 						if currentMode < isa.ModeM ||
 							(currentMode == isa.ModeM && cpu.mstatus.MIE()) {
 							cpu.Interrupt(isa.ModeM, bit)
@@ -196,7 +205,7 @@ dispatch:
 					} else {
 						// Delegated to S-mode Enabled if explicitly
 						// in User mode, OR if in S-mode with SIE
-						// active
+						// active.
 						if currentMode < isa.ModeS ||
 							(currentMode == isa.ModeS && cpu.mstatus.SIE()) {
 							cpu.Interrupt(isa.ModeS, bit)
@@ -464,7 +473,7 @@ dispatch:
 			cpu.wfiTimeout = false
 			cpu.m.Unlock()
 
-			delay := time.Duration(stimecmp - now)
+			delay := time.Duration(stimecmp-now) * 10
 			go func() {
 				time.Sleep(delay)
 				cpu.m.Lock()
@@ -475,7 +484,7 @@ dispatch:
 
 			// Wait for interrupt.
 			cpu.m.Lock()
-			for cpu.CSR[CsrMip] == 0 && !cpu.wfiTimeout {
+			for cpu.CSR[CsrMip]&cpu.CSR[CsrMie] == 0 && !cpu.wfiTimeout {
 				cpu.c.Wait()
 			}
 			cpu.m.Unlock()

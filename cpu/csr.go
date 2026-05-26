@@ -251,6 +251,10 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 
 	case CsrStimecmp:
 		cpu.CSR[csr] = v
+		if cpu.syncTime() < v {
+			// Next timer interrupt in the future, clear interrupts.
+			cpu.CSR[CsrMip] &^= isa.IntSTIP
+		}
 
 	case CsrSie:
 		// sie is a masked view of mie — only S-mode bits
