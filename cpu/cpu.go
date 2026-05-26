@@ -464,7 +464,7 @@ dispatch:
 			// Calculate delay to the next stimecmp interrupt.
 
 			stimecmp := cpu.CSR[CsrStimecmp]
-			now := cpu.Now()
+			now := cpu.syncTime()
 
 			if stimecmp == 0xffffffffffffffff || now >= stimecmp {
 				break
@@ -488,6 +488,11 @@ dispatch:
 				cpu.c.Wait()
 			}
 			cpu.m.Unlock()
+
+			// Check timer interrupts.
+			if cpu.syncTime() >= cpu.CSR[CsrStimecmp] {
+				cpu.CSR[CsrMip] |= isa.IntSTIP
+			}
 
 		case isa.Fld:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))

@@ -201,11 +201,11 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 		v = uint64(cpu.mstatus & isa.SstatusMask)
 
 	case CsrSie:
-		mask := uint64((1 << 1) | (1 << 5) | (1 << 9))
+		mask := uint64(isa.IntSSIP | isa.IntSTIP | isa.IntSEIP)
 		v = cpu.CSR[CsrMie] & mask
 
 	case CsrSip:
-		mask := uint64((1 << 1) | (1 << 5) | (1 << 9))
+		mask := uint64(isa.IntSSIP | isa.IntSTIP | isa.IntSEIP)
 		v = cpu.CSR[CsrMip] & mask
 
 	default:
@@ -258,13 +258,13 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 
 	case CsrSie:
 		// sie is a masked view of mie — only S-mode bits
-		mask := uint64((1 << 1) | (1 << 5) | (1 << 9))
+		mask := uint64(isa.IntSSIP | isa.IntSTIP | isa.IntSEIP)
 		mie := cpu.CSR[CsrMie]
 		cpu.CSR[CsrMie] = (mie & ^mask) | (v & mask)
 
 	case CsrSip:
-		// sip is a masked view of mip — only SSIP (bit 1) is writable by S-mode
-		mask := uint64(1 << 1)
+		// sip is a masked view of mip — only S-mode bits.
+		mask := uint64(isa.IntSSIP | isa.IntSTIP | isa.IntSEIP)
 		mip := cpu.CSR[CsrMip]
 		cpu.CSR[CsrMip] = (mip & ^mask) | (v & mask)
 
