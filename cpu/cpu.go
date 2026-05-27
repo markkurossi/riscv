@@ -190,11 +190,12 @@ dispatch:
 
 				// Check each pending interrupt, highest priority first
 				for _, bit := range []uint64{11, 9, 7, 5, 3, 1} {
-					if pending&(1<<bit) == 0 {
+					bitMask := uint64(1 << bit)
+					if pending&bitMask == 0 {
 						continue
 					}
 
-					if mideleg&(1<<bit) == 0 {
+					if mideleg&bitMask == 0 {
 						// Handle in M-mode Enabled if explicitly in a
 						// lower mode, OR if in M-mode with MIE active.
 						if currentMode < isa.ModeM ||
@@ -473,9 +474,10 @@ dispatch:
 			cpu.wfiTimeout = false
 			cpu.m.Unlock()
 
-			delay := time.Duration(stimecmp-now) * 10
+			delay := stimecmp - now
+			delayns := time.Duration(delay) * 10
 			go func() {
-				time.Sleep(delay)
+				time.Sleep(delayns)
 				cpu.m.Lock()
 				cpu.wfiTimeout = true
 				cpu.c.Broadcast()
@@ -486,6 +488,9 @@ dispatch:
 			cpu.m.Lock()
 			for cpu.CSR[CsrMip]&cpu.CSR[CsrMie] == 0 && !cpu.wfiTimeout {
 				cpu.c.Wait()
+			}
+			if cpu.wfiTimeout {
+				cpu.Time += delay
 			}
 			cpu.m.Unlock()
 

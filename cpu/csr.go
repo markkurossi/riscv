@@ -180,7 +180,7 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 	case 0x7a0, 0x7a1, 0x7a2, 0x7a3, 0x7a4:
 
 	case CsrTime:
-		v = cpu.Now()
+		v = cpu.syncTime()
 
 	case CsrInstret:
 		v = cpu.Instret
