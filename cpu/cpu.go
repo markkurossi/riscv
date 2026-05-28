@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"math/bits"
 	"os"
@@ -279,7 +280,7 @@ dispatch:
 			if cpu.Symtab != nil {
 				mapped, entry := cpu.kernelMap(cpu.PC)
 				if entry != nil && entry != cpu.LastSymbol {
-					fmt.Printf("%v  <%s+0x%x>:\r\n",
+					log.Printf("%v  <%s+0x%x>:\r\n",
 						fmtAddr(cpu.PC), entry.Name, mapped-entry.Start)
 					cpu.LastSymbol = entry
 				}
@@ -402,36 +403,29 @@ dispatch:
 			return cpu.Trap(isa.CauseBreakpoint, 0, nil)
 
 		case isa.Sret:
+			if cpu.Trace {
+				cpu.traceFunc(cpu.PC)
+				cpu.tracef(raw, instr, "mode=%v => %v, sepc=%x",
+					cpu.Mode(), cpu.mstatus.SPP(), cpu.CSR[CsrSepc])
+			}
 			cpu.mstatus.SetSIE(cpu.mstatus.SPIE())
 			cpu.mstatus.SetSPIE(true)
 			cpu.SetMode(cpu.mstatus.SPP())
 			cpu.mstatus.SetSPP(isa.ModeU)
 			cpu.PC = cpu.CSR[CsrSepc]
-
-			if cpu.Trace {
-				cpu.traceFunc(cpu.PC)
-				cpu.tracef(raw, instr, "sepc=%x, mode=%v", cpu.PC, cpu.Mode())
-			}
-
 			continue
 
 		case isa.Mret:
 			if cpu.Trace {
 				cpu.traceFunc(cpu.PC)
-				cpu.tracef(raw, instr, "mode=%v => %v",
-					cpu.Mode(), cpu.mstatus.MPP())
+				cpu.tracef(raw, instr, "mode=%v => %v, mepc=%x",
+					cpu.Mode(), cpu.mstatus.MPP(), cpu.CSR[CsrMepc])
 			}
-
 			cpu.mstatus.SetMIE(cpu.mstatus.MPIE())
 			cpu.mstatus.SetMPIE(true)
 			cpu.SetMode(cpu.mstatus.MPP())
 			cpu.mstatus.SetMPP(isa.ModeU)
 			cpu.PC = cpu.CSR[CsrMepc]
-
-			if cpu.Trace {
-				cpu.tracef(raw, instr, "mepc=%x, mode=%v", cpu.PC, cpu.Mode())
-			}
-
 			continue
 
 		case isa.Ecall:
@@ -532,10 +526,6 @@ dispatch:
 			}
 
 		case isa.Fence:
-			// XXX fence
-			if cpu.DebugTrace {
-				cpu.traceFunc(cpu.PC)
-			}
 
 		case isa.SfenceVMA:
 			cpu.MMU.FlushTLB()
@@ -1238,10 +1228,10 @@ func (cpu *CPU) traceFunc(pc uint64) *SymEntry {
 		return nil
 	}
 
-	cpu.ColorOn()
-	fmt.Printf("%8x  <%s+0x%x>:", pc, entry.Name, mapped-entry.Start)
-	cpu.ColorOff()
-	fmt.Print("\r\n")
+	log.Printf("%s%8x  <%s+0x%x>:%s",
+		cpu.ColorOn(),
+		pc, entry.Name, mapped-entry.Start,
+		cpu.ColorOff())
 
 	return entry
 }
@@ -1252,9 +1242,9 @@ func (cpu *CPU) tracef(raw uint32, instr isa.Instr,
 	cpu.trace(raw, instr, fmt.Sprintf(format, args...))
 }
 
-func (cpu *CPU) ColorOn() {
+func (cpu *CPU) ColorOn() string {
 	if !cpuColor {
-		return
+		return ""
 	}
 	var color string
 	if true {
@@ -1276,14 +1266,14 @@ func (cpu *CPU) ColorOn() {
 			color = "30" // black/white
 		}
 	}
-	fmt.Printf("\x1b[%sm", color)
+	return fmt.Sprintf("\x1b[%sm", color)
 }
 
-func (cpu *CPU) ColorOff() {
+func (cpu *CPU) ColorOff() string {
 	if !cpuColor {
-		return
+		return ""
 	}
-	fmt.Printf("\x1b[0m")
+	return fmt.Sprintf("\x1b[0m")
 }
 
 func fmtAddr(addr uint64) string {
@@ -1300,8 +1290,6 @@ func fmtAddr(addr uint64) string {
 }
 
 func (cpu *CPU) trace(raw uint32, instr isa.Instr, msg string) {
-	cpu.ColorOn()
-
 	var line string
 
 	addr := fmtAddr(cpu.PC)
@@ -1323,7 +1311,5 @@ func (cpu *CPU) trace(raw uint32, instr isa.Instr, msg string) {
 		}
 		line += fmt.Sprintf(" # %s", msg)
 	}
-	fmt.Print(line)
-	cpu.ColorOff()
-	fmt.Print("\r\n")
+	log.Printf("%s%s%s", cpu.ColorOn(), line, cpu.ColorOff())
 }
