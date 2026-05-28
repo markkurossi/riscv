@@ -16,6 +16,7 @@ import (
 	"github.com/markkurossi/riscv/emulator"
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/kernel"
+	"github.com/markkurossi/trace"
 )
 
 func main() {
@@ -30,9 +31,19 @@ func main() {
 	kern := flag.String("kernel", "", "the kernel; enables system emulation")
 	initrd := flag.String("initrd", "", "the init filesystem")
 	symbols := flag.String("symbols", "", "kernel System.map")
+	logger := flag.String("log", "", "logger unix domain socket")
 	flag.Parse()
 
 	log.SetFlags(0)
+
+	if len(*logger) > 0 {
+		logger, err := trace.NewClient(*logger)
+		if err != nil {
+			log.Fatalf("could not connect to logger %v: %v\n", *logger, err)
+		}
+		log.SetOutput(logger)
+		fmt.Println("Remote logger enabled\r\n")
+	}
 
 	params := kernel.Params{
 		Verbose:  *verbose,
