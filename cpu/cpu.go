@@ -94,7 +94,13 @@ func (cpu *CPU) Now() uint64 {
 }
 
 func (cpu *CPU) syncTime() uint64 {
-	cpu.Time = uint64(time.Since(cpu.StartTime).Nanoseconds()) / 10
+	// The CPU.Time is a monotonically increasing counter that is
+	// incremented on every instructions, and with the time interrupt
+	// delay in the wfi instruction. To change the clock to follow
+	// real wall clock time, change the time to use the time since the
+	// CPU start:
+	//
+	//	cpu.Time = uint64(time.Since(cpu.StartTime).Nanoseconds()) / 10
 	return cpu.Time
 }
 
