@@ -507,9 +507,8 @@ dispatch:
 			if err != nil {
 				return err
 			}
-			v64 := uint64(v32)
-			v64 |= uint64(0xffffffff) << 32
-			cpu.F[instr.Rd] = math.Float64frombits(v64)
+			f32 := math.Float32frombits(v32)
+			cpu.F[instr.Rd] = float64(f32)
 
 		case isa.Fsd:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
@@ -1117,11 +1116,44 @@ dispatch:
 		case isa.FaddD:
 			cpu.F[instr.Rd] = cpu.F[instr.Rs1] + cpu.F[instr.Rs2]
 
+		case isa.FaddS:
+			cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]) +
+				float32(cpu.F[instr.Rs2]))
+
 		case isa.FsubD:
 			cpu.F[instr.Rd] = cpu.F[instr.Rs1] - cpu.F[instr.Rs2]
 
+		case isa.FsubS:
+			cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]) -
+				float32(cpu.F[instr.Rs2]))
+
 		case isa.FmulD:
 			cpu.F[instr.Rd] = cpu.F[instr.Rs1] * cpu.F[instr.Rs2]
+
+		case isa.FmulS:
+			cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]) *
+				float32(cpu.F[instr.Rs2]))
+
+		case isa.FdivD:
+			cpu.F[instr.Rd] = cpu.F[instr.Rs1] / cpu.F[instr.Rs2]
+
+		case isa.FdivS:
+			cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]) /
+				float32(cpu.F[instr.Rs2]))
+
+		case isa.FleD:
+			if cpu.F[instr.Rs1] <= cpu.F[instr.Rs2] {
+				cpu.X[instr.Rd] = 1
+			} else {
+				cpu.X[instr.Rd] = 0
+			}
+
+		case isa.FltD:
+			if cpu.F[instr.Rs1] < cpu.F[instr.Rs2] {
+				cpu.X[instr.Rd] = 1
+			} else {
+				cpu.X[instr.Rd] = 0
+			}
 
 		case isa.FeqD:
 			if cpu.F[instr.Rs1] == cpu.F[instr.Rs2] {
@@ -1159,13 +1191,36 @@ dispatch:
 		case isa.FcvtLD:
 			// XXX If the value is out of range, fcsr.fflags.NV is set
 			// to 1
-			cpu.X[instr.Rd] = uint64(int64(cpu.F[instr.Rs1]))
+			f := cpu.F[instr.Rs1]
+			var v uint64
+			if math.IsNaN(f) {
+				// RISC-V default NaN value for signed 64-bit
+				v = 0x7fffffffffffffff
+			} else if f >= math.MaxInt64 {
+				// Handles +Inf and positive overflow.
+				v = 0x7fffffffffffffff
+			} else if f < math.MinInt64 {
+				// Handles -Inf and negative overflow.
+				v = 0x8000000000000000
+			} else {
+				v = uint64(int64(f))
+			}
+			cpu.X[instr.Rd] = v
 
 		case isa.FcvtWD:
 			cpu.X[instr.Rd] = uint64(int64(int32(cpu.F[instr.Rs1])))
 
 		case isa.FcvtWUD:
 			cpu.X[instr.Rd] = uint64(uint32(cpu.F[instr.Rs1]))
+
+		case isa.FcvtLUS:
+			cpu.X[instr.Rd] = uint64(cpu.F[instr.Rs1])
+
+		case isa.FcvtSD:
+			cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]))
+
+		case isa.FcvtDS:
+			cpu.F[instr.Rd] = cpu.F[instr.Rs1]
 
 		case isa.FsgnjD:
 			v := math.Float64bits(cpu.F[instr.Rs1])

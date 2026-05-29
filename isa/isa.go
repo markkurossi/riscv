@@ -413,6 +413,8 @@ const (
 	FcvtSWU
 	FcvtSL
 	FcvtSLU
+	FcvtSD
+	FcvtDS
 
 	FcvtDW
 	FcvtDWU
@@ -894,6 +896,12 @@ var Operands = map[Op]OpInfo{
 	FcvtSLU: OpInfo{
 		Name: "fcvt.s.lu",
 	},
+	FcvtSD: OpInfo{
+		Name: "fcvt.s.d",
+	},
+	FcvtDS: OpInfo{
+		Name: "fcvt.d.s",
+	},
 	FcvtDW: OpInfo{
 		Name: "fcvt.d.w",
 	},
@@ -1102,6 +1110,18 @@ func (instr Instr) String() string {
 		case Fld, Flw:
 			return fmt.Sprintf("%v F%v,%d(%v)",
 				pad(instr.Op), int(instr.Rd), instr.Imm, instr.Rs1)
+
+		case Fsw:
+			return fmt.Sprintf("%v F%v,%d(%v)",
+				pad(instr.Op), int(instr.Rs2), instr.Imm, instr.Rs1)
+
+		case FcvtDS:
+			return fmt.Sprintf("%v F%v,F%v",
+				pad(instr.Op), int(instr.Rd), int(instr.Rs1))
+
+		case FmvXD:
+			return fmt.Sprintf("%v %v,F%v",
+				pad(instr.Op), instr.Rd, int(instr.Rs1))
 
 		case Lui: // GroupLUI
 			return fmt.Sprintf("%v %v,0x%x",

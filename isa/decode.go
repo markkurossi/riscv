@@ -812,11 +812,11 @@ func Decode(raw uint32) (Instr, error) {
 	case GroupLOADFP:
 		switch funct3 {
 		case 0b010:
-			instr.Imm = int32(raw>>20) & 0b1111_11111111
+			instr.Imm = int32(raw) >> 20
 			instr.Op = Flw
 
 		case 0b011:
-			instr.Imm = int32(raw>>20) & 0b1111_11111111
+			instr.Imm = int32(raw) >> 20
 			instr.Op = Fld
 
 		default:
@@ -837,16 +837,36 @@ func Decode(raw uint32) (Instr, error) {
 
 	case GroupOPFP:
 		switch funct7 {
+		case 0b0000000:
+			instr.Op = FaddS
 		case 0b0000001:
 			instr.Op = FaddD
+		case 0b0000100:
+			instr.Op = FsubS
 		case 0b0000101:
 			instr.Op = FsubD
+		case 0b0001000:
+			instr.Op = FmulS
 		case 0b0001001:
 			instr.Op = FmulD
+		case 0b0001100:
+			instr.Op = FdivS
+		case 0b0001101:
+			instr.Op = FdivD
 		case 0b1010000:
 			instr.Op = FeqS
 		case 0b1010001:
-			instr.Op = FeqD
+			switch funct3 {
+			case 0b000:
+				instr.Op = FleD
+			case 0b001:
+				instr.Op = FltD
+			case 0b010:
+				instr.Op = FeqD
+			default:
+				return instr, fmt.Errorf("OP-FP: funct7=%07b, funct3=%03b",
+					funct7, funct3)
+			}
 
 		case 0b1100001:
 			funct5 := raw >> 20 & 0b11111
@@ -861,6 +881,9 @@ func Decode(raw uint32) (Instr, error) {
 				return instr, fmt.Errorf("OP-FP: funct7=%07b, funct5=%05b",
 					funct7, funct5)
 			}
+
+		case 0b1100000:
+			instr.Op = FcvtLUS
 
 		case 0b1101001:
 			funct5 := raw >> 20 & 0b11111
@@ -895,8 +918,15 @@ func Decode(raw uint32) (Instr, error) {
 		case 0b0010001:
 			instr.Op = FsgnjD
 
+		case 0b0100000:
+			instr.Op = FcvtSD
+
+		case 0b0100001:
+			instr.Op = FcvtDS
+
 		default:
-			return instr, fmt.Errorf("OP-FP: funct7=%07b", funct7)
+			return instr, fmt.Errorf("OP-FP: funct7=%07b, raw=%08x",
+				funct7, raw)
 		}
 
 	case GroupMADD:
