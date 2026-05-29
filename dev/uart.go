@@ -4,7 +4,7 @@
 // All rights reserved.
 //
 
-package main
+package dev
 
 import (
 	"fmt"
@@ -75,7 +75,7 @@ func (uart *UART) Run() {
 		uart.inputAvail.Store(true)
 
 		if uart.Plic != nil && (uart.EIR&0x01) != 0 {
-			uart.Plic.Pending |= (1 << UARTIRQ)
+			uart.Plic.Pending |= (1 << uart.IRQ)
 			uart.Plic.ReevaluateInterrupts()
 		}
 	}
@@ -107,7 +107,7 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 				uart.isrPending &^= 0x01 // Clear receiver interrupt flag
 
 				if uart.isrPending == 0 && uart.Plic != nil {
-					uart.Plic.Pending &^= (1 << UARTIRQ)
+					uart.Plic.Pending &^= (1 << uart.IRQ)
 					uart.Plic.ReevaluateInterrupts()
 				}
 			}

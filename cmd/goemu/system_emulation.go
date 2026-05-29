@@ -13,6 +13,7 @@ import (
 
 	"github.com/markkurossi/gofdt"
 	"github.com/markkurossi/riscv/cpu"
+	"github.com/markkurossi/riscv/dev"
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/kernel"
 	"github.com/markkurossi/riscv/memory"
@@ -50,13 +51,13 @@ func systemEmulation(params kernel.Params,
 	core := cpu.New(mem)
 	core.Trace = params.CPUtrace
 
-	plic := &PLIC{
+	plic := &dev.PLIC{
 		Hart:  core,
 		Start: PLICBase,
 		End:   PLICBase + PLICSize,
 	}
 
-	uart := &UART{
+	uart := &dev.UART{
 		Hart:  core,
 		Start: UARTBase,
 		End:   UARTBase + UARTSize,
@@ -75,12 +76,12 @@ func systemEmulation(params kernel.Params,
 				Start: SysconBase,
 				End:   SysconBase + SysconSize,
 			},
-			&GoldfishRTC{
+			&dev.GoldfishRTC{
 				Hart:  core,
 				Start: RTCBase,
 				End:   RTCBase + RTCSize,
 			},
-			&CLINT{
+			&dev.CLINT{
 				Hart:  core,
 				Start: CLINTBase,
 				End:   CLINTBase + CLINTSize,
@@ -141,8 +142,6 @@ func systemEmulation(params kernel.Params,
 
 var (
 	_ mmu.ROM = &ROM{}
-	_ mmu.ROM = &UART{}
-	_ mmu.ROM = &CLINT{}
 )
 
 type ROM struct {
@@ -404,7 +403,7 @@ func makeDTB(initrdSize uint64) []byte {
 	fdt.Prop("interrupt-controller", nil, 0)
 
 	// Number of interrupt sources supported. This is defined in PLIC.
-	fdt.PropU32("riscv,ndev", MaxInterrupts)
+	fdt.PropU32("riscv,ndev", dev.MaxInterrupts)
 
 	// PLIC phandle
 	fdt.PropU32("phandle", 2)

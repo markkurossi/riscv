@@ -4,7 +4,7 @@
 // All rights reserved.
 //
 
-package main
+package dev
 
 import (
 	"time"
