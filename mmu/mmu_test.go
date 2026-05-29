@@ -48,6 +48,10 @@ func (hart hart) Mstatus() isa.Mstatus {
 	return 0
 }
 
+func (hart hart) Now() uint64 {
+	return 0
+}
+
 func (hart hart) Trap(cause, tval uint64, err error) error {
 	return nil
 }
@@ -61,10 +65,12 @@ func (hart hart) SetInterrupt(mask uint64) {
 func (hart hart) Shutdown() {
 }
 
-func (hart hart) ColorOn() {
+func (hart hart) ColorOn() string {
+	return ""
 }
 
-func (hart hart) ColorOff() {
+func (hart hart) ColorOff() string {
+	return ""
 }
 
 func makeTestMMU() (*MMU, uint64) {
