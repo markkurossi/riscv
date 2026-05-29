@@ -1334,7 +1334,7 @@ func (cpu *CPU) ColorOff() string {
 	if !cpuColor {
 		return ""
 	}
-	return fmt.Sprintf("\x1b[0m")
+	return "\x1b[0m"
 }
 
 func fmtAddr(addr uint64) string {

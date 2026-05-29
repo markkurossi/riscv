@@ -42,7 +42,7 @@ func main() {
 			log.Fatalf("could not connect to logger %v: %v\n", *logger, err)
 		}
 		log.SetOutput(logger)
-		fmt.Println("Remote logger enabled\r\n")
+		fmt.Println("Remote logger enabled")
 	}
 
 	params := kernel.Params{
