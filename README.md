@@ -52,7 +52,7 @@ completeness, additional devices, and performance work.
 - [x] SV39 MMU
 - [x] Interrupt handling
 - [ ] ACLINT timer/IPI support
-- [ ] PLIC interrupt controller
+- [x] PLIC interrupt controller
 - [ ] Parse kernel PE32+ header: load address, symbols
 - [ ] VirtIO
 - [x] Initramfs loading
