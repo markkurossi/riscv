@@ -178,6 +178,16 @@ func (plic *PLIC) Store64(paddr, v uint64) error {
 	return nil
 }
 
+func (plic *PLIC) SetInterruptRequest(irq uint32, set bool) {
+	bit := uint32(1) << irq
+	if set {
+		plic.Pending |= bit
+	} else {
+		plic.Pending &^= bit
+	}
+	plic.ReevaluateInterrupts()
+}
+
 func (plic *PLIC) ClaimInterrupt(contextID uint32) uint32 {
 	var highestPriority uint32 = 0
 	var claimedSource uint32 = 0

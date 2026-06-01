@@ -18,6 +18,7 @@ import (
 	"github.com/markkurossi/riscv/kernel"
 	"github.com/markkurossi/riscv/memory"
 	"github.com/markkurossi/riscv/mmu"
+	"github.com/markkurossi/riscv/virtio"
 )
 
 const (
@@ -36,6 +37,9 @@ const (
 	RTCBase = 0x10100000
 	RTCSize = 0x1000
 
+	VirtioBlkBase = 0x10008000
+	VirtioBlkIRQ  = 13
+
 	CLINTBase = 0x2000000
 	CLINTSize = 0x10000
 
@@ -50,6 +54,21 @@ func systemEmulation(params kernel.Params,
 
 	core := cpu.New(mem)
 	core.Trace = params.CPUtrace
+
+	var root string
+	switch 0 {
+	case 0:
+		root = "linux-2026-04-08/rootfs.ext2"
+	case 1:
+		root = "linux-2026-04-08/ubuntu-24.04.4-live-server-riscv64.iso"
+	case 2:
+		root = "ubuntu-26.04/ubuntu-26.04-preinstalled-server-riscv64.img"
+	}
+
+	rootfs, err := os.Open(root)
+	if err != nil {
+		return err
+	}
 
 	plic := &dev.PLIC{
 		Hart:  core,
@@ -81,6 +100,7 @@ func systemEmulation(params kernel.Params,
 				Start: RTCBase,
 				End:   RTCBase + RTCSize,
 			},
+			virtio.NewBlk(core, VirtioBlkBase, plic, VirtioBlkIRQ, mem, rootfs),
 			&dev.CLINT{
 				Hart:  core,
 				Start: CLINTBase,
@@ -504,6 +524,25 @@ func makeDTB(initrdSize uint64) []byte {
 
 	fdt.EndNode() // rtc
 
+	// VirtIO MMIO Block Device.
+	fdt.BeginNodeNum("virtio_blk", VirtioBlkBase)
+	fdt.PropStr("compatible", "virtio,mmio")
+
+	// Address and size.
+	regData = [4]uint32{
+		uint32(VirtioBlkBase >> 32), uint32(VirtioBlkBase),
+		uint32(virtio.BlkSize >> 32), uint32(virtio.BlkSize),
+	}
+	fdt.PropTabU32("reg", &regData[0], 4)
+
+	// Connect to PLIC (phandle=2) as Interrupt Source VirtioBlkIRQ.
+	virtioInterrupts := [2]uint32{
+		2,
+		VirtioBlkIRQ,
+	}
+	fdt.PropTabU32("interrupts-extended", &virtioInterrupts[0], 2)
+	fdt.EndNode() // virtio_blk
+
 	fdt.EndNode() // Close the "soc" node wrapper
 
 	// ---------------------------------------------------------------------
@@ -512,15 +551,23 @@ func makeDTB(initrdSize uint64) []byte {
 
 	fdt.BeginNode("chosen")
 
-	fdt.PropStr(
-		"bootargs",
-		// "console=ttyS0,115200 earlycon=uart8250,mmio,0x10000000,115200 keep_bootcon lpj=1000000",
-		// "earlycon=sbi console=ttyS0,115200 lpj=1000000",
-		// "earlycon=sbi console=ttyS0,115200",
-		//"earlycon=uart8250,mmio,0x10000000 console=ttyS0,115200 root=/dev/ram0 rw init=/init norandmaps",
+	// "console=ttyS0,115200 earlycon=uart8250,mmio,0x10000000,115200 keep_bootcon lpj=1000000",
+	// "earlycon=sbi console=ttyS0,115200 lpj=1000000",
+	// "earlycon=sbi console=ttyS0,115200",
+	//"earlycon=uart8250,mmio,0x10000000 console=ttyS0,115200 root=/dev/ram0 rw init=/init norandmaps",
 
-		"earlycon=sbi console=ttyS0,115200 init=/init",
-	)
+	if false {
+		fdt.PropStr(
+			"bootargs",
+			//"earlycon=sbi console=ttyS0,115200 init=/init",
+			`earlycon=sbi console=ttyS0,115200 root=/dev/vda rw rootwait init=/init dyndbg="file fs/* +p; file drivers/block/* +p"`,
+		)
+	} else {
+		fdt.PropStr(
+			"bootargs",
+			"earlycon=sbi console=ttyS0,115200 root=/dev/vda rw rootwait",
+		)
+	}
 
 	if initrdSize > 0 {
 		// Linux expects these properties to define the physical

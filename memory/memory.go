@@ -57,6 +57,7 @@ func PageOffset(addr uint64) int {
 type Memory struct {
 	RAM      []byte
 	RAMBase  uint64
+	BO       binary.ByteOrder
 	numPages int
 	nextPage int
 }
@@ -71,6 +72,7 @@ func New(base, size uint64) *Memory {
 	return &Memory{
 		RAM:      make([]byte, size),
 		RAMBase:  base,
+		BO:       bo,
 		numPages: int(size / PageSize),
 	}
 }

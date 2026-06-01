@@ -72,9 +72,10 @@ type CPU struct {
 	TrapHandler TrapHandler
 	Symtab      Symtab
 
-	lastDescOp isa.Op
-	DebugTrace bool
-	LastSymbol *SymEntry
+	lastDescOp  isa.Op
+	DebugTrace  bool
+	DebugTrace2 bool
+	LastSymbol  *SymEntry
 }
 
 func New(mem *memory.Memory) *CPU {
@@ -148,6 +149,10 @@ func (cpu *CPU) Run() error {
 
 func (cpu *CPU) Shutdown() {
 	cpu.shutdown = true
+}
+
+func (cpu *CPU) SetTrace(on bool) {
+	// cpu.DebugTrace = on
 }
 
 func (cpu *CPU) loop() error {
@@ -282,25 +287,32 @@ dispatch:
 
 		cpu.Instret++
 
-		if cpuDebug || cpu.DebugTrace {
+		if cpuDebug || cpu.DebugTrace || cpu.DebugTrace2 {
 			if cpu.Symtab != nil {
 				mapped, entry := cpu.kernelMap(cpu.PC)
 				if entry != nil && entry != cpu.LastSymbol {
-					log.Printf("%v  <%s+0x%x>:\r\n",
-						fmtAddr(cpu.PC), entry.Name, mapped-entry.Start)
+					if cpu.DebugTrace {
+						log.Printf("%v  <%s+0x%x>:\r\n",
+							fmtAddr(cpu.PC), entry.Name, mapped-entry.Start)
+					}
 					cpu.LastSymbol = entry
 				}
 				if entry != nil {
 					switch entry.Name {
 					case "__delay":
-						if true {
+						if false {
 							// cpu.MMU.Mem.Strings()
 							os.Exit(1)
 						}
+
+					case "mount_root_generic":
+						cpu.DebugTrace = true
 					}
 				}
 			}
-			cpu.trace(raw, instr, "")
+			if cpuDebug || cpu.DebugTrace {
+				// cpu.trace(raw, instr, "")
+			}
 		}
 
 		switch instr.Op {

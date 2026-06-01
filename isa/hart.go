@@ -14,6 +14,7 @@ type Hart interface {
 	ClearInterrupt(mask uint64)
 	SetInterrupt(mask uint64)
 	Shutdown()
+	SetTrace(on bool)
 	ColorOn() string
 	ColorOff() string
 }

@@ -1,0 +1,568 @@
+//
+// Copyright (c) 2026 Markku Rossi
+//
+// All rights reserved.
+//
+
+package virtio
+
+import (
+	"encoding/hex"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/markkurossi/riscv/dev"
+	"github.com/markkurossi/riscv/isa"
+	"github.com/markkurossi/riscv/memory"
+)
+
+const (
+	BlkSize = 4096
+)
+
+type Blk struct {
+	Hart     isa.Hart
+	Start    uint64
+	End      uint64
+	Plic     *dev.PLIC
+	IRQ      uint32
+	Mem      *memory.Memory
+	File     *os.File
+	fileInfo os.FileInfo
+
+	deviceFeaturesSel uint32
+	driverFeaturesSel uint32
+	driverFeatures    [2]uint32
+	status            uint32
+	interruptStatus   uint32
+
+	queueSel uint32
+	queues   [1]VirtQueue
+}
+
+func NewBlk(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
+	mem *memory.Memory, file *os.File) *Blk {
+
+	blk := &Blk{
+		Hart:  hart,
+		Start: start,
+		End:   start + BlkSize,
+		Plic:  plic,
+		IRQ:   irq,
+		Mem:   mem,
+		File:  file,
+	}
+	for idx := range blk.queues {
+		blk.queues[idx].Blk = blk
+	}
+
+	return blk
+}
+
+type VirtQueue struct {
+	Blk          *Blk
+	Num          uint32 // Set by guest (num of descs allocated, <= NumMax)
+	Ready        uint32 // Guest writes 1 to activate
+	DescPhys     uint64 // 64-bit Guest Physical Address of Descriptor Table
+	AvailPhys    uint64 // 64-bit Guest Physical Address of Available Ring
+	UsedPhys     uint64 // 64-bit Guest Physical Address of Used Ring
+	lastAvailIdx uint16
+}
+
+func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
+	log.Printf("executeDescriptorChain: idx=%v\n", idx)
+
+	hdr, err := vq.loadDesc(idx)
+	if err != nil {
+		return err
+	}
+	if hdr.Len != 16 || hdr.Flags&VirtqDescFNext == 0 {
+		return fmt.Errorf("invalid blk header: %v", hdr)
+	}
+	t, err := vq.Blk.readGuestUint32(hdr.Addr)
+	if err != nil {
+		return err
+	}
+	sector, err := vq.Blk.readGuestUint64(hdr.Addr + 8)
+	if err != nil {
+		return err
+	}
+
+	data, err := vq.loadDesc(hdr.Next)
+	if err != nil {
+		return err
+	}
+	if data.Flags&VirtqDescFNext == 0 {
+		return fmt.Errorf("invalid blk data: %v", data)
+	}
+
+	status, err := vq.loadDesc(data.Next)
+	if err != nil {
+		return err
+	}
+	if status.Len != 1 {
+		return fmt.Errorf("invalid blk status: %v", status)
+	}
+
+	fileOffset := int64(sector) * 512
+	addr := data.Addr
+
+	// Handle request type.
+	switch t {
+	case VirtioBlkTIn:
+		buf, err := vq.Blk.guestData(addr, uint64(data.Len))
+		if err != nil {
+			// XXX set status to err.
+			log.Printf("VirtIO Page Error: guestData(%v,%v): %v",
+				addr, data.Len, err)
+			return err
+		}
+		n, err := vq.Blk.File.ReadAt(buf, fileOffset)
+		if err != nil {
+			log.Printf("VirtIO Read Error: failed to read from host file at offset %d: %v",
+				fileOffset, err)
+			return err
+		}
+		log.Printf("VirtIO Disk Read: Filled %d/%d bytes into guest RAM layout at paddr offset %x\n",
+			n, data.Len, vq.Blk.Mem.Offset(addr))
+		if n >= 2048 && false {
+			log.Printf("Superblock:\n%s", hex.Dump(buf[1024:2048]))
+		}
+
+		// Temporary Signature Diagnostic Check
+		for i := 0; i < len(buf)-1; i++ {
+			if buf[i] == 0x53 && buf[i+1] == 0xef {
+				log.Printf("[SUPERBLOCK TARGET PROBE] Found signature 0xEF53 at raw buf index: %d (Expected: 1080)\n", i)
+			}
+		}
+	}
+
+	err = vq.Blk.writeGuestUint8(status.Addr, VirtioBlkSOk)
+	if err != nil {
+		return err
+	}
+	log.Printf("req header: %v\n", hdr)
+	log.Printf("  - type  : %v\n", t)
+	log.Printf("  - sector: %v\n", sector)
+	log.Printf("req data  : %v\n", data)
+	log.Printf("req status: %v\n", status)
+
+	// Update used ring.
+	err = vq.updateUsedRing(idx, data.Len)
+	if err != nil {
+		// XXX update status[0].
+		return err
+	}
+
+	// Direct VFS error verification hack
+	if sector == 0 && data.Len == 4096 {
+		// Read the status byte layout directly from guest memory
+		// after writing it
+		statusCheck, _ := vq.Blk.readGuestUint16(status.Addr)
+		usedIdxCheck, _ := vq.Blk.readGuestUint16(vq.UsedPhys + 2)
+
+		log.Printf("[VFS DEBUG] Status byte committed to RAM: %d",
+			statusCheck)
+		log.Printf("[VFS DEBUG] Used index updated in RAM header: %d",
+			usedIdxCheck)
+	}
+
+	return nil
+}
+
+func (vq *VirtQueue) updateUsedRing(idx uint16, bytesTransferred uint32) error {
+	usedIdxAddr := vq.UsedPhys + 2
+	usedIdx, err := vq.Blk.readGuestUint16(usedIdxAddr)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("updateUsedRing: idx=%v, transferred=%v\n",
+		idx, bytesTransferred)
+	vq.Blk.Hart.SetTrace(true)
+
+	elemAddr := vq.UsedPhys + 4 + (uint64(uint32(usedIdx)%vq.Num) * 8)
+
+	log.Printf("DEBUG: UsedPhys Header: %x, Writing Element Slot to: %x\n",
+		usedIdxAddr, elemAddr)
+
+	// ID of the descriptor chain head
+	vq.Blk.writeGuestUint32(elemAddr, uint32(idx))
+	vq.Blk.writeGuestUint32(elemAddr+4, bytesTransferred)
+
+	// 2. Increment the Used Ring total tracker index
+	vq.Blk.writeGuestUint16(usedIdxAddr, usedIdx+1)
+
+	// 3. Set the Interrupt Status Register to notify the guest
+	vq.Blk.interruptStatus |= 0x1 // Virtqueue Interrupt 0x1
+
+	// 4. Assert your PLIC line!
+	vq.Blk.Plic.SetInterruptRequest(vq.Blk.IRQ, true)
+
+	return nil
+}
+
+func (vq *VirtQueue) loadDesc(idx uint16) (*VirtioDesc, error) {
+	desc := vq.DescPhys + uint64(idx*16)
+
+	addr, err := vq.Blk.readGuestUint64(desc)
+	if err != nil {
+		return nil, err
+	}
+	l, err := vq.Blk.readGuestUint32(desc + 8)
+	if err != nil {
+		return nil, err
+	}
+	flags, err := vq.Blk.readGuestUint16(desc + 12)
+	if err != nil {
+		return nil, err
+	}
+	next, err := vq.Blk.readGuestUint16(desc + 14)
+	if err != nil {
+		return nil, err
+	}
+
+	return &VirtioDesc{
+		Addr:  addr,
+		Len:   l,
+		Flags: flags,
+		Next:  next,
+	}, nil
+}
+
+const (
+	VirtqDescFNext     = 1 // Next field valid.
+	VirtqDescFWrite    = 2 // Device write-only (otherwise read-only)
+	VirtqDescFIndirect = 4 // List of buffer descriptors.
+)
+
+type VirtioDesc struct {
+	Addr  uint64 // Guest Physical Address
+	Len   uint32 // Length of the buffer
+	Flags uint16 // VIRTIO_DESC_F_NEXT (1), VIRTIO_DESC_F_WRITE (2)
+	Next  uint16 // If flag NEXT is set, the index of the next descriptor
+}
+
+func (desc *VirtioDesc) String() string {
+	return fmt.Sprintf("Buf=%v@%x,Flags=%x,Next=%x",
+		desc.Len, desc.Addr, desc.Flags, desc.Next)
+}
+
+const (
+	VirtioBlkTIn          = 0
+	VirtioBlkTOut         = 1
+	VirtioBlkTFlush       = 4
+	VirtioBlkTDiscard     = 11
+	VirtioBlkTWriteZeroes = 13
+)
+
+const (
+	VirtioBlkSOk     = 0
+	VirtioBlkSIOerr  = 1
+	VirtioBlkSUnsupp = 2
+)
+
+func (vio *Blk) Halt() error {
+	return nil
+}
+
+func (vio *Blk) Contains(paddr uint64) bool {
+	return paddr >= vio.Start && paddr < vio.End
+}
+
+func (vio *Blk) Load8(paddr uint64) (uint8, error) {
+	log.Printf("Blk.Load8(0x%03x)", paddr-vio.Start)
+	return 0, nil
+}
+
+func (vio *Blk) Load16(paddr uint64) (uint16, error) {
+	log.Printf("Blk.Load16(0x%03x)", paddr-vio.Start)
+	return 0, nil
+}
+
+func (vio *Blk) Load32(paddr uint64) (uint32, error) {
+	offset := paddr - vio.Start
+
+	log.Printf("Blk.Load32(%v)", mmioReg(offset))
+
+	switch offset {
+	case 0x000:
+		return Magic, nil
+	case 0x004:
+		return Version, nil
+	case 0x008:
+		return DeviceID, nil
+	case 0x00c:
+		return VendorID, nil
+	case 0x010: // DeviceFeatures
+		switch vio.deviceFeaturesSel {
+		case 0:
+			// Bits 0-31: Block-specific features (e.g., RO, Segments, etc.)
+			// Return 0 for now if you want a basic default disk
+			return 0, nil
+		case 1:
+			// Bits 32-63: Generic VirtIO features
+			// Bit 32 is VIRTIO_F_VERSION_1 (1 << 0 of this upper page)
+			return 1 << 0, nil
+		}
+
+	case 0x034: // QueueNumMax
+		if vio.queueSel < uint32(len(vio.queues)) {
+			return 256, nil
+		}
+		return 0, nil
+
+	case 0x044: // QueueReady
+		if vio.queueSel < uint32(len(vio.queues)) {
+			return vio.queues[vio.queueSel].Ready, nil
+		}
+		return 0, nil
+
+	case 0x060: // InterruptStatus
+		return vio.interruptStatus, nil
+
+	case 0x070:
+		return vio.status, nil
+
+	case 0x100: // Disk size in sectors, low
+		return uint32(vio.size()), nil
+
+	case 0x104: // Disk size in sectors, high
+		return uint32(vio.size() >> 32), nil
+	}
+
+	return 0, nil
+}
+
+func (vio *Blk) Load64(paddr uint64) (uint64, error) {
+	log.Printf("Blk.Load64(0x%03x)", paddr-vio.Start)
+	return 0, nil
+}
+
+func (vio *Blk) Store8(paddr, v uint64) error {
+	log.Printf("Blk.Store8(0x%03x, 0x%02x)", paddr-vio.Start, v)
+	return nil
+}
+
+func (vio *Blk) Store16(paddr, v uint64) error {
+	log.Printf("Blk.Store16(0x%03x, 0x%04x)", paddr-vio.Start, v)
+	return nil
+}
+
+func (vio *Blk) Store32(paddr, v uint64) error {
+	offset := paddr - vio.Start
+
+	log.Printf("Blk.Store32(%v, 0x%08x)", mmioReg(offset), v)
+
+	switch offset {
+	case 0x014: // DeviceFeaturesSel
+		vio.deviceFeaturesSel = uint32(v)
+
+	case 0x024: // DriverFeaturesSel
+		vio.driverFeaturesSel = uint32(v)
+
+	case 0x020: // DriverFeatures
+		if vio.driverFeaturesSel < 2 {
+			vio.driverFeatures[vio.driverFeaturesSel] = uint32(v)
+		}
+
+	case 0x030: // QueueSel
+		vio.queueSel = uint32(v)
+
+	case 0x038: // QueueNum (Guest setting chosen queue size)
+		if vio.queueSel < uint32(len(vio.queues)) {
+			vio.queues[vio.queueSel].Num = uint32(v)
+		}
+
+	case 0x044: // QueueReady
+		if vio.queueSel < uint32(len(vio.queues)) {
+			vio.queues[vio.queueSel].Ready = uint32(v)
+			if v == 1 {
+				// Initialization Complete!
+				// The queue addresses below are now valid and locked down.
+			}
+		}
+
+	case 0x050: // QueueNotify
+		vio.processQueue(uint32(v))
+
+	case 0x064: // InterruptACK The guest writes a bitmask of the bits
+		// it has acknowledged and wants cleared
+		vio.interruptStatus &^= uint32(v)
+
+		// If the guest has cleared all active interrupts, we can
+		// de-assert the PLIC line
+		if vio.interruptStatus == 0 {
+			// Lower the interrupt line
+			vio.Plic.SetInterruptRequest(vio.IRQ, false)
+		}
+
+		// Buffer Base Address Registers (rv64 writes lower then upper halves)
+
+	case 0x080: // QueueDescLow
+		vio.queues[0].DescPhys =
+			(vio.queues[0].DescPhys & 0xffffffff00000000) | v
+
+	case 0x084: // QueueDescHigh
+		vio.queues[0].DescPhys =
+			(vio.queues[0].DescPhys & 0x00000000ffffffff) | (v << 32)
+
+	case 0x090: // QueueDriverLow (Available Ring)
+		vio.queues[0].AvailPhys =
+			(vio.queues[0].AvailPhys & 0xffffffff00000000) | v
+
+	case 0x094: // QueueDriverHigh
+		vio.queues[0].AvailPhys =
+			(vio.queues[0].AvailPhys & 0x00000000ffffffff) | (v << 32)
+
+	case 0x0a0: // QueueDeviceLow (Used Ring)
+		vio.queues[0].UsedPhys =
+			(vio.queues[0].UsedPhys & 0xffffffff00000000) | v
+
+	case 0x0a4: // QueueDeviceHigh
+		vio.queues[0].UsedPhys =
+			(vio.queues[0].UsedPhys & 0x00000000ffffffff) | (v << 32)
+
+	case 0x070: // Status
+		if v == 0 {
+			// Guest requested a device reset
+			vio.status = 0
+			vio.driverFeatures[0] = 0
+			vio.driverFeatures[1] = 0
+			return nil
+		}
+
+		// Standard status update protocol sequence
+		vio.status = uint32(v)
+
+		if v&8 != 0 { // VIRTIO_CONFIG_S_FEATURES_OK (8)
+			// Validate that the driver acknowledged
+			// VIRTIO_F_VERSION_1 (bit 32 -> page 1, bit 0)
+			if (vio.driverFeatures[1] & 1) == 0 {
+				// If driver rejected version 1, clear the FEATURES_OK
+				// bit to signal failure
+				vio.status &= ^uint32(8)
+			}
+		}
+	}
+	return nil
+}
+
+func (vio *Blk) Store64(paddr, v uint64) error {
+	log.Printf("Blk.Store64(0x%03x, 0x%016x)", paddr-vio.Start, v)
+	return nil
+}
+
+func (vio *Blk) size() uint64 {
+	var err error
+
+	if vio.fileInfo == nil {
+		vio.fileInfo, err = vio.File.Stat()
+		if err != nil {
+			log.Printf("failed to stat image: %v", err)
+			return 0
+		}
+	}
+	return uint64((vio.fileInfo.Size() + 511) / 512)
+}
+
+func (vio *Blk) guestData(addr, l uint64) ([]byte, error) {
+	if !vio.Mem.Contains(addr) {
+		return nil, fmt.Errorf("invalid addr %x", addr)
+	}
+	ofs := vio.Mem.Offset(addr)
+	return vio.Mem.RAM[ofs : ofs+l], nil
+}
+
+func (vio *Blk) readGuestUint16(addr uint64) (uint16, error) {
+	if !vio.Mem.Contains(addr) {
+		return 0, fmt.Errorf("invalid addr %x", addr)
+	}
+	return vio.Mem.BO.Uint16(vio.Mem.RAM[vio.Mem.Offset(addr):]), nil
+}
+
+func (vio *Blk) readGuestUint32(addr uint64) (uint32, error) {
+	if !vio.Mem.Contains(addr) {
+		return 0, fmt.Errorf("invalid addr %x", addr)
+	}
+	return vio.Mem.BO.Uint32(vio.Mem.RAM[vio.Mem.Offset(addr):]), nil
+}
+
+func (vio *Blk) readGuestUint64(addr uint64) (uint64, error) {
+	if !vio.Mem.Contains(addr) {
+		return 0, fmt.Errorf("invalid addr %x", addr)
+	}
+	return vio.Mem.BO.Uint64(vio.Mem.RAM[vio.Mem.Offset(addr):]), nil
+}
+
+func (vio *Blk) writeGuestUint8(addr uint64, v uint8) error {
+	if !vio.Mem.Contains(addr) {
+		return fmt.Errorf("invalid addr %x", addr)
+	}
+	vio.Mem.RAM[vio.Mem.Offset(addr)] = v
+
+	return nil
+}
+
+func (vio *Blk) writeGuestUint16(addr uint64, v uint16) error {
+	if !vio.Mem.Contains(addr) {
+		return fmt.Errorf("invalid addr %x", addr)
+	}
+	vio.Mem.BO.PutUint16(vio.Mem.RAM[vio.Mem.Offset(addr):], v)
+
+	return nil
+}
+
+func (vio *Blk) writeGuestUint32(addr uint64, v uint32) error {
+	if !vio.Mem.Contains(addr) {
+		return fmt.Errorf("invalid addr %x", addr)
+	}
+	vio.Mem.BO.PutUint32(vio.Mem.RAM[vio.Mem.Offset(addr):], v)
+
+	return nil
+}
+
+func (vio *Blk) processQueue(idx uint32) {
+	if idx >= uint32(len(vio.queues)) {
+		log.Printf("invalid queue index  %v", idx)
+		return
+	}
+
+	// 1. Read the driver's current Available Ring Index from guest memory
+	//
+	//   Avail Ring layout: flags (2 bytes), idx (2 bytes), ring[...]
+	//   (array of uint16)
+	paddr := vio.queues[idx].AvailPhys + 2
+	availIdx, err := vio.readGuestUint16(paddr)
+	if err != nil {
+		log.Printf("guest memory access: %v", err)
+		return
+	}
+	log.Printf("availIdx: %v", availIdx)
+
+	// vio.lastAvailIdx is an internal state tracker on your Virtqueue
+	// struct initialized to 0
+	for vio.queues[idx].lastAvailIdx != availIdx {
+		// 2. Get the head descriptor index from the available ring
+		// array
+		ringOffset := uint64(uint32(vio.queues[idx].lastAvailIdx) %
+			vio.queues[idx].Num)
+
+		paddr := vio.queues[idx].AvailPhys + 4 + (ringOffset * 2)
+		descHeadIdx, err := vio.readGuestUint16(paddr)
+		if err != nil {
+			log.Printf("guest memory access: %v", err)
+			return
+		}
+
+		// 3. Process the entire chain starting at descHeadIdx
+		err = vio.queues[idx].executeDescriptorChain(descHeadIdx)
+		if err != nil {
+			log.Printf("execute descriptor chain: %v", err)
+			return
+		}
+
+		vio.queues[idx].lastAvailIdx++
+	}
+}
