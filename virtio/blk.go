@@ -406,7 +406,8 @@ func (vio *Blk) Store32(paddr, v uint64) error {
 
 	case 0x084: // QueueDescHigh
 		vio.queues[0].DescPhys =
-			(vio.queues[0].DescPhys & 0x00000000ffffffff) | (v << 32)
+			(vio.queues[0].DescPhys & 0x00000000ffffffff) |
+				(uint64(v&0xffffffff) << 32)
 
 	case 0x090: // QueueDriverLow (Available Ring)
 		vio.queues[0].AvailPhys =
@@ -414,7 +415,8 @@ func (vio *Blk) Store32(paddr, v uint64) error {
 
 	case 0x094: // QueueDriverHigh
 		vio.queues[0].AvailPhys =
-			(vio.queues[0].AvailPhys & 0x00000000ffffffff) | (v << 32)
+			(vio.queues[0].AvailPhys & 0x00000000ffffffff) |
+				(uint64(v&0xffffffff) << 32)
 
 	case 0x0a0: // QueueDeviceLow (Used Ring)
 		vio.queues[0].UsedPhys =
@@ -422,7 +424,8 @@ func (vio *Blk) Store32(paddr, v uint64) error {
 
 	case 0x0a4: // QueueDeviceHigh
 		vio.queues[0].UsedPhys =
-			(vio.queues[0].UsedPhys & 0x00000000ffffffff) | (v << 32)
+			(vio.queues[0].UsedPhys & 0x00000000ffffffff) |
+				(uint64(v&0xffffffff) << 32)
 
 	case 0x070: // Status
 		if v == 0 {
@@ -534,21 +537,21 @@ func (vio *Blk) processQueue(idx uint32) {
 	//   Avail Ring layout: flags (2 bytes), idx (2 bytes), ring[...]
 	//   (array of uint16)
 	paddr := vio.queues[idx].AvailPhys + 2
-	availIdx, err := vio.readGuestUint16(paddr)
-	if err != nil {
-		log.Printf("guest memory access: %v", err)
-		return
-	}
-	log.Printf("availIdx: %v", availIdx)
+	for {
+		availIdx, err := vio.readGuestUint16(paddr)
+		if err != nil {
+			log.Printf("guest memory access: %v", err)
+			return
+		}
+		log.Printf("lastAvailIdx: %v, availIdx: %v",
+			vio.queues[idx].lastAvailIdx, availIdx)
 
-	// vio.lastAvailIdx is an internal state tracker on your Virtqueue
-	// struct initialized to 0
-	for vio.queues[idx].lastAvailIdx != availIdx {
-		// 2. Get the head descriptor index from the available ring
-		// array
+		if vio.queues[idx].lastAvailIdx == availIdx {
+			// Queue drained.
+			break
+		}
 		ringOffset := uint64(uint32(vio.queues[idx].lastAvailIdx) %
 			vio.queues[idx].Num)
-
 		paddr := vio.queues[idx].AvailPhys + 4 + (ringOffset * 2)
 		descHeadIdx, err := vio.readGuestUint16(paddr)
 		if err != nil {
@@ -556,7 +559,6 @@ func (vio *Blk) processQueue(idx uint32) {
 			return
 		}
 
-		// 3. Process the entire chain starting at descHeadIdx
 		err = vio.queues[idx].executeDescriptorChain(descHeadIdx)
 		if err != nil {
 			log.Printf("execute descriptor chain: %v", err)
