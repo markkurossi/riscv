@@ -65,6 +65,9 @@ func (hart hart) SetInterrupt(mask uint64) {
 func (hart hart) Shutdown() {
 }
 
+func (hart hart) SetTrace(on bool) {
+}
+
 func (hart hart) ColorOn() string {
 	return ""
 }

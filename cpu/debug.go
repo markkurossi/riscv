@@ -22,6 +22,16 @@ func (cpu *CPU) disassembleFunction(name string) {
 	cpu.disassembleKernel(entry.Start)
 }
 
+func (cpu *CPU) kernelToPhys(vaddr uint64) (uint64, bool) {
+	if vaddr >= 0x80200000 && vaddr < 0x100000000 {
+		// Physical address during early boot (MMU off).
+		return vaddr, true
+	} else if vaddr >= 0xffffffff80000000 {
+		return vaddr - 0xffffffff80000000 + 0x80200000, true
+	}
+	return 0, false
+}
+
 func (cpu *CPU) kernelMap(vaddr uint64) (uint64, *SymEntry) {
 	// XXX resolve the offsets from cpu.Mem.
 

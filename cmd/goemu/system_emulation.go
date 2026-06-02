@@ -58,16 +58,12 @@ func systemEmulation(params kernel.Params,
 	var root string
 	switch 0 {
 	case 0:
-		root = "linux-2026-04-08/rootfs.ext2"
 	case 1:
-		root = "linux-2026-04-08/ubuntu-24.04.4-live-server-riscv64.iso"
+		root = "linux-2026-04-08/rootfs.ext2"
 	case 2:
+		root = "linux-2026-04-08/ubuntu-24.04.4-live-server-riscv64.iso"
+	case 3:
 		root = "ubuntu-26.04/ubuntu-26.04-preinstalled-server-riscv64.img"
-	}
-
-	rootfs, err := os.Open(root)
-	if err != nil {
-		return err
 	}
 
 	plic := &dev.PLIC{
@@ -100,7 +96,6 @@ func systemEmulation(params kernel.Params,
 				Start: RTCBase,
 				End:   RTCBase + RTCSize,
 			},
-			virtio.NewBlk(core, VirtioBlkBase, plic, VirtioBlkIRQ, mem, rootfs),
 			&dev.CLINT{
 				Hart:  core,
 				Start: CLINTBase,
@@ -108,6 +103,20 @@ func systemEmulation(params kernel.Params,
 			},
 		},
 	}
+
+	var virtioBlk *virtio.Blk
+
+	if len(root) > 0 {
+		rootfs, err := os.Open(root)
+		if err != nil {
+			return err
+		}
+		virtioBlk = virtio.NewBlk(core, VirtioBlkBase, plic, VirtioBlkIRQ,
+			mem, rootfs)
+		rom.Segments = append(rom.Segments, virtioBlk)
+
+	}
+
 	core.MMU.ROM = rom
 
 	core.SetMode(isa.ModeM)
@@ -141,7 +150,7 @@ func systemEmulation(params kernel.Params,
 		copy(mem.RAM[mem.Offset(OfsInitrd):], data)
 	}
 
-	dtb := makeDTB(initrdSize)
+	dtb := makeDTB(initrdSize, virtioBlk)
 	copy(mem.RAM[mem.Offset(OfsDTB):], dtb)
 
 	core.X[isa.A0] = 0
@@ -260,7 +269,7 @@ func (rom *ROM) Store64(paddr, v uint64) error {
 	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 }
 
-func makeDTB(initrdSize uint64) []byte {
+func makeDTB(initrdSize uint64, virtioBlk *virtio.Blk) []byte {
 	// Initialize FDT buffer
 	buf := make([]byte, 65536)
 	fdt := gofdt.NewFDT(buf)
@@ -524,24 +533,27 @@ func makeDTB(initrdSize uint64) []byte {
 
 	fdt.EndNode() // rtc
 
-	// VirtIO MMIO Block Device.
-	fdt.BeginNodeNum("virtio_blk", VirtioBlkBase)
-	fdt.PropStr("compatible", "virtio,mmio")
+	if virtioBlk != nil {
+		// VirtIO MMIO Block Device.
+		fdt.BeginNodeNum("virtio_blk", virtioBlk.Start)
+		fdt.PropStr("compatible", "virtio,mmio")
 
-	// Address and size.
-	regData = [4]uint32{
-		uint32(VirtioBlkBase >> 32), uint32(VirtioBlkBase),
-		uint32(virtio.BlkSize >> 32), uint32(virtio.BlkSize),
-	}
-	fdt.PropTabU32("reg", &regData[0], 4)
+		// Address and size.
+		size := virtioBlk.End - virtioBlk.Start
+		regData = [4]uint32{
+			uint32(virtioBlk.Start >> 32), uint32(virtioBlk.Start),
+			uint32(size >> 32), uint32(size),
+		}
+		fdt.PropTabU32("reg", &regData[0], 4)
 
-	// Connect to PLIC (phandle=2) as Interrupt Source VirtioBlkIRQ.
-	virtioInterrupts := [2]uint32{
-		2,
-		VirtioBlkIRQ,
+		// Connect to PLIC (phandle=2) as Interrupt Source VirtioBlkIRQ.
+		virtioInterrupts := [2]uint32{
+			2,
+			virtioBlk.IRQ,
+		}
+		fdt.PropTabU32("interrupts-extended", &virtioInterrupts[0], 2)
+		fdt.EndNode() // virtio_blk
 	}
-	fdt.PropTabU32("interrupts-extended", &virtioInterrupts[0], 2)
-	fdt.EndNode() // virtio_blk
 
 	fdt.EndNode() // Close the "soc" node wrapper
 

@@ -7,6 +7,8 @@
 package virtio
 
 import (
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -123,8 +125,13 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 				fileOffset, err)
 			return err
 		}
-		vq.Blk.logf("filled %d/%d bytes into guest RAM at offset %x",
-			n, data.Len, vq.Blk.Mem.Offset(addr))
+		vq.Blk.logf("read %d/%d bytes into guest RAM addr %x (offset %x)",
+			n, data.Len, addr, vq.Blk.Mem.Offset(addr))
+
+		if sector == 0 {
+			magic := binary.LittleEndian.Uint16(buf[1024+56:])
+			vq.Blk.logf("superblock magic=%04x", magic)
+		}
 	}
 
 	err = vq.Blk.writeGuestUint8(status.Addr, VirtioBlkSOk)
@@ -165,8 +172,8 @@ func (vq *VirtQueue) updateUsedRing(idx uint16, bytesTransferred uint32) error {
 		return err
 	}
 
-	vq.Blk.logf("updateUsedRing: idx=%v, transferred=%v\n",
-		idx, bytesTransferred)
+	vq.Blk.logf("updateUsedRing: usedIdx=%v, idx=%v, transferred=%v\n",
+		usedIdx, idx, bytesTransferred)
 	vq.Blk.Hart.SetTrace(true)
 
 	elemAddr := vq.UsedPhys + 4 + (uint64(uint32(usedIdx)%vq.Num) * 8)
@@ -186,6 +193,11 @@ func (vq *VirtQueue) updateUsedRing(idx uint16, bytesTransferred uint32) error {
 
 	// 4. Assert your PLIC line!
 	vq.Blk.Plic.SetInterruptRequest(vq.Blk.IRQ, true)
+
+	used, err := vq.Blk.guestData(vq.UsedPhys, 0x10)
+	if err == nil {
+		vq.Blk.logf("used @ %x:\n%s", vq.UsedPhys, hex.Dump(used))
+	}
 
 	return nil
 }
@@ -315,6 +327,7 @@ func (vio *Blk) Load32(paddr uint64) (uint32, error) {
 		return vio.interruptStatus, nil
 
 	case 0x070:
+		vio.logf("Load32(%v) => %x\n", mmioReg(offset), vio.status)
 		return vio.status, nil
 
 	case 0x100: // Disk size in sectors, low
@@ -380,13 +393,17 @@ func (vio *Blk) Store32(paddr, v uint64) error {
 		vio.processQueue(uint32(v))
 
 	case 0x064: // InterruptACK The guest writes a bitmask of the bits
+		vio.logf("InterruptACK status=%x", vio.interruptStatus)
+
 		// it has acknowledged and wants cleared
 		vio.interruptStatus &^= uint32(v)
+		vio.logf("interruptStatus: %x\n", vio.interruptStatus)
 
 		// If the guest has cleared all active interrupts, we can
 		// de-assert the PLIC line
 		if vio.interruptStatus == 0 {
 			// Lower the interrupt line
+			vio.logf("clearing PLIC interrupt %v", vio.IRQ)
 			vio.Plic.SetInterruptRequest(vio.IRQ, false)
 		}
 
@@ -429,7 +446,7 @@ func (vio *Blk) Store32(paddr, v uint64) error {
 		}
 
 		// Standard status update protocol sequence
-		vio.status = uint32(v)
+		vio.status |= uint32(v)
 
 		if v&8 != 0 { // VIRTIO_CONFIG_S_FEATURES_OK (8)
 			// Validate that the driver acknowledged
@@ -519,6 +536,8 @@ func (vio *Blk) writeGuestUint32(addr uint64, v uint32) error {
 }
 
 func (vio *Blk) processQueue(idx uint32) {
+	vio.logf("QueueNotify(%v)", idx)
+
 	if idx >= uint32(len(vio.queues)) {
 		vio.logf("invalid queue index  %v", idx)
 		return
