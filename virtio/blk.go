@@ -7,7 +7,6 @@
 package virtio
 
 import (
-	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -71,7 +70,7 @@ type VirtQueue struct {
 }
 
 func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
-	log.Printf("executeDescriptorChain: idx=%v\n", idx)
+	vq.Blk.logf("chain: idx=%v", idx)
 
 	hdr, err := vq.loadDesc(idx)
 	if err != nil {
@@ -114,39 +113,29 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 		buf, err := vq.Blk.guestData(addr, uint64(data.Len))
 		if err != nil {
 			// XXX set status to err.
-			log.Printf("VirtIO Page Error: guestData(%v,%v): %v",
+			vq.Blk.logf("guestData(%v,%v) failed: %v",
 				addr, data.Len, err)
 			return err
 		}
 		n, err := vq.Blk.File.ReadAt(buf, fileOffset)
 		if err != nil {
-			log.Printf("VirtIO Read Error: failed to read from host file at offset %d: %v",
+			vq.Blk.logf("failed to read from host file at offset %d: %v",
 				fileOffset, err)
 			return err
 		}
-		log.Printf("VirtIO Disk Read: Filled %d/%d bytes into guest RAM layout at paddr offset %x\n",
+		vq.Blk.logf("filled %d/%d bytes into guest RAM at offset %x",
 			n, data.Len, vq.Blk.Mem.Offset(addr))
-		if n >= 2048 && false {
-			log.Printf("Superblock:\n%s", hex.Dump(buf[1024:2048]))
-		}
-
-		// Temporary Signature Diagnostic Check
-		for i := 0; i < len(buf)-1; i++ {
-			if buf[i] == 0x53 && buf[i+1] == 0xef {
-				log.Printf("[SUPERBLOCK TARGET PROBE] Found signature 0xEF53 at raw buf index: %d (Expected: 1080)\n", i)
-			}
-		}
 	}
 
 	err = vq.Blk.writeGuestUint8(status.Addr, VirtioBlkSOk)
 	if err != nil {
 		return err
 	}
-	log.Printf("req header: %v\n", hdr)
-	log.Printf("  - type  : %v\n", t)
-	log.Printf("  - sector: %v\n", sector)
-	log.Printf("req data  : %v\n", data)
-	log.Printf("req status: %v\n", status)
+	vq.Blk.logf("req header: %v\n", hdr)
+	vq.Blk.logf("  - type  : %v\n", t)
+	vq.Blk.logf("  - sector: %v\n", sector)
+	vq.Blk.logf("req data  : %v\n", data)
+	vq.Blk.logf("req status: %v\n", status)
 
 	// Update used ring.
 	err = vq.updateUsedRing(idx, data.Len)
@@ -162,10 +151,8 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 		statusCheck, _ := vq.Blk.readGuestUint16(status.Addr)
 		usedIdxCheck, _ := vq.Blk.readGuestUint16(vq.UsedPhys + 2)
 
-		log.Printf("[VFS DEBUG] Status byte committed to RAM: %d",
-			statusCheck)
-		log.Printf("[VFS DEBUG] Used index updated in RAM header: %d",
-			usedIdxCheck)
+		vq.Blk.logf("status byte committed to RAM: %d", statusCheck)
+		vq.Blk.logf("used index updated in RAM header: %d", usedIdxCheck)
 	}
 
 	return nil
@@ -178,13 +165,13 @@ func (vq *VirtQueue) updateUsedRing(idx uint16, bytesTransferred uint32) error {
 		return err
 	}
 
-	log.Printf("updateUsedRing: idx=%v, transferred=%v\n",
+	vq.Blk.logf("updateUsedRing: idx=%v, transferred=%v\n",
 		idx, bytesTransferred)
 	vq.Blk.Hart.SetTrace(true)
 
 	elemAddr := vq.UsedPhys + 4 + (uint64(uint32(usedIdx)%vq.Num) * 8)
 
-	log.Printf("DEBUG: UsedPhys Header: %x, Writing Element Slot to: %x\n",
+	vq.Blk.logf("UsedPhys Header: %x, Writing Element Slot to: %x\n",
 		usedIdxAddr, elemAddr)
 
 	// ID of the descriptor chain head
@@ -263,6 +250,11 @@ const (
 	VirtioBlkSUnsupp = 2
 )
 
+func (vio *Blk) logf(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	log.Print("virtio-blk: " + msg)
+}
+
 func (vio *Blk) Halt() error {
 	return nil
 }
@@ -272,19 +264,19 @@ func (vio *Blk) Contains(paddr uint64) bool {
 }
 
 func (vio *Blk) Load8(paddr uint64) (uint8, error) {
-	log.Printf("Blk.Load8(0x%03x)", paddr-vio.Start)
+	vio.logf("Load8(0x%03x)", paddr-vio.Start)
 	return 0, nil
 }
 
 func (vio *Blk) Load16(paddr uint64) (uint16, error) {
-	log.Printf("Blk.Load16(0x%03x)", paddr-vio.Start)
+	vio.logf("Load16(0x%03x)", paddr-vio.Start)
 	return 0, nil
 }
 
 func (vio *Blk) Load32(paddr uint64) (uint32, error) {
 	offset := paddr - vio.Start
 
-	log.Printf("Blk.Load32(%v)", mmioReg(offset))
+	vio.logf("Load32(%v)", mmioReg(offset))
 
 	switch offset {
 	case 0x000:
@@ -336,24 +328,24 @@ func (vio *Blk) Load32(paddr uint64) (uint32, error) {
 }
 
 func (vio *Blk) Load64(paddr uint64) (uint64, error) {
-	log.Printf("Blk.Load64(0x%03x)", paddr-vio.Start)
+	vio.logf("Load64(0x%03x)", paddr-vio.Start)
 	return 0, nil
 }
 
 func (vio *Blk) Store8(paddr, v uint64) error {
-	log.Printf("Blk.Store8(0x%03x, 0x%02x)", paddr-vio.Start, v)
+	vio.logf("Store8(0x%03x, 0x%02x)", paddr-vio.Start, v)
 	return nil
 }
 
 func (vio *Blk) Store16(paddr, v uint64) error {
-	log.Printf("Blk.Store16(0x%03x, 0x%04x)", paddr-vio.Start, v)
+	vio.logf("Store16(0x%03x, 0x%04x)", paddr-vio.Start, v)
 	return nil
 }
 
 func (vio *Blk) Store32(paddr, v uint64) error {
 	offset := paddr - vio.Start
 
-	log.Printf("Blk.Store32(%v, 0x%08x)", mmioReg(offset), v)
+	vio.logf("Store32(%v, 0x%08x)", mmioReg(offset), v)
 
 	switch offset {
 	case 0x014: // DeviceFeaturesSel
@@ -402,7 +394,7 @@ func (vio *Blk) Store32(paddr, v uint64) error {
 
 	case 0x080: // QueueDescLow
 		vio.queues[0].DescPhys =
-			(vio.queues[0].DescPhys & 0xffffffff00000000) | v
+			(vio.queues[0].DescPhys & 0xffffffff00000000) | (v & 0xffffffff)
 
 	case 0x084: // QueueDescHigh
 		vio.queues[0].DescPhys =
@@ -411,7 +403,7 @@ func (vio *Blk) Store32(paddr, v uint64) error {
 
 	case 0x090: // QueueDriverLow (Available Ring)
 		vio.queues[0].AvailPhys =
-			(vio.queues[0].AvailPhys & 0xffffffff00000000) | v
+			(vio.queues[0].AvailPhys & 0xffffffff00000000) | (v & 0xffffffff)
 
 	case 0x094: // QueueDriverHigh
 		vio.queues[0].AvailPhys =
@@ -420,7 +412,7 @@ func (vio *Blk) Store32(paddr, v uint64) error {
 
 	case 0x0a0: // QueueDeviceLow (Used Ring)
 		vio.queues[0].UsedPhys =
-			(vio.queues[0].UsedPhys & 0xffffffff00000000) | v
+			(vio.queues[0].UsedPhys & 0xffffffff00000000) | (v & 0xffffffff)
 
 	case 0x0a4: // QueueDeviceHigh
 		vio.queues[0].UsedPhys =
@@ -453,7 +445,7 @@ func (vio *Blk) Store32(paddr, v uint64) error {
 }
 
 func (vio *Blk) Store64(paddr, v uint64) error {
-	log.Printf("Blk.Store64(0x%03x, 0x%016x)", paddr-vio.Start, v)
+	vio.logf("Store64(0x%03x, 0x%016x)", paddr-vio.Start, v)
 	return nil
 }
 
@@ -463,7 +455,7 @@ func (vio *Blk) size() uint64 {
 	if vio.fileInfo == nil {
 		vio.fileInfo, err = vio.File.Stat()
 		if err != nil {
-			log.Printf("failed to stat image: %v", err)
+			vio.logf("failed to stat image: %v", err)
 			return 0
 		}
 	}
@@ -528,7 +520,7 @@ func (vio *Blk) writeGuestUint32(addr uint64, v uint32) error {
 
 func (vio *Blk) processQueue(idx uint32) {
 	if idx >= uint32(len(vio.queues)) {
-		log.Printf("invalid queue index  %v", idx)
+		vio.logf("invalid queue index  %v", idx)
 		return
 	}
 
@@ -540,11 +532,10 @@ func (vio *Blk) processQueue(idx uint32) {
 	for {
 		availIdx, err := vio.readGuestUint16(paddr)
 		if err != nil {
-			log.Printf("guest memory access: %v", err)
+			vio.logf("guest memory access: %v", err)
 			return
 		}
-		log.Printf("lastAvailIdx: %v, availIdx: %v",
-			vio.queues[idx].lastAvailIdx, availIdx)
+		vio.logf("queue: idx: %v/%v", vio.queues[idx].lastAvailIdx, availIdx)
 
 		if vio.queues[idx].lastAvailIdx == availIdx {
 			// Queue drained.
@@ -555,13 +546,15 @@ func (vio *Blk) processQueue(idx uint32) {
 		paddr := vio.queues[idx].AvailPhys + 4 + (ringOffset * 2)
 		descHeadIdx, err := vio.readGuestUint16(paddr)
 		if err != nil {
-			log.Printf("guest memory access: %v", err)
+			vio.logf("guest memory access: %v", err)
 			return
 		}
+		vio.logf("queue: idx=%v, ringOffset=%v, paddr=%x, headIdx=%v",
+			vio.queues[idx].lastAvailIdx, ringOffset, paddr, descHeadIdx)
 
 		err = vio.queues[idx].executeDescriptorChain(descHeadIdx)
 		if err != nil {
-			log.Printf("execute descriptor chain: %v", err)
+			vio.logf("execute descriptor chain: %v", err)
 			return
 		}
 

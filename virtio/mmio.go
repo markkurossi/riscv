@@ -37,6 +37,15 @@ var mmioRegs = map[uint64]string{
 	0x060: "InterruptStatus",
 	0x064: "InterruptACK",
 	0x070: "Status",
+	0x080: "QueueDescLow",
+	0x084: "QueueDescHigh",
+	0x090: "QueueDriverLow",
+	0x094: "QueueDriverHigh",
+	0x0a0: "QueueDeviceLow",
+	0x0a4: "QueueDeviceHigh",
+	0x0fc: "ConfigGeneration",
+	0x100: "CapacityLow",
+	0x104: "CapacityHigh",
 }
 
 func mmioReg(ofs uint64) string {
