@@ -792,7 +792,7 @@ dispatch:
 
 		case isa.Sra:
 			cpu.X[instr.Rd] = uint64(int64(cpu.X[instr.Rs1]) >>
-				cpu.X[instr.Rs2] & 0x3f)
+				(cpu.X[instr.Rs2] & 0x3f))
 
 		case isa.Srai:
 			cpu.X[instr.Rd] = uint64(int64(cpu.X[instr.Rs1]) >> instr.Imm)
