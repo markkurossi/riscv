@@ -435,8 +435,14 @@ const (
 	FmaddS
 	FmaddD
 
+	// Vector extension
+	Opvplaceholder
+
 	// Zba & Zbb Bit-Manipulation Extensions.
 	AddUw
+	Sh1add
+	Sh2add
+	Sh3add
 	Sh1addUw
 	Sh2addUw
 	Sh3addUw

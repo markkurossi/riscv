@@ -275,6 +275,8 @@ dispatch:
 			} else {
 				instr, err = isa.Decode(raw)
 				if err != nil {
+					cpu.tracef(raw, instr, "decode failed: %v", err)
+					cpu.Dump(cpu.PC)
 					return err
 				}
 				cpu.decodeCache[idx].Raw = raw
@@ -1248,6 +1250,17 @@ dispatch:
 			v |= b & (1 << 63)
 
 			cpu.F[instr.Rd] = math.Float64frombits(v)
+
+			// Zba (Address Generation Instructions) extensions.
+
+		case isa.Sh1add:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs2] + (cpu.X[instr.Rs1] << 1)
+
+		case isa.Sh2add:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs2] + (cpu.X[instr.Rs1] << 2)
+
+		case isa.Sh3add:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs2] + (cpu.X[instr.Rs1] << 3)
 
 		default:
 			cpu.tracef(raw, instr, "not implemented")

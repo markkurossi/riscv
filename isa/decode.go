@@ -628,6 +628,22 @@ func Decode(raw uint32) (Instr, error) {
 						funct3, raw)
 			}
 
+			// Zba (Address Generation Instructions) extension.
+
+		case 0b0010000:
+			switch funct3 {
+			case 0b010:
+				instr.Op = Sh1add
+			case 0b100:
+				instr.Op = Sh2add
+			case 0b110:
+				instr.Op = Sh3add
+			default:
+				return instr,
+					fmt.Errorf("invalid group OP Zba funct3: %03b, raw=%08x",
+						funct3, raw)
+			}
+
 		default:
 			return instr, fmt.Errorf("group OP funct7: %v, raw=%08x",
 				funct7, raw)
@@ -940,12 +956,16 @@ func Decode(raw uint32) (Instr, error) {
 			return instr, fmt.Errorf("MADD: funct2=%02b", funct7&0b11)
 		}
 
+	case GroupOPV:
+		instr.Op = Opvplaceholder
+
 	default:
 		if group>>2 == 0b111 {
 			return instr,
 				fmt.Errorf("extended-length instructions not supported")
 		}
-		fmt.Printf("decode: group %v not implemented yet\n", group)
+		return instr, fmt.Errorf("group %v not implemented yet: raw=%08x",
+			group, raw)
 	}
 
 	return instr, nil
