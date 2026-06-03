@@ -38,11 +38,11 @@ func main() {
 	log.SetFlags(0)
 
 	if len(*logger) > 0 {
-		logger, err := trace.NewClient(*logger)
+		lc, err := trace.NewClient(*logger)
 		if err != nil {
 			log.Fatalf("could not connect to logger %v: %v\n", *logger, err)
 		}
-		log.SetOutput(logger)
+		log.SetOutput(lc)
 		fmt.Println("Remote logger enabled")
 	}
 
