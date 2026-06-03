@@ -20,7 +20,8 @@ import (
 )
 
 const (
-	BlkSize = 4096
+	BlkSize  = 4096
+	BlkDebug = false
 )
 
 const (
@@ -107,7 +108,7 @@ type VirtQueue struct {
 }
 
 func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
-	vq.Blk.logf("chain: idx=%v", idx)
+	vq.Blk.debugf("chain: idx=%v", idx)
 
 	hdr, err := vq.loadDesc(idx)
 	if err != nil {
@@ -163,8 +164,8 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 				fileOffset, err)
 			opStatus = VIRTIO_BLK_S_IOERR
 		} else {
-			vq.Blk.logf("read %d/%d bytes into guest RAM addr %x (offset %x)",
-				n, data.Len, addr, vq.Blk.Mem.Offset(addr))
+			vq.Blk.debugf("read %d/%d bytes into guest RAM addr %x",
+				n, data.Len, addr)
 		}
 
 	case VIRTIO_BLK_T_OUT:
@@ -181,8 +182,8 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 				fileOffset, err)
 			opStatus = VIRTIO_BLK_S_IOERR
 		} else {
-			vq.Blk.logf("wrote %d/%d bytes from guest RAM addr %x (offset %x)",
-				n, data.Len, addr, vq.Blk.Mem.Offset(addr))
+			vq.Blk.debugf("wrote %d/%d bytes from guest RAM addr %x",
+				n, data.Len, addr)
 		}
 
 	default:
@@ -194,11 +195,11 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 	if err != nil {
 		return err
 	}
-	vq.Blk.logf("req header: %v\n", hdr)
-	vq.Blk.logf(" - type   : %v\n", blkTypeString(t))
-	vq.Blk.logf(" - sector : %v\n", sector)
-	vq.Blk.logf("req data  : %v\n", data)
-	vq.Blk.logf("req status: %v\n", status)
+	vq.Blk.debugf("req header: %v\n", hdr)
+	vq.Blk.debugf(" - type   : %v\n", blkTypeString(t))
+	vq.Blk.debugf(" - sector : %v\n", sector)
+	vq.Blk.debugf("req data  : %v\n", data)
+	vq.Blk.debugf("req status: %v\n", status)
 
 	// Update used ring.
 	err = vq.updateUsedRing(idx, data.Len)
@@ -217,7 +218,7 @@ func (vq *VirtQueue) updateUsedRing(idx uint16, bytesTransferred uint32) error {
 		return err
 	}
 
-	vq.Blk.logf("updateUsedRing: usedIdx=%v, idx=%v, transferred=%v\n",
+	vq.Blk.debugf("updateUsedRing: usedIdx=%v, idx=%v, transferred=%v",
 		usedIdx, idx, bytesTransferred)
 	vq.Blk.Hart.SetTrace(true)
 
@@ -320,6 +321,14 @@ func (vio *Blk) logf(format string, args ...interface{}) {
 	log.Print("virtio-blk: " + msg)
 }
 
+func (vio *Blk) debugf(format string, args ...interface{}) {
+	if !BlkDebug {
+		return
+	}
+	msg := fmt.Sprintf(format, args...)
+	log.Print("virtio-blk: debug: " + msg)
+}
+
 func (vio *Blk) Halt() error {
 	return nil
 }
@@ -329,19 +338,19 @@ func (vio *Blk) Contains(paddr uint64) bool {
 }
 
 func (vio *Blk) Load8(paddr uint64) (uint8, error) {
-	vio.logf("Load8(0x%03x)", paddr-vio.Start)
+	vio.debugf("Load8(0x%03x)", paddr-vio.Start)
 	return 0, nil
 }
 
 func (vio *Blk) Load16(paddr uint64) (uint16, error) {
-	vio.logf("Load16(0x%03x)", paddr-vio.Start)
+	vio.debugf("Load16(0x%03x)", paddr-vio.Start)
 	return 0, nil
 }
 
 func (vio *Blk) Load32(paddr uint64) (uint32, error) {
 	offset := paddr - vio.Start
 
-	vio.logf("Load32(%v)", mmioReg(offset))
+	vio.debugf("Load32(%v)", mmioReg(offset))
 
 	switch offset {
 	case 0x000:
@@ -380,7 +389,7 @@ func (vio *Blk) Load32(paddr uint64) (uint32, error) {
 		return vio.interruptStatus, nil
 
 	case 0x070:
-		vio.logf("Load32(%v) => %v[0x%x]\n", mmioReg(offset),
+		vio.debugf("Load32(%v) => %v[0x%x]\n", mmioReg(offset),
 			statusString(vio.status), vio.status)
 		return vio.status, nil
 
@@ -395,24 +404,24 @@ func (vio *Blk) Load32(paddr uint64) (uint32, error) {
 }
 
 func (vio *Blk) Load64(paddr uint64) (uint64, error) {
-	vio.logf("Load64(0x%03x)", paddr-vio.Start)
+	vio.debugf("Load64(0x%03x)", paddr-vio.Start)
 	return 0, nil
 }
 
 func (vio *Blk) Store8(paddr, v uint64) error {
-	vio.logf("Store8(0x%03x, 0x%02x)", paddr-vio.Start, v)
+	vio.debugf("Store8(0x%03x, 0x%02x)", paddr-vio.Start, v)
 	return nil
 }
 
 func (vio *Blk) Store16(paddr, v uint64) error {
-	vio.logf("Store16(0x%03x, 0x%04x)", paddr-vio.Start, v)
+	vio.debugf("Store16(0x%03x, 0x%04x)", paddr-vio.Start, v)
 	return nil
 }
 
 func (vio *Blk) Store32(paddr, v uint64) error {
 	offset := paddr - vio.Start
 
-	vio.logf("Store32(%v, 0x%08x)", mmioReg(offset), v)
+	vio.debugf("Store32(%v, 0x%08x)", mmioReg(offset), v)
 
 	switch offset {
 	case 0x014: // DeviceFeaturesSel
@@ -443,17 +452,17 @@ func (vio *Blk) Store32(paddr, v uint64) error {
 		vio.processQueue(uint32(v))
 
 	case 0x064: // InterruptACK The guest writes a bitmask of the bits
-		vio.logf("InterruptACK status=%x", vio.interruptStatus)
+		vio.debugf("InterruptACK status=%x", vio.interruptStatus)
 
 		// it has acknowledged and wants cleared
 		vio.interruptStatus &^= uint32(v)
-		vio.logf("interruptStatus: %x\n", vio.interruptStatus)
+		vio.debugf("interruptStatus: %x\n", vio.interruptStatus)
 
 		// If the guest has cleared all active interrupts, we can
 		// de-assert the PLIC line
 		if vio.interruptStatus == 0 {
 			// Lower the interrupt line
-			vio.logf("clearing PLIC interrupt %v", vio.IRQ)
+			vio.debugf("clearing PLIC interrupt %v", vio.IRQ)
 			vio.Plic.SetInterruptRequest(vio.IRQ, false)
 		}
 
@@ -512,7 +521,7 @@ func (vio *Blk) Store32(paddr, v uint64) error {
 }
 
 func (vio *Blk) Store64(paddr, v uint64) error {
-	vio.logf("Store64(0x%03x, 0x%016x)", paddr-vio.Start, v)
+	vio.debugf("Store64(0x%03x, 0x%016x)", paddr-vio.Start, v)
 	return nil
 }
 
@@ -593,7 +602,7 @@ func (vio *Blk) writeGuestUint32(addr uint64, v uint32) error {
 }
 
 func (vio *Blk) processQueue(idx uint32) {
-	vio.logf("QueueNotify(%v)", idx)
+	vio.debugf("QueueNotify(%v)", idx)
 
 	if idx >= uint32(len(vio.queues)) {
 		vio.logf("invalid queue index  %v", idx)
@@ -611,7 +620,7 @@ func (vio *Blk) processQueue(idx uint32) {
 			vio.logf("guest memory access: %v", err)
 			return
 		}
-		vio.logf("queue: idx: %v/%v", vio.queues[idx].lastAvailIdx, availIdx)
+		vio.debugf("queue: idx: %v/%v", vio.queues[idx].lastAvailIdx, availIdx)
 
 		if vio.queues[idx].lastAvailIdx == availIdx {
 			// Queue drained.
@@ -625,7 +634,7 @@ func (vio *Blk) processQueue(idx uint32) {
 			vio.logf("guest memory access: %v", err)
 			return
 		}
-		vio.logf("queue: idx=%v, ringOffset=%v, paddr=%x, headIdx=%v",
+		vio.debugf("queue: idx=%v, ringOffset=%v, paddr=%x, headIdx=%v",
 			vio.queues[idx].lastAvailIdx, ringOffset, paddr, descHeadIdx)
 
 		err = vio.queues[idx].executeDescriptorChain(descHeadIdx)
