@@ -7,7 +7,6 @@
 package virtio
 
 import (
-	"encoding/binary"
 	"fmt"
 	"log"
 	"os"
@@ -144,6 +143,9 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 	addr := data.Addr
 
 	// Handle request type.
+
+	var opStatus uint8 = VirtioBlkSOk
+
 	switch t {
 	case VirtioBlkTIn:
 		buf, err := vq.Blk.guestData(addr, uint64(data.Len))
@@ -162,16 +164,12 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 		vq.Blk.logf("read %d/%d bytes into guest RAM addr %x (offset %x)",
 			n, data.Len, addr, vq.Blk.Mem.Offset(addr))
 
-		if sector == 0 {
-			magic := binary.LittleEndian.Uint16(buf[1024+56:])
-			vq.Blk.logf("superblock magic=%04x", magic)
-		}
-
 	default:
-		panic(fmt.Sprintf("hdr.Type=%v", t))
+		vq.Blk.logf("type %v not supported", t)
+		opStatus = VirtioBlkSUnsupp
 	}
 
-	err = vq.Blk.writeGuestUint8(status.Addr, VirtioBlkSOk)
+	err = vq.Blk.writeGuestUint8(status.Addr, opStatus)
 	if err != nil {
 		return err
 	}
