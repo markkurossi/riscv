@@ -179,8 +179,8 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 
  - [x] UART interrupt wiring in DTB
  - [x] Host terminal polling
- - [ ] Proper wfi sleep behavior
- - [ ] Add VirtIO block device (virtio-blk)
+ - [x] Proper wfi sleep behavior
+ - [x] Add VirtIO block device (virtio-blk)
  - [ ] Add VirtIO networking
  - [ ] Process-local page tables in emulator mode
  - [ ] Full syscall coverage in emulator mode
