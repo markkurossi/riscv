@@ -32,6 +32,7 @@ func main() {
 	initrd := flag.String("initrd", "", "the init filesystem")
 	symbols := flag.String("symbols", "", "kernel System.map")
 	logger := flag.String("log", "", "logger unix domain socket")
+	cooked := flag.Bool("cooked", false, "don't enable raw terminal mode")
 	flag.Parse()
 
 	log.SetFlags(0)
@@ -51,6 +52,7 @@ func main() {
 		CPUtrace: *cputrace,
 		Profile:  len(*cpuprofile) > 0,
 		Color:    *color,
+		Cooked:   *cooked,
 		FSRoot:   *fsroot,
 	}
 

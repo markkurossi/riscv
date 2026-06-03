@@ -22,12 +22,13 @@ import (
 //   plic.ReevaluateInterrupts()
 
 type UART struct {
-	Hart  isa.Hart
-	Start uint64
-	End   uint64
-	Plic  *PLIC
-	IRQ   uint32
-	Color bool
+	Hart   isa.Hart
+	Start  uint64
+	End    uint64
+	Plic   *PLIC
+	IRQ    uint32
+	Color  bool
+	Cooked bool
 
 	oldState *term.State
 
@@ -47,12 +48,14 @@ type UART struct {
 }
 
 func (uart *UART) Run() {
-	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
-	if err != nil {
-		fmt.Printf("term.MakeRaw: %v\n", err)
-		return
+	if !uart.Cooked {
+		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+		if err != nil {
+			fmt.Printf("term.MakeRaw: %v\n", err)
+			return
+		}
+		uart.oldState = oldState
 	}
-	uart.oldState = oldState
 
 	var buf [1]byte
 
@@ -82,7 +85,9 @@ func (uart *UART) Run() {
 }
 
 func (uart *UART) Halt() error {
-	term.Restore(int(os.Stdin.Fd()), uart.oldState)
+	if uart.oldState != nil {
+		term.Restore(int(os.Stdin.Fd()), uart.oldState)
+	}
 	return nil
 }
 

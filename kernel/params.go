@@ -16,6 +16,7 @@ type Params struct {
 	CPUtrace bool
 	Profile  bool
 	Color    bool
+	Cooked   bool
 	FSRoot   string
 }
 

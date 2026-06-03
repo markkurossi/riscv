@@ -73,12 +73,13 @@ func systemEmulation(params kernel.Params,
 	}
 
 	uart := &dev.UART{
-		Hart:  core,
-		Start: UARTBase,
-		End:   UARTBase + UARTSize,
-		Plic:  plic,
-		IRQ:   UARTIRQ,
-		Color: params.Color,
+		Hart:   core,
+		Start:  UARTBase,
+		End:    UARTBase + UARTSize,
+		Plic:   plic,
+		IRQ:    UARTIRQ,
+		Color:  params.Color,
+		Cooked: params.Cooked,
 	}
 
 	rom := &ROM{
