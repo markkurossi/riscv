@@ -313,7 +313,7 @@ dispatch:
 				}
 			}
 			if cpuDebug || cpu.DebugTrace {
-				// cpu.trace(raw, instr, "")
+				cpu.trace(raw, instr, "")
 			}
 		}
 

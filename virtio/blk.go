@@ -4,9 +4,9 @@
 // All rights reserved.
 //
 
-//lint:file-ignore ST1003 to match the C coding style for constants.
-
 package virtio
+
+//lint:file-ignore ST1003 to match the C coding style for constants.
 
 import (
 	"fmt"
@@ -437,10 +437,6 @@ func (vio *Blk) Store32(paddr, v uint64) error {
 	case 0x044: // QueueReady
 		if vio.queueSel < uint32(len(vio.queues)) {
 			vio.queues[vio.queueSel].Ready = uint32(v)
-			if v == 1 {
-				// Initialization Complete!
-				// The queue addresses below are now valid and locked down.
-			}
 		}
 
 	case 0x050: // QueueNotify

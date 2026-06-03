@@ -129,7 +129,7 @@ func (cpu *CPU) disassembleKernel(vaddr uint64) {
 			line = fmt.Sprintf("%s:  %04x       %v", addr, raw, instr)
 		}
 		if vaddr == pc {
-			line += fmt.Sprintf("\t# offending instruction")
+			line += "\t# offending instruction"
 		}
 		log.Printf("%s\r\n", line)
 	}

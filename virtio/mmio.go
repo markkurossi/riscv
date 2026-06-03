@@ -4,6 +4,7 @@
 // All rights reserved.
 //
 
+// Package virtio implements the Virtual I/O Device (VIRTIO) Version 1.1.
 package virtio
 
 import (

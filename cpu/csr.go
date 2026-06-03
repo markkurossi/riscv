@@ -6,6 +6,8 @@
 
 package cpu
 
+//lint:file-ignore ST1003 to match the CSR naming conventions.
+
 import (
 	"fmt"
 
