@@ -4,6 +4,8 @@
 // All rights reserved.
 //
 
+//lint:file-ignore ST1003 to match the C coding style for constants.
+
 package linux
 
 import (

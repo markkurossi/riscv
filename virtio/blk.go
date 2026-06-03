@@ -4,6 +4,8 @@
 // All rights reserved.
 //
 
+//lint:file-ignore ST1003 to match the C coding style for constants.
+
 package virtio
 
 import (
@@ -111,7 +113,7 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 	if err != nil {
 		return err
 	}
-	if hdr.Len != 16 || hdr.Flags&VirtqDescFNext == 0 {
+	if hdr.Len != 16 || hdr.Flags&VIRTQ_DESC_F_NEXT == 0 {
 		return fmt.Errorf("invalid blk header: %v", hdr)
 	}
 	t, err := vq.Blk.readGuestUint32(hdr.Addr)
@@ -127,7 +129,7 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 	if err != nil {
 		return err
 	}
-	if data.Flags&VirtqDescFNext == 0 {
+	if data.Flags&VIRTQ_DESC_F_NEXT == 0 {
 		return fmt.Errorf("invalid blk data: %v", data)
 	}
 
@@ -144,10 +146,10 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 
 	// Handle request type.
 
-	var opStatus uint8 = VirtioBlkSOk
+	var opStatus uint8 = VIRTIO_BLK_S_OK
 
 	switch t {
-	case VirtioBlkTIn:
+	case VIRTIO_BLK_T_IN:
 		buf, err := vq.Blk.guestData(addr, uint64(data.Len))
 		if err != nil {
 			// XXX set status to err.
@@ -159,13 +161,13 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 		if err != nil {
 			vq.Blk.logf("failed to read from host file at offset %d: %v",
 				fileOffset, err)
-			opStatus = VirtioBlkSIOerr
+			opStatus = VIRTIO_BLK_S_IOERR
 		} else {
 			vq.Blk.logf("read %d/%d bytes into guest RAM addr %x (offset %x)",
 				n, data.Len, addr, vq.Blk.Mem.Offset(addr))
 		}
 
-	case VirtioBlkTOut:
+	case VIRTIO_BLK_T_OUT:
 		buf, err := vq.Blk.guestData(addr, uint64(data.Len))
 		if err != nil {
 			// XXX set status to err.
@@ -177,7 +179,7 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 		if err != nil {
 			vq.Blk.logf("failed to write to host file at offset %d: %v",
 				fileOffset, err)
-			opStatus = VirtioBlkSIOerr
+			opStatus = VIRTIO_BLK_S_IOERR
 		} else {
 			vq.Blk.logf("wrote %d/%d bytes from guest RAM addr %x (offset %x)",
 				n, data.Len, addr, vq.Blk.Mem.Offset(addr))
@@ -185,7 +187,7 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 
 	default:
 		vq.Blk.logf("type %v not supported", t)
-		opStatus = VirtioBlkSUnsupp
+		opStatus = VIRTIO_BLK_S_UNSUPP
 	}
 
 	err = vq.Blk.writeGuestUint8(status.Addr, opStatus)
@@ -266,9 +268,9 @@ func (vq *VirtQueue) loadDesc(idx uint16) (*VirtioDesc, error) {
 }
 
 const (
-	VirtqDescFNext     = 1 // Next field valid.
-	VirtqDescFWrite    = 2 // Device write-only (otherwise read-only)
-	VirtqDescFIndirect = 4 // List of buffer descriptors.
+	VIRTQ_DESC_F_NEXT     = 1 // Next field valid.
+	VIRTQ_DESC_F_WRITE    = 2 // Device write-only (otherwise read-only)
+	VIRTQ_DESC_F_INDIRECT = 4 // List of buffer descriptors.
 )
 
 type VirtioDesc struct {
@@ -284,19 +286,19 @@ func (desc *VirtioDesc) String() string {
 }
 
 const (
-	VirtioBlkTIn          = 0
-	VirtioBlkTOut         = 1
-	VirtioBlkTFlush       = 4
-	VirtioBlkTDiscard     = 11
-	VirtioBlkTWriteZeroes = 13
+	VIRTIO_BLK_T_IN           = 0
+	VIRTIO_BLK_T_OUT          = 1
+	VIRTIO_BLK_T_FLUSH        = 4
+	VIRTIO_BLK_T_DISCARD      = 11
+	VIRTIO_BLK_T_WRITE_ZEROES = 13
 )
 
 var blkTypes = map[uint32]string{
-	VirtioBlkTIn:          "read",
-	VirtioBlkTOut:         "write",
-	VirtioBlkTFlush:       "flush",
-	VirtioBlkTDiscard:     "discard",
-	VirtioBlkTWriteZeroes: "write-zeroes",
+	VIRTIO_BLK_T_IN:           "read",
+	VIRTIO_BLK_T_OUT:          "write",
+	VIRTIO_BLK_T_FLUSH:        "flush",
+	VIRTIO_BLK_T_DISCARD:      "discard",
+	VIRTIO_BLK_T_WRITE_ZEROES: "write-zeroes",
 }
 
 func blkTypeString(t uint32) string {
@@ -308,9 +310,9 @@ func blkTypeString(t uint32) string {
 }
 
 const (
-	VirtioBlkSOk     = 0
-	VirtioBlkSIOerr  = 1
-	VirtioBlkSUnsupp = 2
+	VIRTIO_BLK_S_OK     = 0
+	VIRTIO_BLK_S_IOERR  = 1
+	VIRTIO_BLK_S_UNSUPP = 2
 )
 
 func (vio *Blk) logf(format string, args ...interface{}) {
