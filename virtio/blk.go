@@ -8,10 +8,10 @@ package virtio
 
 import (
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/markkurossi/riscv/dev"
 	"github.com/markkurossi/riscv/isa"
@@ -21,6 +21,40 @@ import (
 const (
 	BlkSize = 4096
 )
+
+const (
+	DeviceStatusAcknowledge      = 1
+	DeviceStatusDriver           = 2
+	DeviceStatusFailed           = 128
+	DeviceStatusFeaturesOK       = 8
+	DeviceStatusDriverOK         = 4
+	DeviceStatusDeviceNeedsReset = 64
+)
+
+func statusString(status uint32) string {
+	var result []string
+
+	if status&DeviceStatusAcknowledge != 0 {
+		result = append(result, "ACKNOWLEDGE")
+	}
+	if status&DeviceStatusDriver != 0 {
+		result = append(result, "DRIVER")
+	}
+	if status&DeviceStatusFailed != 0 {
+		result = append(result, "FAILED")
+	}
+	if status&DeviceStatusFeaturesOK != 0 {
+		result = append(result, "FEATURES_OK")
+	}
+	if status&DeviceStatusDriverOK != 0 {
+		result = append(result, "DRIVER_OK")
+	}
+	if status&DeviceStatusDeviceNeedsReset != 0 {
+		result = append(result, "DEVICE_NEEDS_RESET")
+	}
+
+	return strings.Join(result, ",")
+}
 
 type Blk struct {
 	Hart     isa.Hart
@@ -132,6 +166,9 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 			magic := binary.LittleEndian.Uint16(buf[1024+56:])
 			vq.Blk.logf("superblock magic=%04x", magic)
 		}
+
+	default:
+		panic(fmt.Sprintf("hdr.Type=%v", t))
 	}
 
 	err = vq.Blk.writeGuestUint8(status.Addr, VirtioBlkSOk)
@@ -151,17 +188,6 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 		return err
 	}
 
-	// Direct VFS error verification hack
-	if sector == 0 && data.Len == 4096 {
-		// Read the status byte layout directly from guest memory
-		// after writing it
-		statusCheck, _ := vq.Blk.readGuestUint16(status.Addr)
-		usedIdxCheck, _ := vq.Blk.readGuestUint16(vq.UsedPhys + 2)
-
-		vq.Blk.logf("status byte committed to RAM: %d", statusCheck)
-		vq.Blk.logf("used index updated in RAM header: %d", usedIdxCheck)
-	}
-
 	return nil
 }
 
@@ -178,9 +204,6 @@ func (vq *VirtQueue) updateUsedRing(idx uint16, bytesTransferred uint32) error {
 
 	elemAddr := vq.UsedPhys + 4 + (uint64(uint32(usedIdx)%vq.Num) * 8)
 
-	vq.Blk.logf("UsedPhys Header: %x, Writing Element Slot to: %x\n",
-		usedIdxAddr, elemAddr)
-
 	// ID of the descriptor chain head
 	vq.Blk.writeGuestUint32(elemAddr, uint32(idx))
 	vq.Blk.writeGuestUint32(elemAddr+4, bytesTransferred)
@@ -193,11 +216,6 @@ func (vq *VirtQueue) updateUsedRing(idx uint16, bytesTransferred uint32) error {
 
 	// 4. Assert your PLIC line!
 	vq.Blk.Plic.SetInterruptRequest(vq.Blk.IRQ, true)
-
-	used, err := vq.Blk.guestData(vq.UsedPhys, 0x10)
-	if err == nil {
-		vq.Blk.logf("used @ %x:\n%s", vq.UsedPhys, hex.Dump(used))
-	}
 
 	return nil
 }
@@ -327,7 +345,8 @@ func (vio *Blk) Load32(paddr uint64) (uint32, error) {
 		return vio.interruptStatus, nil
 
 	case 0x070:
-		vio.logf("Load32(%v) => %x\n", mmioReg(offset), vio.status)
+		vio.logf("Load32(%v) => %v[0x%x]\n", mmioReg(offset),
+			statusString(vio.status), vio.status)
 		return vio.status, nil
 
 	case 0x100: // Disk size in sectors, low
@@ -485,6 +504,13 @@ func (vio *Blk) guestData(addr, l uint64) ([]byte, error) {
 	}
 	ofs := vio.Mem.Offset(addr)
 	return vio.Mem.RAM[ofs : ofs+l], nil
+}
+
+func (vio *Blk) readGuestUint8(addr uint64) (uint8, error) {
+	if !vio.Mem.Contains(addr) {
+		return 0, fmt.Errorf("invalid addr %x", addr)
+	}
+	return vio.Mem.RAM[vio.Mem.Offset(addr)], nil
 }
 
 func (vio *Blk) readGuestUint16(addr uint64) (uint16, error) {
