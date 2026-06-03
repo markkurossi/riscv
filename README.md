@@ -550,3 +550,36 @@ The emulator is targeting RISC-V, note:
    address** of the DTB header to be stored into register **`a1`**.
 
 > **Canonical URL**: You can find the latest stable version (v0.4) of the full specification here: [https://www.devicetree.org/specifications/](https://www.devicetree.org/specifications/)
+
+# Building Linux Kernel
+
+``` shell
+cd ephemelier/riscv
+make run
+cd own/linux-7.0.11
+```
+
+## Configure
+
+``` shell
+make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- defconfig
+```
+
+We could also tune the kernel parameters with:
+
+``` shell
+make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- menuconfig
+```
+
+## Build
+
+``` shell
+make -j$(nproc) ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu-
+```
+
+## Debug
+
+``` shell
+mknod /dev/vda b 254 0
+mount -t ext2 /dev/vda /mnt
+```
