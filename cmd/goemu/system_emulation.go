@@ -47,6 +47,8 @@ const (
 	PLICSize = 0x400000
 )
 
+const imageNumber = 1
+
 func systemEmulation(params kernel.Params,
 	bios, kernel, initrd, symbols string) error {
 
@@ -56,11 +58,12 @@ func systemEmulation(params kernel.Params,
 	core.Trace = params.CPUtrace
 
 	var root string
-	switch 0 {
+	switch imageNumber {
 	case 0:
 	case 1:
 		root = "linux-2026-04-08/rootfs.ext2"
 	case 2:
+		// The ISO images might need a different approach.
 		root = "linux-2026-04-08/ubuntu-24.04.4-live-server-riscv64.iso"
 	case 3:
 		root = "ubuntu-26.04/ubuntu-26.04-preinstalled-server-riscv64.img"
@@ -108,7 +111,7 @@ func systemEmulation(params kernel.Params,
 	var virtioBlk *virtio.Blk
 
 	if len(root) > 0 {
-		rootfs, err := os.Open(root)
+		rootfs, err := os.OpenFile(root, os.O_RDWR, 0644)
 		if err != nil {
 			return err
 		}
@@ -569,16 +572,23 @@ func makeDTB(initrdSize uint64, virtioBlk *virtio.Blk) []byte {
 	// "earlycon=sbi console=ttyS0,115200",
 	//"earlycon=uart8250,mmio,0x10000000 console=ttyS0,115200 root=/dev/ram0 rw init=/init norandmaps",
 
-	if false {
+	switch imageNumber {
+	case 1:
 		fdt.PropStr(
 			"bootargs",
-			//"earlycon=sbi console=ttyS0,115200 init=/init",
-			`earlycon=sbi console=ttyS0,115200 root=/dev/vda rw rootwait init=/init dyndbg="file fs/* +p; file drivers/block/* +p"`,
+			"earlycon=sbi console=ttyS0,115200 root=/dev/vda ro rootwait",
 		)
-	} else {
+
+	case 2:
 		fdt.PropStr(
 			"bootargs",
-			"earlycon=sbi console=ttyS0,115200 root=/dev/vda rw rootwait",
+			"earlycon=sbi console=ttyS0,115200 root=/dev/vda3 ro rootwait",
+		)
+
+	default:
+		fdt.PropStr(
+			"bootargs",
+			"earlycon=sbi console=ttyS0,115200 root=/dev/vda1 ro rootwait",
 		)
 	}
 

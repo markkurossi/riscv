@@ -159,10 +159,29 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 		if err != nil {
 			vq.Blk.logf("failed to read from host file at offset %d: %v",
 				fileOffset, err)
+			opStatus = VirtioBlkSIOerr
+		} else {
+			vq.Blk.logf("read %d/%d bytes into guest RAM addr %x (offset %x)",
+				n, data.Len, addr, vq.Blk.Mem.Offset(addr))
+		}
+
+	case VirtioBlkTOut:
+		buf, err := vq.Blk.guestData(addr, uint64(data.Len))
+		if err != nil {
+			// XXX set status to err.
+			vq.Blk.logf("guestData(%v,%v) failed: %v",
+				addr, data.Len, err)
 			return err
 		}
-		vq.Blk.logf("read %d/%d bytes into guest RAM addr %x (offset %x)",
-			n, data.Len, addr, vq.Blk.Mem.Offset(addr))
+		n, err := vq.Blk.File.WriteAt(buf, fileOffset)
+		if err != nil {
+			vq.Blk.logf("failed to write to host file at offset %d: %v",
+				fileOffset, err)
+			opStatus = VirtioBlkSIOerr
+		} else {
+			vq.Blk.logf("wrote %d/%d bytes from guest RAM addr %x (offset %x)",
+				n, data.Len, addr, vq.Blk.Mem.Offset(addr))
+		}
 
 	default:
 		vq.Blk.logf("type %v not supported", t)
@@ -174,8 +193,8 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 		return err
 	}
 	vq.Blk.logf("req header: %v\n", hdr)
-	vq.Blk.logf("  - type  : %v\n", t)
-	vq.Blk.logf("  - sector: %v\n", sector)
+	vq.Blk.logf(" - type   : %v\n", blkTypeString(t))
+	vq.Blk.logf(" - sector : %v\n", sector)
 	vq.Blk.logf("req data  : %v\n", data)
 	vq.Blk.logf("req status: %v\n", status)
 
@@ -271,6 +290,22 @@ const (
 	VirtioBlkTDiscard     = 11
 	VirtioBlkTWriteZeroes = 13
 )
+
+var blkTypes = map[uint32]string{
+	VirtioBlkTIn:          "read",
+	VirtioBlkTOut:         "write",
+	VirtioBlkTFlush:       "flush",
+	VirtioBlkTDiscard:     "discard",
+	VirtioBlkTWriteZeroes: "write-zeroes",
+}
+
+func blkTypeString(t uint32) string {
+	name, ok := blkTypes[t]
+	if ok {
+		return name
+	}
+	return fmt.Sprintf("{type %d}", t)
+}
 
 const (
 	VirtioBlkSOk     = 0
