@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/memory"
@@ -60,9 +61,6 @@ type MMU struct {
 	Hart isa.Hart
 	Mem  *memory.Memory
 	ROM  ROM
-
-	Sum bool
-	Mxr bool
 
 	TLB [4096]TLBEntry
 }
@@ -288,20 +286,24 @@ type TLBEntry struct {
 	Page       uint64
 	Flags      PTEFlags
 	OffsetMask uint32
+	UserMode   bool
 }
 
 func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
 	if mmu.satp.Mode() == SatpModeBare {
 		return vaddr, nil
 	}
-	if mmu.Hart.Mode() == isa.ModeM {
+	mode := mmu.Hart.Mode()
+	if mode == isa.ModeM {
 		return vaddr, nil
 	}
 
 	vpn := vaddr >> 12
 	tlb := &mmu.TLB[vpn&0xfff]
 
-	if tlb.VPN == vpn && tlb.Flags&PteV != 0 {
+	if tlb.VPN == vpn && tlb.Flags&PteV != 0 &&
+		tlb.UserMode == (mode == isa.ModeU) {
+
 		if int(tlb.Flags)&access == access {
 			return tlb.Page | (vaddr & uint64(tlb.OffsetMask)), nil
 		}
@@ -344,6 +346,7 @@ func (mmu *MMU) mapSlow(vaddr, vpn uint64, access int) (uint64, error) {
 		tlb.VPN = vpn
 		tlb.Page = page
 		tlb.Flags = flags | PteV
+		tlb.UserMode = mmu.Hart.Mode() == isa.ModeU
 	}
 
 	switch level {
@@ -386,11 +389,8 @@ func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 			if mmu.Hart.Mode() == isa.ModeS && vaddr&(1<<63) == 0 &&
 				!mmu.Hart.Mstatus().SUM() {
 				if false {
-					fmt.Printf("%v-mode: %x, pte=%v, level=%v\n",
-						mmu.Hart.Mode(), vaddr, pte, level)
-				} else if false {
-					fmt.Printf("%v-mode: SUM=%v, MXR=%v\n",
-						mmu.Hart.Mode(),
+					fmt.Printf("%v: %x, pte=%v, level=%v, SUM=%v, MXR=%v\n",
+						mmu.Hart.Mode(), vaddr, pte, level,
 						mmu.Hart.Mstatus().SUM(),
 						mmu.Hart.Mstatus().MXR())
 				}
@@ -445,8 +445,10 @@ func (ac *AccessContext) Error() string {
 	return result
 }
 
-func (ac *AccessContext) WithDesc(desc string) *AccessContext {
-	ac.Desc = desc
+func acWithDesc(ac *AccessContext, desc string) *AccessContext {
+	if ac != nil {
+		ac.Desc = desc
+	}
 	return ac
 }
 
@@ -455,18 +457,21 @@ func (mmu *MMU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 
 	var ac *AccessContext
 
+	sum := mmu.Hart.Mstatus().SUM()
+	mxr := mmu.Hart.Mstatus().MXR()
+
 	if debugMMU {
 		ac = &AccessContext{
 			Addr:   vaddr,
 			PTE:    pte,
 			Access: access,
-			SUM:    mmu.Sum,
-			MXR:    mmu.Mxr,
+			SUM:    sum,
+			MXR:    mxr,
 		}
 	}
 
 	readable := pte.Readable()
-	if mmu.Mxr && pte.Executable() {
+	if mxr && pte.Executable() {
 		// MXR overrides read constraints if executable is active
 		readable = true
 	}
@@ -489,32 +494,32 @@ func (mmu *MMU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 		if !isUserPage {
 			if access&AccessExec != 0 {
 				return 0, 0, 0, mmu.Hart.Trap(isa.CauseInstPageFault,
-					vaddr, ac.WithDesc("U-mode"))
+					vaddr, acWithDesc(ac, "U-mode"))
 			}
 			if access&AccessWrite != 0 {
 				return 0, 0, 0, mmu.Hart.Trap(isa.CauseStorePageFault,
-					vaddr, ac.WithDesc("U-mode"))
+					vaddr, acWithDesc(ac, "U-mode"))
 			}
 			return 0, 0, 0, mmu.Hart.Trap(isa.CauseLoadPageFault,
-				vaddr, ac.WithDesc("U-mode"))
+				vaddr, acWithDesc(ac, "U-mode"))
 		}
 	} else if mmu.Hart.Mode() == isa.ModeS {
 		// Supervisor mode accessing a User Page (PteU == 1)
-		if isUserPage && false /* XXX is the flag wrong way? */ {
+		if isUserPage {
 			// Rule A: Supervisor mode can NEVER execute code from a User page
 			if access&AccessExec != 0 {
 				return 0, 0, 0, mmu.Hart.Trap(isa.CauseInstPageFault,
-					vaddr, ac.WithDesc("S-mode exec user page"))
+					vaddr, acWithDesc(ac, "S-mode exec user page"))
 			}
 			// Rule B: Supervisor data access is ONLY allowed if
 			// sstatus.SUM == 1
-			if !mmu.Sum {
+			if !sum {
 				if access&AccessWrite != 0 {
 					return 0, 0, 0, mmu.Hart.Trap(isa.CauseStorePageFault,
-						vaddr, ac.WithDesc("S-mode user page"))
+						vaddr, acWithDesc(ac, "S-mode user page"))
 				}
 				return 0, 0, 0, mmu.Hart.Trap(isa.CauseLoadPageFault,
-					vaddr, ac.WithDesc("S-mode user page"))
+					vaddr, acWithDesc(ac, "S-mode user page"))
 			}
 		}
 	}
@@ -742,6 +747,14 @@ func (mmu *MMU) Store64(vaddr, v uint64) error {
 	if memory.Avail(vaddr, 8) {
 		paddr, err := mmu.Map(vaddr, AccessWrite)
 		if err != nil {
+			if false {
+				log.Printf("here: vaddr=%016x, err=%v", vaddr, err)
+				if trap, ok := errors.AsType[*isa.Trap](err); ok {
+					if trap.Err != nil {
+						log.Printf("  caused by %v\n", trap.Err)
+					}
+				}
+			}
 			return err
 		}
 		if paddr < mmu.Mem.RAMBase {
