@@ -510,6 +510,7 @@ const (
 	Vsetivli
 	Vsetvl
 	VmvVX
+	VmvVI
 	Vle8V
 	Vle16V
 	Vle32V
@@ -519,8 +520,13 @@ const (
 	Vse32V
 	Vse64V
 
+	// Zicond Extension (Conditional Integer Operations).
+	CzeroEqz
+	CzeroNez
+
 	// Zba & Zbb Bit-Manipulation Extensions.
 	AddUw
+	Maxu
 	Sh1add
 	Sh2add
 	Sh3add
@@ -1038,6 +1044,9 @@ var Operands = map[Op]OpInfo{
 	VmvVX: OpInfo{
 		Name: "vmv.v.x",
 	},
+	VmvVI: OpInfo{
+		Name: "vmv.v.i",
+	},
 	Vle8V: OpInfo{
 		Name: "vle8.v",
 	},
@@ -1063,8 +1072,18 @@ var Operands = map[Op]OpInfo{
 		Name: "vse64.v",
 	},
 
+	CzeroEqz: OpInfo{
+		Name: "czero.eqz",
+	},
+	CzeroNez: OpInfo{
+		Name: "czero.nez",
+	},
+
 	AddUw: OpInfo{
 		Name: "add.uw",
+	},
+	Maxu: OpInfo{
+		Name: "maxu",
 	},
 	Sh1add: OpInfo{
 		Name: "sh1add",
@@ -1205,7 +1224,8 @@ func (instr Instr) String() string {
 	if instr.Op != Invalid {
 		switch instr.Op {
 		case Add, And, Div, Divu, Divw, Mul, Mulhu, Mulw, Or, Rem, Remw,
-			Slt, Sll, Sltu, Srl, Sub, Subw, Xor, AddUw:
+			Slt, Sll, Sltu, Srl, Sub, Subw, Xor, AddUw, Maxu,
+			CzeroEqz, CzeroNez:
 			// GroupOP, GroupOP32
 			return fmt.Sprintf("%v %v,%v,%v",
 				pad(instr.Op), instr.Rd, instr.Rs1, instr.Rs2)
@@ -1305,6 +1325,10 @@ func (instr Instr) String() string {
 				result += fmt.Sprintf(",v%d.t", int(instr.Rs2))
 			}
 			return result
+
+		case VmvVI:
+			return fmt.Sprintf("%v v%v,%v",
+				pad(instr.Op), int(instr.Rd), instr.Imm)
 
 			// Vector loads and stores.
 		case Vle8V, Vle16V, Vle32V, Vle64V, Vse8V, Vse16V, Vse32V, Vse64V:

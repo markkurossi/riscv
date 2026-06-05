@@ -79,6 +79,21 @@ func DecodeC(raw uint16) (Instr, error) {
 				int32(raw&0b1100000)<<1
 			instr.Op = Ld
 
+		case 0b100:
+			// Zca / C Extension
+			funct3 := raw >> 10 & 0b111
+			switch funct3 {
+			case 0b000:
+				instr.Rd = compressedRegisters[raw>>2&0b111]
+				instr.Rs1 = compressedRegisters[raw>>7&0b111]
+				instr.Imm = int32(raw>>6&0b1) | int32(raw>>4&0b10)
+				instr.Op = Lbu
+
+			default:
+				return instr, fmt.Errorf("Zca: func3=%03b, raw=%04x",
+					funct3, raw)
+			}
+
 		case 0b101:
 			instr.Rs2 = compressedRegisters[raw>>2&0b111]
 			instr.Rs1 = compressedRegisters[raw>>7&0b111]
@@ -227,6 +242,27 @@ func DecodeC(raw uint16) (Instr, error) {
 					instr.Rs1 = instr.Rd
 					instr.Rs2 = compressedRegisters[raw>>2&0b111]
 					instr.Op = Subw
+
+				case 0b110:
+					// The RISC-V Zcb Extension.
+					instr.Rd = compressedRegisters[raw>>7&0b111]
+					instr.Rs1 = instr.Rd
+					instr.Rs2 = compressedRegisters[raw>>2&0b111]
+					instr.Op = Mul
+
+				case 0b111:
+					// The RISC-V Zcb Extension.
+					switch raw >> 2 & 0b111 {
+					case 0b100:
+						instr.Rd = compressedRegisters[raw>>7&0b111]
+						instr.Rs1 = instr.Rd
+						instr.Rs2 = Zero
+						instr.Op = AddUw
+
+					default:
+						return instr,
+							fmt.Errorf("Zcb: raw=%04x, Q1/100/11/%03b", raw, f3)
+					}
 
 				default:
 					return instr, fmt.Errorf("raw=%04x, Q1/100/11/%03b",
@@ -616,6 +652,30 @@ func Decode(raw uint32) (Instr, error) {
 						funct3, raw)
 			}
 
+			// The 'B' Extension for Bit Manipulation.
+		case 5:
+			switch funct3 {
+			case 0b111:
+				instr.Op = Maxu
+
+			default:
+				return instr,
+					fmt.Errorf("invalid B-extension: funct3=%03b, raw=%08x",
+						funct3, raw)
+			}
+
+			// Zicond Extension (Conditional Integer Operations).
+		case 7:
+			switch funct3 {
+			case 0b101:
+				instr.Op = CzeroEqz
+			case 0b111:
+				instr.Op = CzeroNez
+			default:
+				return instr,
+					fmt.Errorf("Zicond: funct3=%03b, raw=%08x", funct3, raw)
+			}
+
 		case 32:
 			switch funct3 {
 			case 0:
@@ -685,6 +745,13 @@ func Decode(raw uint32) (Instr, error) {
 			switch funct3 {
 			case 0:
 				instr.Op = AddUw
+			default:
+				return instr, fmt.Errorf("group %v: funct7=%v, raw=%x",
+					group, funct7, raw)
+			}
+
+		case 16:
+			switch funct3 {
 			case 2:
 				instr.Op = Sh1addUw
 			case 4:
@@ -997,6 +1064,17 @@ func Decode(raw uint32) (Instr, error) {
 
 	case GroupOPV:
 		switch funct3 {
+		case 0b011:
+			switch funct7 >> 1 {
+			case 0b010111:
+				instr.Imm = int32(raw<<7) >> 27
+				instr.Op = VmvVI
+
+			default:
+				return instr, fmt.Errorf("%v: funct3=%03b, funct6=%06b",
+					group, funct3, funct7>>1)
+			}
+
 		case 0b100:
 			switch funct7 >> 1 {
 			case 0b010111:

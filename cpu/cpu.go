@@ -1261,6 +1261,31 @@ dispatch:
 
 			cpu.F[instr.Rd] = math.Float64frombits(v)
 
+			// Extension 'B' Bit Manipulation.
+
+		case isa.Maxu:
+			if cpu.X[instr.Rs1] > cpu.X[instr.Rs2] {
+				cpu.X[instr.Rd] = cpu.X[instr.Rs1]
+			} else {
+				cpu.X[instr.Rd] = cpu.X[instr.Rs2]
+			}
+
+			// Zicond Extension (Conditional Integer Operations).
+
+		case isa.CzeroEqz:
+			if cpu.X[instr.Rs2] == 0 {
+				cpu.X[instr.Rd] = 0
+			} else {
+				cpu.X[instr.Rd] = cpu.X[instr.Rs1]
+			}
+
+		case isa.CzeroNez:
+			if cpu.X[instr.Rs2] != 0 {
+				cpu.X[instr.Rd] = 0
+			} else {
+				cpu.X[instr.Rd] = cpu.X[instr.Rs1]
+			}
+
 			// Zba (Address Generation Instructions) extensions.
 
 		case isa.AddUw:
@@ -1276,7 +1301,34 @@ dispatch:
 		case isa.Sh3add:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs2] + (cpu.X[instr.Rs1] << 3)
 
+		case isa.Sh1addUw:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs2] +
+				(uint64(uint32(cpu.X[instr.Rs1])) << 1)
+
+		case isa.Sh2addUw:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs2] +
+				(uint64(uint32(cpu.X[instr.Rs1])) << 2)
+
+		case isa.Sh3addUw:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs2] +
+				(uint64(uint32(cpu.X[instr.Rs1])) << 3)
+
 			// Vector extension.
+
+		case isa.Vsetvli:
+			vtype := isa.VType(instr.Imm)
+			cpu.vpu.VType = vtype
+			maxVL := uint64(float32(cpu.vpu.VLEN)*vtype.VLMUL()) /
+				uint64(vtype.VSEW())
+
+			requestedVL := cpu.X[instr.Rs1]
+			if requestedVL > maxVL {
+				cpu.vpu.VL = maxVL
+			} else {
+				cpu.vpu.VL = requestedVL
+			}
+			cpu.X[instr.Rd] = cpu.vpu.VL
+			cpu.vpu.VStart = 0
 
 		case isa.Vsetivli:
 			vtype := isa.VType(instr.Imm)
@@ -1297,6 +1349,7 @@ dispatch:
 				cpu.vpu.VL = requestedVL
 			}
 			cpu.X[instr.Rd] = cpu.vpu.VL
+			cpu.vpu.VStart = 0
 
 		case isa.VmvVX:
 			vl := cpu.vpu.VL
@@ -1307,7 +1360,6 @@ dispatch:
 			switch sew {
 			case 8:
 				val8 := uint8(scalarVal)
-
 				for i := uint64(0); i < vl; i++ {
 					dest[i] = val8
 				}
@@ -1327,6 +1379,38 @@ dispatch:
 			case 64:
 				for i := uint64(0); i < vl; i++ {
 					bo.PutUint64(dest[i*8:], scalarVal)
+				}
+			}
+			cpu.vpu.VStart = 0
+
+		case isa.VmvVI:
+			vl := cpu.vpu.VL
+			sew := cpu.vpu.VType.VSEW()
+			dest := cpu.vpu.VRegs[instr.Rd]
+
+			switch sew {
+			case 8:
+				val8 := uint8(instr.Imm)
+				for i := cpu.vpu.VStart; i < vl; i++ {
+					dest[i] = val8
+				}
+
+			case 16:
+				val16 := uint16(instr.Imm)
+				for i := cpu.vpu.VStart; i < vl; i++ {
+					bo.PutUint16(dest[i*2:], val16)
+				}
+
+			case 32:
+				val32 := uint32(instr.Imm)
+				for i := cpu.vpu.VStart; i < vl; i++ {
+					bo.PutUint32(dest[i*4:], val32)
+				}
+
+			case 64:
+				val64 := uint64(instr.Imm)
+				for i := cpu.vpu.VStart; i < vl; i++ {
+					bo.PutUint64(dest[i*8:], val64)
 				}
 			}
 			cpu.vpu.VStart = 0
