@@ -207,6 +207,75 @@ func (g Group) String() string {
 	return fmt.Sprintf("{Group %x}", int(g))
 }
 
+type VType int32
+
+func (vt VType) VLMUL() float32 {
+	switch vt & 0b111 {
+	case 0b000:
+		return 1.0
+	case 0b001:
+		return 2.0
+	case 0b010:
+		return 4.0
+	case 0b011:
+		return 8.0
+	case 0b111:
+		return 0.5
+	case 0b110:
+		return 0.25
+	case 0b101:
+		return 0.125
+	default:
+		return 1.0
+	}
+}
+
+func (vt VType) VSEW() uint8 {
+	return uint8(8 << ((vt >> 3) & 0b111))
+}
+
+func (vt VType) VTA() bool {
+	return vt&(1<<6) != 0
+}
+
+func (vt VType) VMA() bool {
+	return vt&(1<<7) != 0
+}
+
+func (vt VType) String() string {
+	result := fmt.Sprintf("e%v", vt.VSEW())
+
+	var lmul string
+	switch vt & 0b111 {
+	case 0b000:
+		lmul = "m1"
+	case 0b001:
+		lmul = "m2"
+	case 0b010:
+		lmul = "m4"
+	case 0b011:
+		lmul = "m8"
+	case 0b111:
+		lmul = "mf2"
+	case 0b110:
+		lmul = "mf4"
+	case 0b101:
+		lmul = "mf8"
+	default:
+		lmul = "reserved"
+	}
+	result += "," + lmul
+
+	if vt&(1<<6) != 0 {
+		result += ",ta"
+	}
+	if vt&(1<<7) != 0 {
+		result += ",ma"
+	}
+
+	return result
+}
+
 // Op defines instruction opcodes. The standard RISC-V Base Integer
 // ISA (RV32I/RV64I) has about 40–50 instructions. The M (Multiply), A
 // (Atomic), F/D (Floating Point), and C (Compressed) extensions,
@@ -435,8 +504,20 @@ const (
 	FmaddS
 	FmaddD
 
-	// Vector extension
-	Opvplaceholder
+	// Vector extension.
+
+	Vsetvli
+	Vsetivli
+	Vsetvl
+	VmvVX
+	Vle8V
+	Vle16V
+	Vle32V
+	Vle64V
+	Vse8V
+	Vse16V
+	Vse32V
+	Vse64V
 
 	// Zba & Zbb Bit-Manipulation Extensions.
 	AddUw
@@ -944,8 +1025,55 @@ var Operands = map[Op]OpInfo{
 	FmaddD: OpInfo{
 		Name: "fmadd.d",
 	},
+
+	Vsetvli: OpInfo{
+		Name: "vsetvli",
+	},
+	Vsetivli: OpInfo{
+		Name: "vsetivli",
+	},
+	Vsetvl: OpInfo{
+		Name: "vsetvl",
+	},
+	VmvVX: OpInfo{
+		Name: "vmv.v.x",
+	},
+	Vle8V: OpInfo{
+		Name: "vle8.v",
+	},
+	Vle16V: OpInfo{
+		Name: "vle16.v",
+	},
+	Vle32V: OpInfo{
+		Name: "vle32.v",
+	},
+	Vle64V: OpInfo{
+		Name: "vle64.v",
+	},
+	Vse8V: OpInfo{
+		Name: "vse8.v",
+	},
+	Vse16V: OpInfo{
+		Name: "vse16.v",
+	},
+	Vse32V: OpInfo{
+		Name: "vse32.v",
+	},
+	Vse64V: OpInfo{
+		Name: "vse64.v",
+	},
+
 	AddUw: OpInfo{
 		Name: "add.uw",
+	},
+	Sh1add: OpInfo{
+		Name: "sh1add",
+	},
+	Sh2add: OpInfo{
+		Name: "sh2add",
+	},
+	Sh3add: OpInfo{
+		Name: "sh3add",
 	},
 	Sh1addUw: OpInfo{
 		Name: "sh1add.uw",
@@ -1077,7 +1205,7 @@ func (instr Instr) String() string {
 	if instr.Op != Invalid {
 		switch instr.Op {
 		case Add, And, Div, Divu, Divw, Mul, Mulhu, Mulw, Or, Rem, Remw,
-			Slt, Sll, Sltu, Srl, Sub, Subw, Xor:
+			Slt, Sll, Sltu, Srl, Sub, Subw, Xor, AddUw:
 			// GroupOP, GroupOP32
 			return fmt.Sprintf("%v %v,%v,%v",
 				pad(instr.Op), instr.Rd, instr.Rs1, instr.Rs2)
@@ -1157,10 +1285,95 @@ func (instr Instr) String() string {
 		case Csrrwi, Csrrsi, Csrrci:
 			return fmt.Sprintf("%v %v,%x,%d",
 				pad(instr.Op), instr.Rd, instr.Imm, uint32(instr.Rs1))
+
+			// GroupOPV
+
+		case Vsetvli:
+			return fmt.Sprintf("%v %v,%v,%v",
+				pad(instr.Op), instr.Rd, instr.Rs1, VType(instr.Imm))
+		case Vsetivli:
+			return fmt.Sprintf("%v %v,%v,%v",
+				pad(instr.Op), instr.Rd, uint32(instr.Rs1), VType(instr.Imm))
+		case Vsetvl:
+			return fmt.Sprintf("%v %v,%v,%v",
+				pad(instr.Op), instr.Rd, instr.Rs1, VType(instr.Rs2))
+
+		case VmvVX:
+			result := fmt.Sprintf("%v v%v,%v",
+				pad(instr.Op), int(instr.Rd), instr.Rs1)
+			if instr.Imm == 0 {
+				result += fmt.Sprintf(",v%d.t", int(instr.Rs2))
+			}
+			return result
+
+			// Vector loads and stores.
+		case Vle8V, Vle16V, Vle32V, Vle64V, Vse8V, Vse16V, Vse32V, Vse64V:
+			return instr.vsString()
 		}
 	}
 
 	return fmt.Sprintf("Instr: Op=%v", instr.Op)
+}
+
+func (instr Instr) vsString() string {
+	var size, op string
+
+	switch instr.Op {
+	case Vle8V:
+		size = "8"
+		op = "l"
+	case Vle16V:
+		size = "16"
+		op = "l"
+	case Vle32V:
+		size = "32"
+		op = "l"
+	case Vle64V:
+		size = "64"
+		op = "l"
+	case Vse8V:
+		size = "8"
+		op = "s"
+	case Vse16V:
+		size = "16"
+		op = "s"
+	case Vse32V:
+		size = "32"
+		op = "s"
+	case Vse64V:
+		size = "64"
+		op = "s"
+	default:
+		panic(instr)
+	}
+
+	var seg string
+	nf := instr.Imm >> 4
+	if nf > 0 {
+		seg = fmt.Sprintf("seg%v", nf+1)
+	}
+
+	var idx string
+	var idxReg string
+	mop := instr.Imm >> 1
+	switch mop {
+	case 0b011:
+		idx = "ux"
+		size = "i" + size
+		idxReg = fmt.Sprintf(",%v", instr.Rs2)
+	case 0b111:
+		idx = "ox"
+		size = "i" + size
+		idxReg = fmt.Sprintf(",%v", instr.Rs2)
+	}
+
+	opname := fmt.Sprintf("v%v%v%ve%v.v", op, idx, seg, size)
+	for len(opname) < maxOpNameLen {
+		opname += " "
+	}
+
+	return fmt.Sprintf("%v v%v,(%v)%v",
+		opname, int(instr.Rd), instr.Rs1, idxReg)
 }
 
 func (instr *Instr) typeI(raw uint32) {

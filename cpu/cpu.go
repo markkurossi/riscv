@@ -49,6 +49,8 @@ type CPU struct {
 
 	PC uint64
 
+	vpu *VPU
+
 	Reservation    uint64 // The address currently reserved
 	HasReservation bool   // Whether the reservation is active
 
@@ -80,6 +82,7 @@ type CPU struct {
 
 func New(mem *memory.Memory) *CPU {
 	cpu := &CPU{
+		vpu: NewVPU(),
 		MMU: &mmu.MMU{
 			Mem: mem,
 		},
@@ -180,7 +183,7 @@ dispatch:
 		// are pending. The loop below will not trigger interrupts if
 		// they are pending but not enabled.
 		// XXX consider moving CsrMip and CsrMie to local variables.
-		if cpu.Instret&0x3f == 0 || cpu.CSR[CsrMip] != 0 {
+		if cpu.Instret&0x3f == 0 { // || cpu.CSR[CsrMip] != 0 {
 			// Sync time to wall clock.
 			now := cpu.syncTime()
 
@@ -277,7 +280,7 @@ dispatch:
 				if err != nil {
 					cpu.tracef(raw, instr, "decode failed: %v", err)
 					cpu.Dump(cpu.PC)
-					return err
+					return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), err)
 				}
 				cpu.decodeCache[idx].Raw = raw
 				cpu.decodeCache[idx].Instr = instr
@@ -319,7 +322,14 @@ dispatch:
 
 		switch instr.Op {
 		case isa.Invalid:
-			return fmt.Errorf("invalid instruction: %v", instr.Op)
+			cpu.tracef(raw, instr, "invalid: %v", instr)
+			cpu.Dump(cpu.PC)
+			if true {
+				return err
+			} else {
+				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+					fmt.Errorf("invalid %v[0x%x]", instr, raw))
+			}
 
 		case isa.Add:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] + cpu.X[instr.Rs2]
@@ -1253,6 +1263,10 @@ dispatch:
 
 			// Zba (Address Generation Instructions) extensions.
 
+		case isa.AddUw:
+			cpu.X[instr.Rd] = uint64(uint32(cpu.X[instr.Rs1])) +
+				cpu.X[instr.Rs2]
+
 		case isa.Sh1add:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs2] + (cpu.X[instr.Rs1] << 1)
 
@@ -1262,11 +1276,161 @@ dispatch:
 		case isa.Sh3add:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs2] + (cpu.X[instr.Rs1] << 3)
 
+			// Vector extension.
+
+		case isa.Vsetivli:
+			vtype := isa.VType(instr.Imm)
+			cpu.vpu.VType = vtype
+			maxVL := uint64(float32(cpu.vpu.VLEN)*vtype.VLMUL()) /
+				uint64(vtype.VSEW())
+
+			var requestedVL uint64
+			if instr.Rs1 == 0 {
+				requestedVL = maxVL
+			} else {
+				requestedVL = cpu.X[instr.Rs1]
+			}
+
+			if requestedVL > maxVL {
+				cpu.vpu.VL = maxVL
+			} else {
+				cpu.vpu.VL = requestedVL
+			}
+			cpu.X[instr.Rd] = cpu.vpu.VL
+
+		case isa.VmvVX:
+			vl := cpu.vpu.VL
+			sew := cpu.vpu.VType.VSEW()
+			scalarVal := cpu.X[instr.Rs1]
+			dest := cpu.vpu.VRegs[instr.Rd]
+
+			switch sew {
+			case 8:
+				val8 := uint8(scalarVal)
+
+				for i := uint64(0); i < vl; i++ {
+					dest[i] = val8
+				}
+
+			case 16:
+				val16 := uint16(scalarVal)
+				for i := uint64(0); i < vl; i++ {
+					bo.PutUint16(dest[i*2:], val16)
+				}
+
+			case 32:
+				val32 := uint32(scalarVal)
+				for i := uint64(0); i < vl; i++ {
+					bo.PutUint32(dest[i*4:], val32)
+				}
+
+			case 64:
+				for i := uint64(0); i < vl; i++ {
+					bo.PutUint64(dest[i*8:], scalarVal)
+				}
+			}
+			cpu.vpu.VStart = 0
+
+			// Load and store instructions:
+			//
+			// 	 0:1 vm - 1 unmasked, 0 masked
+			// 	 1:3 mop:
+			// 	     - 000 unit-stride
+			// 	     - 010 strided
+			// 	     - 011 indexed (unordered)
+			// 	     - 111 indexed (ordered)
+			// 	 4:6 nf - number of fields = nf+1
+
+		case isa.Vle8V:
+			vm := instr.Imm & 0b1
+			mop := instr.Imm >> 1 & 0b111
+			nf := instr.Imm >> 4 & 0b111
+
+			if vm != 1 || mop != 0 || nf != 0 {
+				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+					fmt.Errorf("instruction %v not implemented yet", instr))
+			}
+
+			baseAddr := cpu.X[instr.Rs1]
+			vl := cpu.vpu.VL
+			dstVec := cpu.vpu.VRegs[instr.Rd]
+
+			for i := cpu.vpu.VStart; i < vl; i++ {
+				srcAddr := baseAddr + i
+				val, err := cpu.MMU.Load8(srcAddr)
+				if err != nil {
+					cpu.vpu.VStart = i
+					return err
+				}
+				dstVec[i] = val
+			}
+			cpu.vpu.VStart = 0
+
+		case isa.Vse8V:
+			vm := instr.Imm & 0b1
+			mop := instr.Imm >> 1 & 0b111
+			nf := instr.Imm >> 4 & 0b111
+
+			if vm != 1 || mop != 0 || nf != 0 {
+				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+					fmt.Errorf("instruction %v not implemented yet", instr))
+			}
+
+			baseAddr := cpu.X[instr.Rs1]
+			vl := cpu.vpu.VL
+			srcVec := cpu.vpu.VRegs[instr.Rd]
+
+			for i := cpu.vpu.VStart; i < vl; i++ {
+				if i+1 > uint64(len(srcVec)) {
+					return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
+				}
+				v := srcVec[i]
+
+				targetAddr := baseAddr + i
+				err := cpu.MMU.Store8(targetAddr, uint64(v))
+				if err != nil {
+					cpu.vpu.VStart = i
+					return err
+				}
+			}
+			cpu.vpu.VStart = 0
+
+		case isa.Vse64V:
+			vm := instr.Imm & 0b1
+			mop := instr.Imm >> 1 & 0b111
+			nf := instr.Imm >> 4 & 0b111
+
+			if vm != 1 || mop != 0 || nf != 0 {
+				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+					fmt.Errorf("instruction %v not implemented yet", instr))
+			}
+
+			baseAddr := cpu.X[instr.Rs1]
+			vl := cpu.vpu.VL
+			srcVec := cpu.vpu.VRegs[instr.Rd]
+
+			for i := cpu.vpu.VStart; i < vl; i++ {
+				elementOfs := i * 8
+				if elementOfs+8 > uint64(len(srcVec)) {
+					return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
+				}
+				v := bo.Uint64(srcVec[elementOfs:])
+
+				targetAddr := baseAddr + i*8
+				err := cpu.MMU.Store64(targetAddr, v)
+				if err != nil {
+					cpu.vpu.VStart = i
+					return err
+				}
+			}
+			cpu.vpu.VStart = 0
+
 		default:
 			cpu.tracef(raw, instr, "not implemented")
 			cpu.Dump(cpu.PC)
-			return fmt.Errorf("instruction %v[0x%x] not implemented yet",
-				instr, raw)
+			return cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("instruction %v[0x%x] not implemented yet",
+					instr, raw))
 		}
 		cpu.PC += uint64(size)
 	}

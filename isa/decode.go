@@ -835,18 +835,57 @@ func Decode(raw uint32) (Instr, error) {
 			instr.Imm = int32(raw) >> 20
 			instr.Op = Fld
 
+			// Vector loads.
+		case 0b000:
+			instr.Imm = int32(raw >> 25)
+			instr.Op = Vle8V
+
+		case 0b101:
+			instr.Imm = int32(raw >> 25)
+			instr.Op = Vle16V
+
+		case 0b110:
+			instr.Imm = int32(raw >> 25)
+			instr.Op = Vle32V
+
+		case 0b111:
+			instr.Imm = int32(raw >> 25)
+			instr.Op = Vle64V
+
 		default:
 			return instr, fmt.Errorf("%v/%03b: raw=%08x", group, funct3, raw)
 		}
 
 	case GroupSTOREFP:
-		instr.Imm = int32(raw&0b1111_10000000)>>7 |
-			int32(raw&0b11111110_00000000_00000000_00000000)>>20
 		switch funct3 {
 		case 0b010:
+			instr.Imm = int32(raw&0b1111_10000000)>>7 |
+				int32(raw&0b11111110_00000000_00000000_00000000)>>20
 			instr.Op = Fsw
+
 		case 0b011:
+			instr.Imm = int32(raw&0b1111_10000000)>>7 |
+				int32(raw&0b11111110_00000000_00000000_00000000)>>20
 			instr.Op = Fsd
+
+			// Vector stores.
+
+		case 0b000:
+			instr.Imm = int32(raw >> 25)
+			instr.Op = Vse8V
+
+		case 0b101:
+			instr.Imm = int32(raw >> 25)
+			instr.Op = Vse16V
+
+		case 0b110:
+			instr.Imm = int32(raw >> 25)
+			instr.Op = Vse32V
+
+		case 0b111:
+			instr.Imm = int32(raw >> 25)
+			instr.Op = Vse64V
+
 		default:
 			return instr, fmt.Errorf("STORE-FP: funct3=%03b", funct3)
 		}
@@ -957,7 +996,33 @@ func Decode(raw uint32) (Instr, error) {
 		}
 
 	case GroupOPV:
-		instr.Op = Opvplaceholder
+		switch funct3 {
+		case 0b100:
+			switch funct7 >> 1 {
+			case 0b010111:
+				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
+				instr.Op = VmvVX
+
+			default:
+				return instr, fmt.Errorf("%v: funct3=%03b, funct6=%06b",
+					group, funct3, funct7>>1)
+			}
+
+		case 0b111:
+			if raw&(1<<31) == 0 {
+				instr.Imm = int32((raw >> 20) & 0b111_11111111)
+				instr.Op = Vsetvli
+			} else if raw&(1<<30) != 0 {
+				instr.Imm = int32((raw >> 20) & 0b011_11111111)
+				// Rs1 is uimm[4:0]
+				instr.Op = Vsetivli
+			} else {
+				instr.Op = Vsetvl
+			}
+		default:
+			return instr, fmt.Errorf("%v: funct3=%03b, raw=%08x",
+				group, funct3, raw)
+		}
 
 	default:
 		if group>>2 == 0b111 {
