@@ -148,6 +148,7 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 	// Handle request type.
 
 	var opStatus uint8 = VIRTIO_BLK_S_OK
+	transferred := data.Len
 
 	switch t {
 	case VIRTIO_BLK_T_IN:
@@ -186,8 +187,21 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 				n, data.Len, addr)
 		}
 
+	case VIRTIO_BLK_T_GET_ID:
+		buf, err := vq.Blk.guestData(addr, uint64(data.Len))
+		if err != nil {
+			// XXX set status to err.
+			vq.Blk.logf("guestData(%v,%v) failed: %v",
+				addr, data.Len, err)
+			return err
+		}
+		id := fmt.Sprintf("goemu-disk-%d\x00", 0)
+		transferred = uint32(copy(buf, []byte(id)))
+		vq.Blk.debugf("wrote %d/%d bytes from guest RAM addr %x",
+			transferred, data.Len, addr)
+
 	default:
-		vq.Blk.logf("type %v not supported", t)
+		vq.Blk.logf("type %v not supported", blkTypeString(t))
 		opStatus = VIRTIO_BLK_S_UNSUPP
 	}
 
@@ -202,7 +216,7 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 	vq.Blk.debugf("req status: %v\n", status)
 
 	// Update used ring.
-	err = vq.updateUsedRing(idx, data.Len)
+	err = vq.updateUsedRing(idx, transferred)
 	if err != nil {
 		// XXX update status[0].
 		return err
@@ -290,16 +304,22 @@ const (
 	VIRTIO_BLK_T_IN           = 0
 	VIRTIO_BLK_T_OUT          = 1
 	VIRTIO_BLK_T_FLUSH        = 4
+	VIRTIO_BLK_T_GET_ID       = 8
+	VIRTIO_BLK_T_GET_LIFETIME = 10
 	VIRTIO_BLK_T_DISCARD      = 11
 	VIRTIO_BLK_T_WRITE_ZEROES = 13
+	VIRTIO_BLK_T_SECURE_ERASE = 14
 )
 
 var blkTypes = map[uint32]string{
 	VIRTIO_BLK_T_IN:           "read",
 	VIRTIO_BLK_T_OUT:          "write",
 	VIRTIO_BLK_T_FLUSH:        "flush",
+	VIRTIO_BLK_T_GET_ID:       "get-id",
+	VIRTIO_BLK_T_GET_LIFETIME: "get-lifetime",
 	VIRTIO_BLK_T_DISCARD:      "discard",
 	VIRTIO_BLK_T_WRITE_ZEROES: "write-zeroes",
+	VIRTIO_BLK_T_SECURE_ERASE: "secure-erase",
 }
 
 func blkTypeString(t uint32) string {
