@@ -999,6 +999,8 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FcvtWUD
 			case 0b00010:
 				instr.Op = FcvtLD
+			case 0b00011:
+				instr.Op = FcvtLUD
 			default:
 				return instr, fmt.Errorf("OP-FP: funct7=%07b, funct5=%05b",
 					funct7, funct5)

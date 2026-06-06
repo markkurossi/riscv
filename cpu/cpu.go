@@ -1218,6 +1218,9 @@ dispatch:
 			// (Floating-point Control and Status Register)
 			cpu.F[instr.Rd] = float64(cpu.X[instr.Rs1])
 
+		case isa.FcvtDWU:
+			cpu.F[instr.Rd] = float64(uint32(cpu.X[instr.Rs1]))
+
 		case isa.FcvtLD:
 			// XXX If the value is out of range, fcsr.fflags.NV is set
 			// to 1
@@ -1234,6 +1237,25 @@ dispatch:
 				v = 0x8000000000000000
 			} else {
 				v = uint64(int64(f))
+			}
+			cpu.X[instr.Rd] = v
+
+		case isa.FcvtLUD:
+			// XXX If the value is out of range, fcsr.fflags.NV is set
+			// to 1
+			f := cpu.F[instr.Rs1]
+			var v uint64
+			if math.IsNaN(f) {
+				// RISC-V default NaN value for signed 64-bit
+				v = 0xffffffffffffffff
+			} else if f >= math.MaxUint64 {
+				// Handles +Inf and positive overflow.
+				v = 0xffffffffffffffff
+			} else if f < 0.0 {
+				// Handles -Inf and negative overflow.
+				v = 0
+			} else {
+				v = uint64(f)
 			}
 			cpu.X[instr.Rd] = v
 
