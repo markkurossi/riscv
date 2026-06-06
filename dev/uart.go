@@ -190,10 +190,10 @@ func (uart *UART) Store8(paddr, v uint64) error {
 	case 0:
 		if uart.Color {
 			uart.Hart.ColorOn()
-			fmt.Printf("%c", byte(v))
+			os.Stdout.Write([]byte{byte(v)})
 			uart.Hart.ColorOff()
 		} else {
-			fmt.Printf("%c", byte(v))
+			os.Stdout.Write([]byte{byte(v)})
 		}
 
 		uart.m.Lock()
