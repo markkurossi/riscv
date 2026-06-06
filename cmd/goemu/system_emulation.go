@@ -66,7 +66,11 @@ func systemEmulation(params kernel.Params,
 		// The ISO images might need a different approach.
 		root = "linux-2026-04-08/ubuntu-24.04.4-live-server-riscv64.iso"
 	case 3:
+		root = "ubuntu-24.04/ubuntu-24.04.4-preinstalled-server-riscv64.img"
+	case 4:
 		root = "ubuntu-26.04/ubuntu-26.04-preinstalled-server-riscv64.img"
+	case 5:
+		root = "netbsd/riscv64.img"
 	}
 
 	plic := &dev.PLIC{
