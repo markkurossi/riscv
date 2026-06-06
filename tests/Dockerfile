@@ -41,3 +41,4 @@ RUN riscv64-unknown-elf-gcc --version && \
     qemu-riscv64 --version
 
 RUN apt-get install -y device-tree-compiler
+RUN apt-get install -y kpartx
