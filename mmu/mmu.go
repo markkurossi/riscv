@@ -582,7 +582,17 @@ func (mmu *MMU) Load16(vaddr uint64) (uint16, error) {
 		if paddr < mmu.Mem.RAMBase {
 			return mmu.ROM.Load16(paddr)
 		}
-		return bo.Uint16(mmu.Mem.RAM[mmu.Mem.Offset(paddr):]), nil
+		if mmu.Mem.Contains(paddr) {
+			return bo.Uint16(mmu.Mem.RAM[mmu.Mem.Offset(paddr):]), nil
+		} else {
+			if debugMMU {
+				err = fmt.Errorf("%v: Load16(%x): addr out of obunds [%x...%x[",
+					mmu.Hart.Mode(), paddr,
+					mmu.Mem.RAMBase, mmu.Mem.RAMBase+uint64(len(mmu.Mem.RAM)))
+				fmt.Printf("%v\r\n", err)
+			}
+			return 0, mmu.Hart.Trap(isa.CauseLoadPageFault, vaddr, err)
+		}
 	}
 
 	var page uint64
@@ -697,9 +707,13 @@ func (mmu *MMU) Store8(vaddr, v uint64) error {
 	if mmu.Mem.Contains(paddr) {
 		mmu.Mem.RAM[mmu.Mem.Offset(paddr)] = byte(v)
 	} else {
-		return fmt.Errorf("%v-mode: MMU.Store(%x, %x): addr out of bounds [%x...%x[",
-			mmu.Hart.Mode(), paddr, v,
-			mmu.Mem.RAMBase, mmu.Mem.RAMBase+uint64(len(mmu.Mem.RAM)))
+		if debugMMU {
+			err = fmt.Errorf("%v: Store8(%x, %x): addr out of bounds [%x...%x[",
+				mmu.Hart.Mode(), paddr, v,
+				mmu.Mem.RAMBase, mmu.Mem.RAMBase+uint64(len(mmu.Mem.RAM)))
+			fmt.Printf("%v\r\n", err)
+		}
+		return mmu.Hart.Trap(isa.CauseStorePageFault, vaddr, err)
 	}
 	return nil
 }
