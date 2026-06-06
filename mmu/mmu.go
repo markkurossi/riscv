@@ -311,14 +311,6 @@ func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
 
 	addr, err := mmu.mapSlow(vaddr, vpn, access)
 	if err != nil {
-		if false {
-			// XXX kludge checks for ROM and low RAM addresses???
-			if vaddr < mmu.Mem.RAMBase ||
-				(mmu.Mem.RAMBase <= vaddr &&
-					vaddr <= mmu.Mem.RAMBase+0x20000000) {
-				return vaddr, nil
-			}
-		}
 		return 0, err
 	}
 	if false {
