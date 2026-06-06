@@ -35,6 +35,10 @@ func (csr CSR) Privilege() isa.PrivilegeMode {
 
 const (
 	CsrFcsr          = 0x003
+	CsrVstart        = 0x008
+	CsrVxsat         = 0x009
+	CsrVxrm          = 0x00a
+	CsrVcsr          = 0x00f
 	CsrSstatus       = 0x100
 	CsrSie           = 0x104
 	CsrStvec         = 0x105
@@ -71,6 +75,9 @@ const (
 	CsrCycle         = 0xc00
 	CsrTime          = 0xc01
 	CsrInstret       = 0xc02
+	CsrVl            = 0xc20
+	CsrVtype         = 0xc21
+	CsrVlenb         = 0xc22
 	CsrSenvcfg       = 0xda0
 	CsrMvendorid     = 0xf11
 	CsrMarchid       = 0xf12
@@ -530,6 +537,20 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 	case CsrSip:
 		mask := uint64(isa.IntSSIP | isa.IntSTIP | isa.IntSEIP)
 		v = cpu.CSR[CsrMip] & mask
+
+		// Vector extension.
+
+	case CsrVstart:
+		v = cpu.vpu.VStart
+
+	case CsrVl:
+		v = cpu.vpu.VL
+
+	case CsrVtype:
+		v = uint64(cpu.vpu.VType)
+
+	case CsrVlenb:
+		v = uint64(cpu.vpu.VLEN / 8)
 
 	default:
 		if csr >= 0xb03 && csr <= 0xb1f {

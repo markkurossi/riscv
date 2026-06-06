@@ -1315,7 +1315,20 @@ dispatch:
 
 			// Vector extension.
 
+			// Load and store instructions:
+			//
+			// 	 0:1 vm - 1 unmasked, 0 masked
+			// 	 1:3 mop:
+			// 	     - 000 unit-stride
+			// 	     - 010 strided
+			// 	     - 011 indexed (unordered)
+			// 	     - 111 indexed (ordered)
+			// 	 4:6 nf - number of fields = nf+1
+
 		case isa.Vsetvli:
+			if cpu.mstatus.VS() == isa.RegOff {
+				return cpu.Trap(isa.CauseIllegalInstr, 0, nil)
+			}
 			vtype := isa.VType(instr.Imm)
 			cpu.vpu.VType = vtype
 			maxVL := uint64(float32(cpu.vpu.VLEN)*vtype.VLMUL()) /
@@ -1329,8 +1342,12 @@ dispatch:
 			}
 			cpu.X[instr.Rd] = cpu.vpu.VL
 			cpu.vpu.VStart = 0
+			cpu.mstatus.SetVS(isa.RegDirty)
 
 		case isa.Vsetivli:
+			if cpu.mstatus.VS() == isa.RegOff {
+				return cpu.Trap(isa.CauseIllegalInstr, 0, nil)
+			}
 			vtype := isa.VType(instr.Imm)
 			cpu.vpu.VType = vtype
 			maxVL := uint64(float32(cpu.vpu.VLEN)*vtype.VLMUL()) /
@@ -1350,8 +1367,12 @@ dispatch:
 			}
 			cpu.X[instr.Rd] = cpu.vpu.VL
 			cpu.vpu.VStart = 0
+			cpu.mstatus.SetVS(isa.RegDirty)
 
 		case isa.VmvVX:
+			if cpu.mstatus.VS() == isa.RegOff {
+				return cpu.Trap(isa.CauseIllegalInstr, 0, nil)
+			}
 			vl := cpu.vpu.VL
 			sew := cpu.vpu.VType.VSEW()
 			scalarVal := cpu.X[instr.Rs1]
@@ -1382,8 +1403,12 @@ dispatch:
 				}
 			}
 			cpu.vpu.VStart = 0
+			cpu.mstatus.SetVS(isa.RegDirty)
 
 		case isa.VmvVI:
+			if cpu.mstatus.VS() == isa.RegOff {
+				return cpu.Trap(isa.CauseIllegalInstr, 0, nil)
+			}
 			vl := cpu.vpu.VL
 			sew := cpu.vpu.VType.VSEW()
 			dest := cpu.vpu.VRegs[instr.Rd]
@@ -1414,18 +1439,12 @@ dispatch:
 				}
 			}
 			cpu.vpu.VStart = 0
-
-			// Load and store instructions:
-			//
-			// 	 0:1 vm - 1 unmasked, 0 masked
-			// 	 1:3 mop:
-			// 	     - 000 unit-stride
-			// 	     - 010 strided
-			// 	     - 011 indexed (unordered)
-			// 	     - 111 indexed (ordered)
-			// 	 4:6 nf - number of fields = nf+1
+			cpu.mstatus.SetVS(isa.RegDirty)
 
 		case isa.Vle8V:
+			if cpu.mstatus.VS() == isa.RegOff {
+				return cpu.Trap(isa.CauseIllegalInstr, 0, nil)
+			}
 			vm := instr.Imm & 0b1
 			mop := instr.Imm >> 1 & 0b111
 			nf := instr.Imm >> 4 & 0b111
@@ -1449,8 +1468,12 @@ dispatch:
 				dstVec[i] = val
 			}
 			cpu.vpu.VStart = 0
+			cpu.mstatus.SetVS(isa.RegDirty)
 
 		case isa.Vse8V:
+			if cpu.mstatus.VS() == isa.RegOff {
+				return cpu.Trap(isa.CauseIllegalInstr, 0, nil)
+			}
 			vm := instr.Imm & 0b1
 			mop := instr.Imm >> 1 & 0b111
 			nf := instr.Imm >> 4 & 0b111
@@ -1478,8 +1501,12 @@ dispatch:
 				}
 			}
 			cpu.vpu.VStart = 0
+			cpu.mstatus.SetVS(isa.RegDirty)
 
 		case isa.Vse64V:
+			if cpu.mstatus.VS() == isa.RegOff {
+				return cpu.Trap(isa.CauseIllegalInstr, 0, nil)
+			}
 			vm := instr.Imm & 0b1
 			mop := instr.Imm >> 1 & 0b111
 			nf := instr.Imm >> 4 & 0b111
@@ -1508,6 +1535,7 @@ dispatch:
 				}
 			}
 			cpu.vpu.VStart = 0
+			cpu.mstatus.SetVS(isa.RegDirty)
 
 		default:
 			cpu.tracef(raw, instr, "not implemented")

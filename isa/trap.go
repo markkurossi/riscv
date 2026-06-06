@@ -120,6 +120,24 @@ func (m *Mstatus) SetSPP(mode PrivilegeMode) {
 	*m |= Mstatus(mode&0b1) << MsSPP
 }
 
+type RegStatus uint8
+
+const (
+	RegOff = iota
+	RegInitial
+	RegClean
+	RegDirty
+)
+
+func (m Mstatus) VS() RegStatus {
+	return RegStatus(m >> MsVS & 0b11)
+}
+
+func (m *Mstatus) SetVS(s RegStatus) {
+	*m &^= 0b11 << MsVS
+	*m |= Mstatus(s&0b11) << MsVS
+}
+
 func (m Mstatus) MPP() PrivilegeMode {
 	return PrivilegeMode(m >> MsMPP & 0b11)
 }
