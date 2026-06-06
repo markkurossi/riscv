@@ -560,11 +560,7 @@ dispatch:
 			cpu.MMU.FlushTLB()
 
 		case isa.FeqS:
-			b1 := math.Float64bits(cpu.F[instr.Rs1])
-			b2 := math.Float64bits(cpu.F[instr.Rs2])
-
-			if math.Float32frombits(uint32(b1)) ==
-				math.Float32frombits(uint32(b2)) {
+			if float32(cpu.F[instr.Rs1]) == float32(cpu.F[instr.Rs2]) {
 				cpu.X[instr.Rd] = 1
 			} else {
 				cpu.X[instr.Rd] = 0
@@ -1203,9 +1199,8 @@ dispatch:
 			cpu.F[instr.Rd] = math.Float64frombits(cpu.X[instr.Rs1])
 
 		case isa.FmvWX:
-			v := uint64(uint32(cpu.X[instr.Rs1]))
-			v |= uint64(0xffffffff) << 32
-			cpu.F[instr.Rd] = math.Float64frombits(v)
+			v := uint32(cpu.X[instr.Rs1])
+			cpu.F[instr.Rd] = float64(math.Float32frombits(v))
 
 		case isa.FmvXD:
 			cpu.X[instr.Rd] = math.Float64bits(cpu.F[instr.Rs1])
@@ -1281,8 +1276,17 @@ dispatch:
 		case isa.FcvtSD:
 			cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]))
 
+		case isa.FcvtSW:
+			cpu.F[instr.Rd] = float64(float32(int32(cpu.X[instr.Rs1])))
+
+		case isa.FcvtSWU:
+			cpu.F[instr.Rd] = float64(float32(uint32(cpu.X[instr.Rs1])))
+
+		case isa.FcvtSL:
+			cpu.F[instr.Rd] = float64(float32(int64(cpu.X[instr.Rs1])))
+
 		case isa.FcvtSLU:
-			cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]))
+			cpu.F[instr.Rd] = float64(float32(cpu.X[instr.Rs1]))
 
 		case isa.FcvtDS:
 			cpu.F[instr.Rd] = cpu.F[instr.Rs1]

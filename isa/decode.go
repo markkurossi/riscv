@@ -1014,6 +1014,12 @@ func Decode(raw uint32) (Instr, error) {
 		case 0b1101000:
 			funct5 := raw >> 20 & 0b11111
 			switch funct5 {
+			case 0b00000:
+				instr.Op = FcvtSW
+			case 0b00001:
+				instr.Op = FcvtSWU
+			case 0b0010:
+				instr.Op = FcvtSL
 			case 0b00011:
 				instr.Op = FcvtSLU
 
