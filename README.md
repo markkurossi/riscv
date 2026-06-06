@@ -28,13 +28,11 @@ memory, privilege modes, and device emulation.
 
 ## Current status
 
-The emulator now boots OpenSBI and Linux 6.x to a functional Buildroot
-shell. The machine supports privilege transitions, virtual memory,
-interrupts, timer devices, and enough platform hardware to run a Linux
-userspace environment.
+The emulator now boots OpenSBI and Linux 7.x to a functional
+Ubuntu24.04.4 shell. The machine supports privilege transitions,
+virtual memory, interrupts, timer devices, and enough platform
+hardware to run a Linux userspace environment.
 
-Current development has shifted from "make Linux boot" to platform
-completeness, additional devices, and performance work.
 
 ### Userspace emulation
 
@@ -55,12 +53,13 @@ completeness, additional devices, and performance work.
 - [x] PLIC interrupt controller
 - [ ] Parse kernel PE32+ header: load address, symbols
 - [ ] VirtIO
+  - [x] virtio-blk
 - [x] Initramfs loading
 - [x] Buildroot shell login
 - [x] System shutdown support
 - [ ] SMP support
 
-## [OASIS VirtIO (Virtual I/O)](https://www.oasis-open.org/standard/virtio-v1-1/)
+## [OASIS VirtIO (Virtual I/O)](https://docs.oasis-open.org/virtio/virtio/v1.3/virtio-v1.3.html)
 
 | Device                        | Linux Driver   | Device ID |
 | :-----                        | :----          | -----:    |
