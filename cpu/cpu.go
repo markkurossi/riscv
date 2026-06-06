@@ -1171,6 +1171,13 @@ dispatch:
 			cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]) /
 				float32(cpu.F[instr.Rs2]))
 
+		case isa.FmsubD:
+			cpu.F[instr.Rd] = cpu.F[instr.Rs1]*cpu.F[instr.Rs2] -
+				cpu.F[instr.Imm]
+
+		case isa.FsqrtD:
+			cpu.F[instr.Rd] = math.Sqrt(cpu.F[instr.Rs1])
+
 		case isa.FleD:
 			if cpu.F[instr.Rs1] <= cpu.F[instr.Rs2] {
 				cpu.X[instr.Rd] = 1
@@ -1202,6 +1209,9 @@ dispatch:
 
 		case isa.FmvXD:
 			cpu.X[instr.Rd] = math.Float64bits(cpu.F[instr.Rs1])
+
+		case isa.FclassD:
+			cpu.X[instr.Rd] = fclassD(cpu.F[instr.Rs1])
 
 		case isa.FmaddD:
 			// Imm is Rs3
@@ -1271,8 +1281,14 @@ dispatch:
 		case isa.FcvtSD:
 			cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]))
 
+		case isa.FcvtSLU:
+			cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]))
+
 		case isa.FcvtDS:
 			cpu.F[instr.Rd] = cpu.F[instr.Rs1]
+
+		case isa.FcvtDW:
+			cpu.F[instr.Rd] = float64(int32(cpu.X[instr.Rs1]))
 
 		case isa.FsgnjD:
 			v := math.Float64bits(cpu.F[instr.Rs1])
@@ -1568,6 +1584,57 @@ dispatch:
 		}
 		cpu.PC += uint64(size)
 	}
+}
+
+func fclassD(fVal float64) uint64 {
+	bits := math.Float64bits(fVal)
+
+	sign := (bits >> 63) == 1
+	exponent := (bits >> 52) & 0x7FF
+	mantissa := bits & 0xFFFFFFFFFFFFF
+
+	var mask uint64
+
+	if exponent == 0x7FF {
+		if mantissa == 0 {
+			if sign {
+				mask = 1 << 0 // -Infinity
+			} else {
+				mask = 1 << 7 // +Infinity
+			}
+		} else {
+			// NaN check (Signal vs Quiet)
+			// RISC-V typically uses the MSB of the mantissa to denote Quiet NaN (1) vs Signaling NaN (0)
+			isQuiet := (mantissa & (1 << 51)) != 0
+			if !isQuiet {
+				mask = 1 << 8 // Signaling NaN
+			} else {
+				mask = 1 << 9 // Quiet NaN
+			}
+		}
+	} else if exponent == 0 {
+		if mantissa == 0 {
+			if sign {
+				mask = 1 << 3 // -0
+			} else {
+				mask = 1 << 4 // +0
+			}
+		} else {
+			if sign {
+				mask = 1 << 2 // Negative subnormal
+			} else {
+				mask = 1 << 5 // Positive subnormal
+			}
+		}
+	} else {
+		if sign {
+			mask = 1 << 1 // Negative normal
+		} else {
+			mask = 1 << 6 // Positive normal
+		}
+	}
+
+	return mask
 }
 
 func (cpu *CPU) ClearInterrupt(mask uint64) {

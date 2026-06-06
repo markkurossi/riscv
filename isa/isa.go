@@ -441,6 +441,9 @@ const (
 	FdivS
 	FdivD
 
+	FmsubD
+	FmsubS
+
 	FsqrtS
 	FsqrtD
 
@@ -898,6 +901,12 @@ var Operands = map[Op]OpInfo{
 	},
 	FdivD: OpInfo{
 		Name: "fdiv.d",
+	},
+	FmsubD: OpInfo{
+		Name: "fmsub.d",
+	},
+	FmsubS: OpInfo{
+		Name: "fmsub.s",
 	},
 	FsqrtS: OpInfo{
 		Name: "fsqrt.s",

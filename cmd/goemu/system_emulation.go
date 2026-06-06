@@ -47,7 +47,7 @@ const (
 	PLICSize = 0x400000
 )
 
-const imageNumber = 1
+const imageNumber = 3
 
 func systemEmulation(params kernel.Params,
 	bios, kernel, initrd, symbols string) error {
@@ -592,7 +592,7 @@ func makeDTB(initrdSize uint64, virtioBlk *virtio.Blk) []byte {
 	default:
 		fdt.PropStr(
 			"bootargs",
-			"earlycon=sbi console=ttyS0,115200 root=/dev/vda1 ro rootwait",
+			"earlycon=sbi console=ttyS0,115200 root=/dev/vda1 ro rootwait systemd.mask=systemd-networkd-wait-online.service",
 		)
 	}
 
