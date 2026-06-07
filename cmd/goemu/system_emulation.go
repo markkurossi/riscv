@@ -94,7 +94,7 @@ func systemEmulation(params kernel.Params,
 		Segments: []mmu.ROM{
 			plic,
 			uart,
-			&Syscon{
+			&dev.Syscon{
 				Hart:  core,
 				Start: SysconBase,
 				End:   SysconBase + SysconSize,
@@ -518,7 +518,7 @@ func makeDTB(initrdSize uint64, virtioBlk *virtio.Blk) []byte {
 	fdt.PropU32("offset", 0x0)
 
 	// The magic value Linux will write to signal poweroff
-	fdt.PropU32("value", PoweroffMagic)
+	fdt.PropU32("value", dev.PoweroffMagic)
 
 	fdt.EndNode()
 
