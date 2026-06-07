@@ -106,7 +106,7 @@ func main() {
 	// If any critical system emulation parameters are set, start
 	// system emulation.
 	if systemConfig.Defined() {
-		err := systemEmulationCfg(params, systemConfig)
+		err := systemEmulation(params, systemConfig)
 		if err != nil {
 			log.Fatal(err)
 		}
