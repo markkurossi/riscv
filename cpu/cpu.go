@@ -1303,6 +1303,15 @@ dispatch:
 
 			cpu.F[instr.Rd] = math.Float64frombits(v)
 
+		case isa.FsgnjS:
+			v := math.Float32bits(float32(cpu.F[instr.Rs1]))
+			b := math.Float32bits(float32(cpu.F[instr.Rs2]))
+
+			v &^= 1 << 31
+			v |= b & (1 << 31)
+
+			cpu.F[instr.Rd] = float64(math.Float32frombits(v))
+
 			// Extension 'B' Bit Manipulation.
 
 		case isa.Maxu:
