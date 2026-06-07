@@ -58,6 +58,7 @@ hardware to run a Linux userspace environment.
 - [x] Buildroot shell login
 - [x] System shutdown support
 - [ ] SMP support
+- [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
 
 ## [OASIS VirtIO (Virtual I/O)](https://docs.oasis-open.org/virtio/virtio/v1.3/virtio-v1.3.html)
 
