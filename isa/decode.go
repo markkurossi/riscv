@@ -90,7 +90,7 @@ func DecodeC(raw uint16) (Instr, error) {
 				instr.Op = Lbu
 
 			default:
-				return instr, fmt.Errorf("Zca: func3=%03b, raw=%04x",
+				return instr, fmt.Errorf("zca: func3=%03b, raw=%04x",
 					funct3, raw)
 			}
 
@@ -261,7 +261,7 @@ func DecodeC(raw uint16) (Instr, error) {
 
 					default:
 						return instr,
-							fmt.Errorf("Zcb: raw=%04x, Q1/100/11/%03b", raw, f3)
+							fmt.Errorf("zcb: raw=%04x, Q1/100/11/%03b", raw, f3)
 					}
 
 				default:
@@ -673,7 +673,7 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = CzeroNez
 			default:
 				return instr,
-					fmt.Errorf("Zicond: funct3=%03b, raw=%08x", funct3, raw)
+					fmt.Errorf("zicond: funct3=%03b, raw=%08x", funct3, raw)
 			}
 
 		case 32:
