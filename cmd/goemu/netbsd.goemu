@@ -1,13 +1,12 @@
 {
   "bios":    "opensbi/fw_jump.bin",
-  "kernel":  "linux-7.0.11/Image",
-  "symbols": "linux-7.0.11/System.map",
-  "append":  "earlycon=sbi console=ttyS0,115200 root=/dev/vda ro rootwait",
+  "kernel":  "netbsd/netbsd-GENERIC64",
+  "append":  "console=com0 root=sd0a",
   "drives": [
     {
       "id":     "hd0",
       "format": "raw",
-      "file":   "linux-2026-04-08/rootfs.ext2"
+      "file":   "netbsd/riscv64.img"
     }
   ],
   "devices": [
