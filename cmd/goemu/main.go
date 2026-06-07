@@ -20,6 +20,10 @@ import (
 	"github.com/markkurossi/trace"
 )
 
+var (
+	argCfg *SystemConfig = new(SystemConfig)
+)
+
 func main() {
 	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to `file`")
 	verbose := flag.Bool("v", false, "verbose output")
@@ -31,6 +35,7 @@ func main() {
 	bios := flag.String("bios", "", "the firmwire; enables system emulation")
 	kern := flag.String("kernel", "", "the kernel; enables system emulation")
 	initrd := flag.String("initrd", "", "the init filesystem")
+	bootargs := flag.String("append", "", "kernel boot args")
 	symbols := flag.String("symbols", "", "kernel System.map")
 	logger := flag.String("log", "", "logger unix domain socket")
 	cooked := flag.Bool("cooked", false, "don't enable raw terminal mode")
@@ -57,6 +62,12 @@ func main() {
 		FSRoot:   *fsroot,
 	}
 
+	argCfg.BIOS = *bios
+	argCfg.Kernel = *kern
+	argCfg.Symbols = *symbols
+	argCfg.Initrd = *initrd
+	argCfg.Append = *bootargs
+
 	if *objdump {
 		disassemble(flag.Args())
 		return
@@ -74,24 +85,28 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	if len(flag.Args()) == 1 {
-		arg0 := flag.Args()[0]
-		if strings.HasSuffix(arg0, ".goemu") {
-			cfg, err := ReadConfig(arg0)
-			if err != nil {
-				log.Fatalf("could not read config %v: %v", arg0, err)
-			}
-			fmt.Printf("cfg: %#v\n", cfg)
-			err = systemEmulationCfg(params, cfg)
-			if err != nil {
-				log.Fatal(err)
-			}
-			return
+	// Process args for .goemu configs.
+
+	var systemConfig *SystemConfig
+
+	for _, arg := range flag.Args() {
+		if !strings.HasSuffix(arg, ".goemu") {
+			continue
 		}
+		cfg, err := ReadConfig(arg)
+		if err != nil {
+			log.Fatalf("could not read config %v: %v", arg, err)
+		}
+		systemConfig = systemConfig.Merge(cfg)
 	}
 
-	if len(*bios) > 0 || len(*kern) > 0 {
-		err := systemEmulation(params, *bios, *kern, *initrd, *symbols)
+	// Merge argument configs.
+	systemConfig = systemConfig.Merge(argCfg)
+
+	// If any critical system emulation parameters are set, start
+	// system emulation.
+	if systemConfig.Defined() {
+		err := systemEmulationCfg(params, systemConfig)
 		if err != nil {
 			log.Fatal(err)
 		}

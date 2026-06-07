@@ -83,9 +83,10 @@ $ git clone https://github.com/markkurossi/riscv
 $ cd riscv/cmd/goemu
 $ go build
 $ ./goemu -bios linux-2026-04-08/fw_jump.bin \
-          -kernel linux-2026-04-08/Image \
+          -kernel linux-7.0.11/Image \
+          -symbols linux-7.0.11/System.map \
           -initrd linux-2026-04-08/rootfs.cpio.gz \
-          -symbols linux-2026-04-08/System.map
+          -append "earlycon=sbi console=ttyS0,115200 root=/dev/vda ro rootwait"
 ```
 
 Expected output:

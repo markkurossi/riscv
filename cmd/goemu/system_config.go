@@ -62,6 +62,39 @@ func ReadConfig(file string) (*SystemConfig, error) {
 	return cfg, nil
 }
 
+func (cfg *SystemConfig) Defined() bool {
+	if cfg == nil {
+		return false
+	}
+	return len(cfg.Kernel) > 0 || len(cfg.BIOS) > 0
+}
+
+func (cfg *SystemConfig) Merge(o *SystemConfig) *SystemConfig {
+	if cfg == nil {
+		return o
+	}
+
+	if len(o.BIOS) > 0 {
+		cfg.BIOS = o.BIOS
+	}
+	if len(o.Kernel) > 0 {
+		cfg.Kernel = o.Kernel
+	}
+	if len(o.Symbols) > 0 {
+		cfg.Symbols = o.Symbols
+	}
+	if len(o.Append) > 0 {
+		cfg.Append = o.Append
+	}
+	if len(o.Initrd) > 0 {
+		cfg.Initrd = o.Initrd
+	}
+	cfg.Drives = append(cfg.Drives, o.Drives...)
+	cfg.Devices = append(cfg.Devices, o.Devices...)
+
+	return cfg
+}
+
 func (cfg *SystemConfig) Drive(id string) *Drive {
 	for _, drive := range cfg.Drives {
 		if drive.ID == id {
