@@ -14,7 +14,6 @@ import (
 import (
 	"encoding/binary"
 	"errors"
-	"runtime/debug"
 )
 
 var (
@@ -57,6 +56,7 @@ func PageOffset(addr uint64) int {
 type Memory struct {
 	RAM      []byte
 	RAMBase  uint64
+	RAMEnd   uint64
 	BO       binary.ByteOrder
 	numPages int
 	nextPage int
@@ -72,6 +72,7 @@ func New(base, size uint64) *Memory {
 	return &Memory{
 		RAM:      make([]byte, size),
 		RAMBase:  base,
+		RAMEnd:   base + size,
 		BO:       bo,
 		numPages: int(size / PageSize),
 	}
@@ -79,7 +80,7 @@ func New(base, size uint64) *Memory {
 
 // Contains tests if the memory contains the address.
 func (mem *Memory) Contains(addr uint64) bool {
-	return addr >= mem.RAMBase && addr-mem.RAMBase <= uint64(len(mem.RAM))
+	return mem.RAMBase <= addr && addr < mem.RAMEnd
 }
 
 // Offset returns the address' offset in the Memory.RAM array.
@@ -101,9 +102,6 @@ func (mem *Memory) Page(num uint64) ([]byte, error) {
 	RAMBasePage := mem.RAMBase / PageSize
 
 	if num < RAMBasePage || num >= RAMBasePage+uint64(mem.numPages) {
-		if false {
-			debug.PrintStack()
-		}
 		return nil, ErrInvalidAddr
 	}
 	addr := (num - RAMBasePage) * PageSize
