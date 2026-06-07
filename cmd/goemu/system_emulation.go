@@ -36,9 +36,10 @@ const (
 
 	RTCBase = 0x10100000
 	RTCSize = 0x1000
+	RTCIRQ  = 11
 
-	VirtioBlkBase = 0x10008000
-	VirtioBlkIRQ  = 13
+	VirtioROMBase = 0x10008000
+	VirtioIRQBase = 1
 
 	CLINTBase = 0x2000000
 	CLINTSize = 0x10000
@@ -46,6 +47,481 @@ const (
 	PLICBase = 0x0c000000
 	PLICSize = 0x400000
 )
+
+func systemEmulationCfg(params kernel.Params, cfg *SystemConfig) error {
+
+	mem := memory.New(memory.RAMBase, 0x20000000)
+
+	core := cpu.New(mem)
+	core.Trace = params.CPUtrace
+
+	plic := &dev.PLIC{
+		Hart:  core,
+		Start: PLICBase,
+		End:   PLICBase + PLICSize,
+	}
+
+	uart := &dev.UART{
+		Hart:   core,
+		Start:  UARTBase,
+		End:    UARTBase + UARTSize,
+		Plic:   plic,
+		IRQ:    UARTIRQ,
+		Color:  params.Color,
+		Cooked: params.Cooked,
+	}
+
+	rom := &ROM{
+		Hart: core,
+		Segments: []mmu.ROM{
+			plic,
+			uart,
+			&dev.Syscon{
+				Hart:  core,
+				Start: SysconBase,
+				End:   SysconBase + SysconSize,
+			},
+			&dev.GoldfishRTC{
+				Hart:  core,
+				Start: RTCBase,
+				End:   RTCBase + RTCSize,
+			},
+			&dev.CLINT{
+				Hart:  core,
+				Start: CLINTBase,
+				End:   CLINTBase + CLINTSize,
+			},
+		},
+	}
+
+	// Create VirtIO devices.
+
+	var virtioROM uint64 = VirtioROMBase
+	var virtioIRQ uint32 = VirtioIRQBase
+
+	for idx, dev := range cfg.Devices {
+		switch dev.Type {
+		case "virtio-blk-device":
+			drive := cfg.Drive(dev.Drive)
+			if drive == nil {
+				return fmt.Errorf("unknown drive: %v", dev.Drive)
+			}
+			var flags int
+			if drive.Readonly {
+				flags = os.O_RDONLY
+			} else {
+				flags = os.O_RDWR
+			}
+			fs, err := os.OpenFile(drive.File, flags, 0644)
+			if err != nil {
+				return err
+			}
+
+			dev.blk = virtio.NewBlk(core, virtioROM, plic, virtioIRQ, mem, fs)
+			rom.Segments = append(rom.Segments, dev.blk)
+
+			deviceID := dev.ID
+			if len(deviceID) == 0 {
+				deviceID = fmt.Sprintf("goemu-disk-%d", idx)
+			}
+			dev.blk.SetID(deviceID)
+
+			virtioROM = dev.blk.End
+			virtioIRQ++
+
+		default:
+			return fmt.Errorf("invalid device type: %v", dev.Type)
+		}
+	}
+
+	core.MMU.ROM = rom
+
+	core.SetMode(isa.ModeM)
+	if len(cfg.Symbols) > 0 {
+		sm, err := cpu.LoadSystemMap(cfg.Symbols)
+		if err != nil {
+			return err
+		}
+		core.Symtab = sm
+	}
+
+	data, err := os.ReadFile(cfg.BIOS)
+	if err != nil {
+		return fmt.Errorf("failed to read BIOS: %w", err)
+	}
+	copy(mem.RAM[mem.Offset(OfsBIOS):], data)
+
+	data, err = os.ReadFile(cfg.Kernel)
+	if err != nil {
+		return fmt.Errorf("failed to read kernel: %w", err)
+	}
+	copy(mem.RAM[mem.Offset(OfsKernel):], data)
+
+	var initrdSize uint64
+	if len(cfg.Initrd) > 0 {
+		data, err = os.ReadFile(cfg.Initrd)
+		if err != nil {
+			return fmt.Errorf("failed to read initrd: %w", err)
+		}
+		initrdSize = uint64(len(data))
+		copy(mem.RAM[mem.Offset(OfsInitrd):], data)
+	}
+
+	dtb := makeDTBNew(initrdSize, cfg)
+	copy(mem.RAM[mem.Offset(OfsDTB):], dtb)
+
+	core.X[isa.A0] = 0
+	core.X[isa.A1] = OfsDTB
+	core.PC = OfsBIOS
+
+	go uart.Run()
+
+	err = core.Run()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("CPU: instret: %v, runtime: %v, MIPS: %.2f\n",
+		core.Instret, core.Runtime,
+		float64(core.Instret/1000000.0)/float64(core.Runtime/time.Second))
+	return nil
+}
+
+func makeDTBNew(initrdSize uint64, cfg *SystemConfig) []byte {
+	// Initialize FDT buffer
+	buf := make([]byte, 65536)
+	fdt := gofdt.NewFDT(buf)
+
+	// ---------------------------------------------------------------------
+	// Root node
+	// ---------------------------------------------------------------------
+
+	fdt.BeginNode("")
+
+	fdt.PropStr("model", "goemu,riscv-emulator")
+	fdt.PropStr("compatible", "riscv,virtio")
+
+	// 64-bit addresses/sizes
+	fdt.PropU32("#address-cells", 2)
+	fdt.PropU32("#size-cells", 2)
+
+	var tab [8]uint32
+
+	// ---------------------------------------------------------------------
+	// CPUs
+	// ---------------------------------------------------------------------
+
+	fdt.BeginNode("cpus")
+
+	fdt.PropU32("#address-cells", 1)
+	fdt.PropU32("#size-cells", 0)
+	fdt.PropU32("timebase-frequency", 100000000)
+
+	// -----------------------------------------------------------------
+	// CPU0
+	// -----------------------------------------------------------------
+
+	fdt.BeginNode("cpu@0")
+
+	fdt.PropStr("device_type", "cpu")
+	fdt.PropStr("status", "okay")
+
+	fdt.PropU32("reg", 0)
+
+	// The standard compatible string for the CPU node
+	fdt.PropStr("compatible", "riscv")
+
+	// The legacy ISA string (Mandatory for many versions)
+	// Note: Use 'g' as an alias for 'imafd' to stay compatible
+	fdt.PropStr("riscv,isa", "rv64gc")
+
+	// Modern granular ISA description
+	fdt.PropStr("riscv,isa-base", "rv64i")
+
+	// Critical: These must be passed as individual arguments to the
+	// PropStr function so they are encoded as a string list in the
+	// blob.
+	fdt.PropTabStr("riscv,isa-extensions",
+		"i", "m", "a", "f", "d", "c", "zicsr", "zifencei", "zicntr", "zihpm",
+	)
+
+	fdt.PropStr("mmu-type", "riscv,sv39")
+
+	// -------------------------------------------------------------
+	// CPU local interrupt controller
+	// -------------------------------------------------------------
+
+	fdt.BeginNode("interrupt-controller")
+
+	fdt.PropU32("#interrupt-cells", 1)
+	fdt.Prop("interrupt-controller", nil, 0)
+
+	fdt.PropStr("compatible", "riscv,cpu-intc")
+
+	// phandle used by CLINT and PLIC
+	fdt.PropU32("phandle", 1)
+
+	fdt.EndNode() // interrupt-controller
+
+	fdt.EndNode() // cpu@0
+
+	fdt.EndNode() // cpus
+
+	// ---------------------------------------------------------------------
+	// RAM
+	// ---------------------------------------------------------------------
+
+	fdt.BeginNodeNum("memory", memory.RAMBase)
+
+	fdt.PropStr("device_type", "memory")
+
+	tab = [8]uint32{
+		uint32(memory.RAMBase >> 32),
+		uint32(memory.RAMBase),
+
+		0x0,
+		0x20000000, // 512 MB
+	}
+
+	fdt.PropTabU32("reg", &tab[0], 4)
+
+	fdt.EndNode() // memory
+
+	// ---------------------------------------------------------------------
+	// SoC Peripherals Bus (Crucial wrapper for OpenSBI probing!)
+	// ---------------------------------------------------------------------
+	fdt.BeginNode("soc")
+	fdt.PropStr("compatible", "simple-bus")
+	fdt.PropU32("#address-cells", 2)
+	fdt.PropU32("#size-cells", 2)
+	fdt.Prop("ranges", nil, 0) // Allows pass-through address mapping to root
+
+	// ---------------------------------------------------------------------
+	// CLINT
+	// ---------------------------------------------------------------------
+
+	fdt.BeginNodeNum("clint", CLINTBase)
+
+	fdt.PropStr("compatible", "riscv,clint0")
+
+	tab = [8]uint32{
+		uint32(CLINTBase >> 32),
+		uint32(CLINTBase),
+
+		uint32(CLINTSize >> 32),
+		uint32(CLINTSize),
+	}
+
+	fdt.PropTabU32("reg", &tab[0], 4)
+
+	// interrupts-extended:
+	//   <phandle interrupt-id>
+	//
+	// 3 = machine software interrupt
+	// 7 = machine timer interrupt
+	//
+	tab = [8]uint32{
+		1, 3,
+		1, 7,
+	}
+
+	fdt.PropTabU32("interrupts-extended", &tab[0], 4)
+
+	fdt.EndNode() // clint
+
+	// ---------------------------------------------------------------------
+	// PLIC
+	// ---------------------------------------------------------------------
+
+	fdt.BeginNodeNum("plic", PLICBase)
+
+	fdt.PropStr("compatible", "sifive,plic-1.0.0")
+
+	tab = [8]uint32{
+		uint32(PLICBase >> 32),
+		uint32(PLICBase),
+
+		uint32(PLICSize >> 32),
+		uint32(PLICSize),
+	}
+
+	fdt.PropTabU32("reg", &tab[0], 4)
+
+	fdt.PropU32("#interrupt-cells", 1)
+	fdt.Prop("interrupt-controller", nil, 0)
+
+	// Number of interrupt sources supported. This is defined in PLIC.
+	fdt.PropU32("riscv,ndev", dev.MaxInterrupts)
+
+	// PLIC phandle
+	fdt.PropU32("phandle", 2)
+
+	// interrupts-extended:
+	//
+	// 11 = machine external interrupt
+	//  9 = supervisor external interrupt
+	//
+	tab = [8]uint32{
+		1, 0xffffffff, // hart 0 M-mode context (use 0xffffffff = not connected)
+		1, 9, // hart 0 S-mode supervisor external interrupt
+	}
+
+	fdt.PropTabU32("interrupts-extended", &tab[0], 4)
+
+	fdt.EndNode() // plic
+
+	// ---------------------------------------------------------------------
+	// UART (16550A)
+	// ---------------------------------------------------------------------
+
+	fdt.BeginNodeNum("uart", UARTBase)
+
+	fdt.PropStr("compatible", "ns16550a")
+
+	tab = [8]uint32{
+		uint32(UARTBase >> 32),
+		uint32(UARTBase),
+
+		uint32(UARTSize >> 32),
+		uint32(UARTSize),
+	}
+
+	fdt.PropTabU32("reg", &tab[0], 4)
+
+	tab = [8]uint32{24000000}
+	fdt.PropTabU32("clock-frequency", &tab[0], 1)
+
+	fdt.PropU32("reg-shift", 0)
+	fdt.PropU32("reg-io-width", 1)
+
+	// UART interrupt comes from PLIC
+	tab = [8]uint32{2, UARTIRQ} // phandle=2 (PLIC), irq source=UARTIRQ
+	fdt.PropTabU32("interrupts-extended", &tab[0], 2)
+
+	fdt.EndNode()
+
+	// ---------------------------------------------------------------------
+	// 1. Generic Syscon Register Block
+	// ---------------------------------------------------------------------
+	fdt.BeginNodeNum("syscon", SysconBase)
+	// "syscon" and "simple-mfd" force Linux to initialize it as a
+	// multi-function register array
+	fdt.PropTabStr("compatible", "syscon", "simple-mfd")
+	regData := [4]uint32{
+		uint32(SysconBase >> 32), uint32(SysconBase),
+		uint32(SysconSize >> 32), uint32(SysconSize),
+	}
+	fdt.PropTabU32("reg", &regData[0], 4)
+	fdt.PropU32("phandle", 3) // Assign a unique phandle to reference this block
+	fdt.EndNode()             // syscon
+
+	// ---------------------------------------------------------------------
+	// 2. Syscon Poweroff Controller (S-Mode Kernel Driver)
+	// ---------------------------------------------------------------------
+	fdt.BeginNode("poweroff")
+	fdt.PropStr("compatible", "syscon-poweroff")
+
+	// References phandle 3 (our syscon node above)
+	fdt.PropU32("regmap", 3)
+
+	// Write to register offset 0
+	fdt.PropU32("offset", 0x0)
+
+	// The magic value Linux will write to signal poweroff
+	fdt.PropU32("value", dev.PoweroffMagic)
+
+	fdt.EndNode()
+
+	// ---------------------------------------------------------------------
+	// Google Goldfish RTC (Real-Time Clock)
+	// ---------------------------------------------------------------------
+	fdt.BeginNodeNum("rtc", RTCBase)
+	fdt.PropStr("compatible", "google,goldfish-rtc")
+
+	// Map to physical address 0x10100000 with a size of 0x1000 (4KB page)
+	regData = [4]uint32{
+		uint32(RTCBase >> 32), uint32(RTCBase),
+		uint32(RTCSize >> 32), uint32(RTCSize),
+	}
+	fdt.PropTabU32("reg", &regData[0], 4)
+
+	// Connect to PLIC (phandle=2).
+	rtcInterrupts := [2]uint32{2, RTCIRQ}
+	fdt.PropTabU32("interrupts-extended", &rtcInterrupts[0], 2)
+	fdt.EndNode()
+
+	// Create VirtualIO devices.
+	for _, dev := range cfg.Devices {
+		switch dev.Type {
+		case "virtio-blk-device": // VirtIO Block Device.
+			fdt.BeginNodeNum("virtio_blk", dev.blk.Start)
+			fdt.PropStr("compatible", "virtio,mmio")
+
+			// Address and size.
+			size := dev.blk.End - dev.blk.Start
+			regData = [4]uint32{
+				uint32(dev.blk.Start >> 32), uint32(dev.blk.Start),
+				uint32(size >> 32), uint32(size),
+			}
+			fdt.PropTabU32("reg", &regData[0], 4)
+
+			// Connect to PLIC (phandle=2).
+			interrupts := [2]uint32{2, dev.blk.IRQ}
+			fdt.PropTabU32("interrupts-extended", &interrupts[0], 2)
+			fdt.EndNode()
+
+		default:
+			panic("invalid device type")
+		}
+	}
+
+	fdt.EndNode() // Close the "soc" node wrapper
+
+	// ---------------------------------------------------------------------
+	// chosen
+	// ---------------------------------------------------------------------
+
+	fdt.BeginNode("chosen")
+
+	fdt.PropStr("bootargs", cfg.Append)
+
+	if initrdSize > 0 {
+		// Linux expects these properties to define the physical
+		// address boundaries of the ramdisk
+		tab = [8]uint32{
+			uint32(OfsInitrd >> 32),
+			uint32(OfsInitrd),
+		}
+		fdt.PropTabU32("linux,initrd-start", &tab[0], 2)
+
+		initrdEnd := OfsInitrd + initrdSize
+		tab = [8]uint32{
+			uint32(initrdEnd >> 32),
+			uint32(initrdEnd),
+		}
+		fdt.PropTabU32("linux,initrd-end", &tab[0], 2)
+	}
+
+	fdt.PropStr("stdout-path", "/uart@10000000:115200n8")
+
+	fdt.EndNode() // chosen
+
+	// ---------------------------------------------------------------------
+	// End root node
+	// ---------------------------------------------------------------------
+
+	fdt.EndNode()
+
+	// Generate final DTB
+	size := fdt.Output()
+
+	dtb := buf[:size]
+
+	os.WriteFile("goemu.dtb", dtb, 0644)
+
+	return dtb
+}
+
+/*************************** Old garbage follows ****************************/
 
 const imageNumber = 3
 
@@ -119,7 +595,7 @@ func systemEmulation(params kernel.Params,
 		if err != nil {
 			return err
 		}
-		virtioBlk = virtio.NewBlk(core, VirtioBlkBase, plic, VirtioBlkIRQ,
+		virtioBlk = virtio.NewBlk(core, VirtioROMBase, plic, VirtioIRQBase,
 			mem, rootfs)
 		rom.Segments = append(rom.Segments, virtioBlk)
 
@@ -175,106 +651,6 @@ func systemEmulation(params kernel.Params,
 		core.Instret, core.Runtime,
 		float64(core.Instret/1000000.0)/float64(core.Runtime/time.Second))
 	return nil
-}
-
-var (
-	_ mmu.ROM = &ROM{}
-)
-
-type ROM struct {
-	Hart     isa.Hart
-	Segments []mmu.ROM
-}
-
-func (rom *ROM) Halt() error {
-	for _, seg := range rom.Segments {
-		err := seg.Halt()
-		if err != nil {
-			fmt.Printf("halt: %v\n", err)
-		}
-	}
-	return nil
-}
-
-func (rom *ROM) Contains(paddr uint64) bool {
-	for _, seg := range rom.Segments {
-		if seg.Contains(paddr) {
-			return true
-		}
-	}
-	return false
-}
-
-func (rom *ROM) Load8(paddr uint64) (uint8, error) {
-	for _, seg := range rom.Segments {
-		if seg.Contains(paddr) {
-			return seg.Load8(paddr)
-		}
-	}
-	return 0, rom.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
-}
-
-func (rom *ROM) Load16(paddr uint64) (uint16, error) {
-	for _, seg := range rom.Segments {
-		if seg.Contains(paddr) {
-			return seg.Load16(paddr)
-		}
-	}
-	return 0, rom.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
-}
-
-func (rom *ROM) Load32(paddr uint64) (uint32, error) {
-	for _, seg := range rom.Segments {
-		if seg.Contains(paddr) {
-			return seg.Load32(paddr)
-		}
-	}
-	return 0, rom.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
-}
-
-func (rom *ROM) Load64(paddr uint64) (uint64, error) {
-	for _, seg := range rom.Segments {
-		if seg.Contains(paddr) {
-			return seg.Load64(paddr)
-		}
-	}
-	return 0, rom.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
-}
-
-func (rom *ROM) Store8(paddr, v uint64) error {
-	for _, seg := range rom.Segments {
-		if seg.Contains(paddr) {
-			return seg.Store8(paddr, v)
-		}
-	}
-	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
-}
-
-func (rom *ROM) Store16(paddr, v uint64) error {
-	for _, seg := range rom.Segments {
-		if seg.Contains(paddr) {
-			return seg.Store16(paddr, v)
-		}
-	}
-	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
-}
-
-func (rom *ROM) Store32(paddr, v uint64) error {
-	for _, seg := range rom.Segments {
-		if seg.Contains(paddr) {
-			return seg.Store32(paddr, v)
-		}
-	}
-	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
-}
-
-func (rom *ROM) Store64(paddr, v uint64) error {
-	for _, seg := range rom.Segments {
-		if seg.Contains(paddr) {
-			return seg.Store64(paddr, v)
-		}
-	}
-	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 }
 
 func makeDTB(initrdSize uint64, virtioBlk *virtio.Blk) []byte {

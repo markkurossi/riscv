@@ -12,6 +12,7 @@ import (
 	"log"
 	"os"
 	"runtime/pprof"
+	"strings"
 
 	"github.com/markkurossi/riscv/emulator"
 	"github.com/markkurossi/riscv/isa"
@@ -71,6 +72,22 @@ func main() {
 			log.Fatal("could not start CPU profile: ", err)
 		}
 		defer pprof.StopCPUProfile()
+	}
+
+	if len(flag.Args()) == 1 {
+		arg0 := flag.Args()[0]
+		if strings.HasSuffix(arg0, ".goemu") {
+			cfg, err := ReadConfig(arg0)
+			if err != nil {
+				log.Fatalf("could not read config %v: %v", arg0, err)
+			}
+			fmt.Printf("cfg: %#v\n", cfg)
+			err = systemEmulationCfg(params, cfg)
+			if err != nil {
+				log.Fatal(err)
+			}
+			return
+		}
 	}
 
 	if len(*bios) > 0 || len(*kern) > 0 {

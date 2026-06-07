@@ -67,6 +67,7 @@ type Blk struct {
 	Mem      *memory.Memory
 	File     *os.File
 	fileInfo os.FileInfo
+	id       []byte
 
 	deviceFeaturesSel uint32
 	driverFeaturesSel uint32
@@ -95,6 +96,11 @@ func NewBlk(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	}
 
 	return blk
+}
+
+func (vio *Blk) SetID(id string) {
+	vio.id = []byte(id)
+	vio.id = append(vio.id, 0)
 }
 
 type VirtQueue struct {
@@ -195,8 +201,7 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 				addr, data.Len, err)
 			return err
 		}
-		id := fmt.Sprintf("goemu-disk-%d\x00", 0)
-		transferred = uint32(copy(buf, []byte(id)))
+		transferred = uint32(copy(buf, vq.Blk.id))
 		vq.Blk.debugf("wrote %d/%d bytes from guest RAM addr %x",
 			transferred, data.Len, addr)
 
