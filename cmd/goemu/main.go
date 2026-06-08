@@ -82,8 +82,6 @@ func main() {
 
 	log.SetFlags(0)
 
-	fmt.Printf("argDrives: %v\n", argDrives)
-
 	if len(*logger) > 0 {
 		lc, err := trace.NewClient(*logger)
 		if err != nil {

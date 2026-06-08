@@ -87,7 +87,11 @@ OpenSBI v1.6
 [   18.582016] Freeing unused kernel image (initmem) memory: 2428K
 [   18.582810] Run /init as init process
 ...
-Welcome to Buildroot
+Welcome to GoEMU RISC-V Linux
+
+Kernel: 7.0.11
+Machine: riscv64
+
 buildroot login: root
 login[79]: root login on 'console'
 # ls -la
@@ -96,9 +100,9 @@ drwx------    2 root     root            60 Apr 19 05:25 .
 drwxr-xr-x   18 root     root           420 May 18 05:41 ..
 -rw-------    1 root     root           192 Apr 19 05:25 .ash_history
 # uname -a
-Linux buildroot 6.18.7 #1 SMP Wed Apr  8 09:41:06 UTC 2026 riscv64 GNU/Linux
+Linux goemu 7.0.11 #9 SMP PREEMPT Wed Jun  3 08:23:43 UTC 2026 riscv64 GNU/Linux
 # date
-Thu May 21 20:06:59 UTC 2026
+Mon Jun  8 04:55:00 UTC 2026
 # halt
 ...
 The system is going down NOW!
@@ -106,6 +110,34 @@ Sent SIGTERM to all processes
 Sent SIGKILL to all processes
 Requesting system halt
 [   22.943205] reboot: System halted
+```
+
+The `buildroot.goemu` file defines the emulator BIOS, kernel, and
+rootfs arguments. Those arguments can also be specified (and
+overwritten) with corresponding command line arguments:
+
+``` shell
+$ ./goemu -bios opensbi/fw_jump.bin \
+          -kernel linux-7.0.11/Image \
+          -symbols linux-7.0.11/System.map \
+          -drive id=hd0,format=raw,file=linux-2026-04-08/rootfs.ext2 \
+          -device virtio-blk-device,drive=hd0 \
+          -append "earlycon=sbi console=ttyS0,115200 root=/dev/vda ro rootwait"
+```
+
+## Emulator Example
+
+The `goemu` provides also a primitive Linux userspace emulation:
+
+``` shell
+$ cd cmd/goemu/
+$ file examples/hello
+examples/hello: ELF 64-bit LSB executable, UCB RISC-V, soft-float ABI, version 1 (SYSV), statically linked, not stripped
+$ ./goemu -ktrace examples/hello
+    0     0 CALL write(1,10050,15)
+Hello, RISC-V!
+    0     0 RET  write 15
+    0     0 CALL exit(0)
 ```
 
 ## Architecture
@@ -226,20 +258,6 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 
  - [x] Supervisor mode
  - [x] Boot Linux kernel
-
-## Emulator Example
-
-``` shell
-$ cd cmd/goemu/
-$ file examples/hello
-examples/hello: ELF 64-bit LSB executable, UCB RISC-V, soft-float ABI, version 1 (SYSV), statically linked, not stripped
-$ ./goemu -ktrace examples/hello
-    0     0 CALL write(1,10050,15)
-Hello, RISC-V!
-    0     0 RET  write 15
-    0     0 CALL exit(0)
-```
-
 
 ### Kernel memory map
 
