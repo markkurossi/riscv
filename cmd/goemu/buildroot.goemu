@@ -8,7 +8,7 @@
       "id":     "hd0",
       "format": "raw",
       "file":   "buildroot-2026.02/rootfs.ext2",
-      "readonly": "on"
+      "readonly": true
     }
   ],
   "devices": [
