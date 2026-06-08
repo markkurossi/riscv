@@ -1,0 +1,19 @@
+{
+  "bios":    "opensbi/fw_jump.bin",
+  "kernel":  "linux-7.0.11/Image",
+  "symbols": "linux-7.0.11/System.map",
+  "append":  "earlycon=sbi console=ttyS0,115200 root=/dev/vda ro rootwait",
+  "drives": [
+    {
+      "id":     "hd0",
+      "format": "raw",
+      "file":   "linux-2026-04-08/rootfs.ext2"
+    }
+  ],
+  "devices": [
+    {
+      "type":  "virtio-blk-device",
+      "drive": "hd0"
+    }
+  ]
+}
