@@ -8,8 +8,10 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/markkurossi/riscv/virtio"
 )
@@ -39,6 +41,77 @@ type Device struct {
 
 	drive *Drive
 	blk   *virtio.Blk
+}
+
+func parseBool(v string) (bool, error) {
+	switch v {
+	case "on", "true":
+		return true, nil
+	case "off", "false":
+		return false, nil
+	default:
+		return false, fmt.Errorf("invalid boolean value '%v'", v)
+	}
+}
+
+func ParseDrive(args string) (*Drive, error) {
+	drive := new(Drive)
+
+	for _, arg := range strings.Split(args, ",") {
+		parts := strings.Split(arg, "=")
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid drive argument: %v", arg)
+		}
+		switch parts[0] {
+		case "id":
+			drive.ID = parts[1]
+		case "file":
+			drive.File = parts[1]
+		case "format":
+			drive.Format = parts[1]
+		case "readonly":
+			b, err := parseBool(parts[1])
+			if err != nil {
+				return nil, fmt.Errorf("invalid boolean argument: %v", arg)
+			}
+			drive.Readonly = b
+		default:
+			return nil, fmt.Errorf("invalid argument: %v", arg)
+		}
+	}
+
+	return drive, nil
+}
+
+func ParseDevice(args string) (*Device, error) {
+	dev := new(Device)
+
+	for idx, arg := range strings.Split(args, ",") {
+		parts := strings.Split(arg, "=")
+
+		if idx == 0 {
+			if len(parts) != 1 {
+				return nil, fmt.Errorf("invalid device type: %v", arg)
+			}
+			dev.Type = arg
+			continue
+		}
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid device argument: %v", arg)
+		}
+		switch parts[0] {
+		case "drive":
+			dev.Drive = parts[1]
+		case "id":
+			dev.ID = parts[1]
+		case "serial":
+			dev.Serial = parts[1]
+		default:
+			return nil, fmt.Errorf("invalid argument: %v", arg)
+		}
+	}
+
+	return dev, nil
 }
 
 func ReadConfig(file string) (*SystemConfig, error) {

@@ -20,9 +20,44 @@ import (
 	"github.com/markkurossi/trace"
 )
 
+type drives []*Drive
+
+func (arg *drives) String() string {
+	return fmt.Sprintf("%v", *arg)
+}
+
+func (arg *drives) Set(value string) error {
+	drive, err := ParseDrive(value)
+	if err != nil {
+		return err
+	}
+	*arg = append(*arg, drive)
+	return nil
+}
+
+type devices []*Device
+
+func (arg *devices) String() string {
+	return fmt.Sprintf("%v", *arg)
+}
+
+func (arg *devices) Set(value string) error {
+	dev, err := ParseDevice(value)
+	if err != nil {
+		return err
+	}
+	*arg = append(*arg, dev)
+	return nil
+}
+
 var (
-	argCfg *SystemConfig = new(SystemConfig)
+	argCfg     *SystemConfig = new(SystemConfig)
+	argDrives  drives
+	argDevices devices
 )
+
+func init() {
+}
 
 func main() {
 	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to `file`")
@@ -39,9 +74,15 @@ func main() {
 	symbols := flag.String("symbols", "", "kernel System.map")
 	logger := flag.String("log", "", "logger unix domain socket")
 	cooked := flag.Bool("cooked", false, "don't enable raw terminal mode")
+
+	flag.Var(&argDrives, "drive", "configure drive")
+	flag.Var(&argDevices, "device", "configure device")
+
 	flag.Parse()
 
 	log.SetFlags(0)
+
+	fmt.Printf("argDrives: %v\n", argDrives)
 
 	if len(*logger) > 0 {
 		lc, err := trace.NewClient(*logger)
@@ -102,6 +143,8 @@ func main() {
 
 	// Merge argument configs.
 	systemConfig = systemConfig.Merge(argCfg)
+	systemConfig.Drives = append(systemConfig.Drives, argDrives...)
+	systemConfig.Devices = append(systemConfig.Devices, argDevices...)
 
 	// If any critical system emulation parameters are set, start
 	// system emulation.
