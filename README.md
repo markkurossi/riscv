@@ -1,7 +1,7 @@
 # RISC-V in Go
 
 <p align="center">
-  <img src="goemu-small.png" width="320">
+  <img src="docs/goemu-small.png" width="320">
 </p>
 
 <p align="center">
@@ -15,6 +15,7 @@ memory, privilege modes, and device emulation.
 - Machine, Supervisor, and User privilege modes
 - SV39 virtual memory and page tables
 - OpenSBI support
+- VirtIO block storage support
 - Linux kernel boot support (Ubuntu-24.04, Buildroot)
 - Linux syscall emulation mode
 - Device emulation:
@@ -26,12 +27,18 @@ memory, privilege modes, and device emulation.
 - Instruction-level execution tracing
 - Compressed instruction support
 
+The project is intended as a readable and hackable implementation of a
+modern RISC-V platform, suitable for learning emulator internals,
+operating systems, and the RISC-V privileged architecture.
+
 ## Current status
 
 The emulator now boots OpenSBI and Linux 7.x to a functional
 Ubuntu24.04.4 shell. The machine supports privilege transitions,
 virtual memory, interrupts, timer devices, and enough platform
 hardware to run a Linux userspace environment.
+
+![Linux Boot](docs/linux-shell.png)
 
 ### Userspace emulation
 
@@ -48,7 +55,7 @@ hardware to run a Linux userspace environment.
 - [x] Machine/Supervisor/User privilege modes
 - [x] SV39 MMU
 - [x] Interrupt handling
-- [ ] ACLINT timer/IPI support
+- [x] ACLINT timer/IPI support
 - [x] PLIC interrupt controller
 - [ ] Parse kernel PE32+ header: load address, symbols
 - [ ] VirtIO
@@ -227,8 +234,6 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 
 ## Internal roadmap
 
- - [x] Interrupt check in loop
- - [x] Create CLINT device in CPU and fix ROM to write to right fields
  - [ ] Does Image have a PE header? Does it also contain System.map?
 
 ## MMU Refactoring
