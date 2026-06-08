@@ -7,7 +7,7 @@
     {
       "id":     "hd0",
       "format": "raw",
-      "file":   "linux-2026-04-08/rootfs.ext2"
+      "file":   "buildroot-2026.02/rootfs.ext2"
     }
   ],
   "devices": [
