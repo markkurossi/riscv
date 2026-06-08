@@ -76,7 +76,7 @@ Expected output:
 OpenSBI v1.6
 
 [    0.000000] Booting Linux on hartid 0
-[    0.000000] Linux version 6.18.7 (root@036cbf3b7083) (riscv64-linux-gcc.br_real (Buildroot 2021.11-18033-g83947c7bb6) 15.1.0, GNU ld (GNU Binutils) 2.44) #1 SMP Wed Apr  8 09:41:06 UTC 2026
+[    0.000000] Linux version 7.0.11 (root@5c73f8dabee1) (riscv64-linux-gnu-gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, GNU ld (GNU Binutils for Ubuntu) 2.42) #9 SMP PREEMPT Wed Jun  3 08:23:43 UTC 2026
 [    0.000000] Machine model: goemu,riscv-emulator
 ...
 [   12.291753] Freeing initrd memory: 9468K
