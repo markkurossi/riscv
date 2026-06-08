@@ -15,7 +15,7 @@ memory, privilege modes, and device emulation.
 - Machine, Supervisor, and User privilege modes
 - SV39 virtual memory and page tables
 - OpenSBI support
-- Linux kernel boot support
+- Linux kernel boot support (Ubuntu-24.04, Buildroot)
 - Linux syscall emulation mode
 - Device emulation:
   - NS16550A UART
@@ -32,7 +32,6 @@ The emulator now boots OpenSBI and Linux 7.x to a functional
 Ubuntu24.04.4 shell. The machine supports privilege transitions,
 virtual memory, interrupts, timer devices, and enough platform
 hardware to run a Linux userspace environment.
-
 
 ### Userspace emulation
 
@@ -60,20 +59,6 @@ hardware to run a Linux userspace environment.
 - [ ] SMP support
 - [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
 
-## [OASIS VirtIO (Virtual I/O)](https://docs.oasis-open.org/virtio/virtio/v1.3/virtio-v1.3.html)
-
-| Device                        | Linux Driver   | Device ID |
-| :-----                        | :----          | -----:    |
-| Block Device                  | virtio_blk     | 2         |
-| 9P Transport                  | 9pnet_virtio   | 9         |
-| Network Card                  | virtio_net     | 1         |
-| Entropy Source / RNG          | virtio_rng     | 4         |
-| Cryptographic Accelerator     | virtio_crypto  | 20        |
-| Persistent Error Storage      | virtio_pstore  | 22        |
-| Graphics Adapter / GPU        | virtio_gpu     | 16        |
-| Input Subsystem               | virtio_input   | 18        |
-| Console / Multi-Stream Serial | virtio_console | 3         |
-
 ## Quick start
 
 Clone and run:
@@ -82,11 +67,7 @@ Clone and run:
 $ git clone https://github.com/markkurossi/riscv
 $ cd riscv/cmd/goemu
 $ go build
-$ ./goemu -bios linux-2026-04-08/fw_jump.bin \
-          -kernel linux-7.0.11/Image \
-          -symbols linux-7.0.11/System.map \
-          -initrd linux-2026-04-08/rootfs.cpio.gz \
-          -append "earlycon=sbi console=ttyS0,115200 root=/dev/vda ro rootwait"
+$ ./goemu buildroot.goemu
 ```
 
 Expected output:
@@ -215,7 +196,7 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 ## Internal roadmap
 
  - [x] Interrupt check in loop
- - [ ] Create CLINT device in CPU and fix ROM to write to right fields
+ - [x] Create CLINT device in CPU and fix ROM to write to right fields
  - [ ] Does Image have a PE header? Does it also contain System.map?
 
 ## MMU Refactoring
@@ -258,157 +239,6 @@ Hello, RISC-V!
     0     0 RET  write 15
     0     0 CALL exit(0)
 ```
-
-## Linux image
-
-Converting from `rootfs.ext2` to `rootfs.cpio`:
-
-``` shell
-debugfs -R "rdump / ./rootfs_contents" rootfs.ext2
-cd rootfs_contents
-find . | cpio -o -H newc | gzip > ../rootfs.cpio.gz
-```
-
-## Device Tree
-
-``` shell
-$ dtc -I dtb -O dts -o source.dts goemu.dtb
-```
-
-## Supervisor Model
-
-### Mode Transition
-
-In RISC-V, mode transitions are governed by privileged instructions
-(`ecall`, `ebreak`, `sret`, `mret`) and hardware interrupts. When an
-exception or interrupt occurs, the processor transitions to a higher
-(or equal) privilege mode to handle it. Conversely, returning from a
-handler restores the previous state.
-
-Here is the foundational breakdown of how these transitions work,
-filling out the table for **User (U)**, **Supervisor (S)**, and
-**Machine (M)** modes.
-
-#### Key Concepts & CSR Fields
-
-Before looking at the table, it helps to understand what the actions
-mean:
-
-* **`xPP` (Previous Privilege):** Holds the mode the processor was in
-  *before* the trap occurred ($U=00$, $S=01$, $M=11$).
-* **`xPIE` (Previous Interrupt Enable):** Saves the state of the
-  interrupt enable bit (`xIE`) from before the trap.
-* **`xIE` (Interrupt Enable):** Gets set to `0` during a trap to
-  globally disable interrupts while entering the handler.
-* **`xtvec` / `xepc`:** The target address is determined by the trap
-  vector register (`mtvec`/`stvec`), and the return address is saved
-  in the exception program counter (`mepc`/`sepc`).
-
-### RISC-V State Transition Table
-
-By default, traps go to **M-mode** unless they are explicitly
-delegated to **S-mode** using delegation registers (`medeleg` for
-exceptions, `mideleg` for interrupts).
-
-| Input  | Mode | Cond   | Cause  | Actions                             | Tgt |
-|--------|------|--------|--------|-------------------------------------|-----|
-| ecall  | M    | —      | EcallM | MPP=M, MPIE=MIE, MIE=0, mepc=pc     | M   |
-| ecall  | S    | !Deleg | EcallS | MPP=S, MPIE=MIE, MIE=0, mepc=pc     | M   |
-| ecall  | S    | Deleg  | EcallS | SPP=S, SPIE=SIE, SIE=0, sepc=pc     | S   |
-| ecall  | U    | !Deleg | EcallU | MPP=U, MPIE=MIE, MIE=0, mepc=pc     | M   |
-| ecall  | U    | Deleg  | EcallU | SPP=U, SPIE=SIE, SIE=0, sepc=pc     | S   |
-| ebreak | Any  | !Deleg | Break  | MPP=mode, MPIE=MIE, MIE=0, mepc=pc  | M   |
-| ebreak | Any  | Deleg  | Break  | SPP=mode, SPIE=SIE, SIE=0, sepc=pc  | S   |
-| mret   | M    | —      | —      | MIE=MPIE, MPIE=1, mode=MPP, pc=mepc | MPP |
-| sret   | S    | —      | —      | SIE=SPIE, SPIE=1, mode=SPP, pc=sepc | SPP |
-| Intr   | Any  | !Deleg | Intr   | MPP=mode, MPIE=MIE, MIE=0, mepc=pc  | M   |
-| Intr   | Any  | Deleg  | Intr   | SPP=mode, SPIE=SIE, SIE=0, sepc=pc  | S   |
-
-
-### Key Takeaways from the Table
-
-1. **The Delegation Rule:** Notice how for `U` and `S` modes, the
-   outcome depends on whether the trap is delegated. If
-   `medeleg[cause]` or `mideleg[cause]` is set to 1, the trap bypasses
-   M-mode entirely and updates the **S-mode** CSRs (`sstatus`, `sepc`,
-   `stvec`).
-
-2. **The Return Mechanism (`xret`):** When executing `mret`, the
-   hardware reads the `MPP` field to know what mode to drop back
-   into. It also restores the interrupt state (`MIE = MPIE`) and
-   resets `MPIE` to 1.
-
-3. **Interrupts vs. Exceptions:** An `ecall` or `ebreak` is
-   synchronous (the saved `epc` points to the instruction itself). An
-   interrupt is asynchronous, meaning `epc` points to the next
-   instruction that *would* have been executed.
-
-4. **M-Mode Interrupts:** If an interrupt occurs while already running
-   in M-mode, it cannot be delegated to S-mode (global RISC-V rule:
-   traps can never be delegated to a lower privilege mode than the one
-   they occurred in). The table still holds true because Deleg
-   implicitly evaluates to false if Mode == M.
-
-### M and S mode trap CSR blocks
-
-The full M-mode trap CSR block is:
-
-| CSR        | Address | Purpose                                              |
-|------------|---------|------------------------------------------------------|
-| `mstatus`  | `0x300` | Global status (MPP, MIE, MPIE, etc.)                 |
-| `mtvec`    | `0x305` | Trap vector base address                             |
-| `mscratch` | `0x340` | Scratch register for M-mode handler                  |
-| `mepc`     | `0x341` | PC of trapping instruction                           |
-| `mcause`   | `0x342` | Exception/interrupt cause code                       |
-| `mtval`    | `0x343` | Trap value (faulting address, bad instruction, etc.) |
-| `mip`      | `0x344` | Machine interrupt pending                            |
-
-And the S-mode equivalents (for completeness):
-
-| CSR        | Address | Purpose                             |
-|------------|---------|-------------------------------------|
-| `sstatus`  | `0x100` | Subset of mstatus visible to S-mode |
-| `stvec`    | `0x105` | S-mode trap vector                  |
-| `sscratch` | `0x140` | Scratch for S-mode handler          |
-| `sepc`     | `0x141` | S-mode exception PC                 |
-| `scause`   | `0x142` | S-mode cause                        |
-| `stval`    | `0x143` | S-mode trap value                   |
-| `sip`      | `0x144` | S-mode interrupt pending            |
-
-### MMU
-
-| Mode | PTE (U, R, W, X)   | SUM      | MXR      | Read    | Store   | Exec |
-| ---- | :----------------- | :------- | :------- | :------ | :------ | :--- |
-| U    | U=0 (Any R/W/X)    | —        | —        | No      | No      | No   |
-| U    | U=1, R=1, W=1, X=0 | —        | —        | yes     | yes     | No   |
-| U    | U=1, R=0, W=0, X=1 | —        | MXR=0    | No      | No      | yes  |
-| U    | U=1, R=0, W=0, X=1 | —        | MXR=1    | yes     | No      | yes  |
-| S    | U=1 (Any R/W/X)    | SUM=0    | —        | No      | No      | No   |
-| S    | U=1, R=1, W=1, X=0 | SUM=1    | —        | yes     | yes     | No   |
-| S    | U=1, R=0, W=0, X=1 | SUM=1    | MXR=0    | No      | No      | No¹  |
-| S    | U=0, R=1, W=0, X=1 | —        | MXR=0    | yes     | No      | yes  |
-| S    | U=0, R=0, W=0, X=1 | —        | MXR=1    | yes     | No      | yes  |
-| M    | (Any Page)         | —        | —        | yes²    | yes²    | yes² |
-| M    | (Any Page)         | mstatus³ | mstatus³ | Match S | Match S | No   |
-
-**Architectural Rules & Pitfalls**
-
-1. The S-Mode Execution Trap: Notice row 7. Even if SUM=1, an attempt
-   by Supervisor mode to fetch an instruction from a User page (U=1)
-   will always trigger an instruction page fault. This is a hardcoded
-   security feature to prevent "ret2usr" exploits where a kernel is
-   tricked into running malicious user-space code.
-
-2. M-Mode and the MPRV Exception: Normally, if the Modify Privilege
-   bit is unset (mstatus.MPRV=0), Machine mode bypasses the MMU
-   entirely.
-
-2. However, if the Modify Privilege bit is set (mstatus.MPRV=1), the
-   MMU steps in only for data loads and stores (not fetches). It
-   translates those accesses using the privilege level specified in
-   mstatus.MPP (usually S or U mode), meaning SUM and MXR suddenly
-   apply to M-mode data operations too. The `Read` and `Store`
-   operations match S-mode semantics.
 
 
 ### Kernel memory map
@@ -462,150 +292,4 @@ And the S-mode equivalents (for completeness):
 | 0x8000_0000    fw_boot.bin     |
 +--------------------------------+
 
-```
-
-### The Boot Sequence
-
-1. **Prepare the DTB (Device Tree Blob):** This is a small data
-   structure that tells Linux "The UART is at 0x10000000 and I have
-   512MB of RAM."
-2. **Load the Image:** Put the Linux `Image` binary at `0x80200000`.
-3. **Set Initial Registers:**
-   * `a0 = 0` (The Hart ID)
-   * `a1 = 0x82000000` (Address of the DTB)
-   * `PC = 0x80200000`
-
-
-# Device Tree Blob (DTB)
-
-The canonical documentation for the Device Tree Blob (DTB) format is
-the **Devicetree Specification**, currently maintained by
-[Devicetree.org](https://www.devicetree.org). Specifically, **Chapter
-5: Flattened Devicetree (DTB) Format** contains the exact memory
-layout.
-
-The DTB (also known as a Flattened Devicetree or FDT) is a linear,
-pointerless data structure. When loaded into memory, it must follow a
-specific sequence of blocks.
-
-### 1. High-Level Memory Layout
-
-A DTB file consists of four main sections, which must appear in the
-following order:
-
-1. **fdt_header**: A fixed-size header containing magic numbers and offsets.
-2. **memory reservation block**: A list of memory areas the kernel must not use.
-3. **structure block**: The actual tree (nodes and properties) encoded as a series of tokens.
-4. **strings block**: All property names are stored here as null-terminated strings to save space.
-
----
-
-### 2. The Header (`fdt_header`)
-
-The header is the "entry point" for any parser. **Note:** All fields
-are 32-bit integers stored in **Big-Endian** format.
-
-| Field           | Offset | Description                                    |
-| ---             | ---    | ---                                            |
-| magic           | 0x00   | The constant 0xd00dfeed                        |
-| totalsize       | 0x04   | Total size of the DTB in bytes                 |
-| off_dt_struct   | 0x08   | Offset from header to Structure Block          |
-| off_dt_strings  | 0x0C   | Offset from header to Strings Block.           |
-| off_mem_rsvmap  | 0x10   | Offset from header to Memory Reservation Block |
-| version         | 0x14   | Format version (standard is `17`)              |
-| last_comp_ver   | 0x18   | Last compatible version (usually `16`)         |
-| boot_cpuid_phys | 0x1C   | Physical ID of the system's boot CPU           |
-| size_dt_strings | 0x20   | Length of the Strings Block in bytes           |
-| size_dt_struct  | 0x24   | Length of the Structure Block in bytes         |
-
----
-
-### 3. Structure Block (The "Tree")
-
-The tree is parsed as a stream of tokens. Each token is a 32-bit
-Big-Endian integer:
-
-* **`FDT_BEGIN_NODE` (0x00000001)**: Followed by the null-terminated name of the node (padded to 4-byte alignment).
-* **`FDT_END_NODE` (0x00000002)**: No data follows.
-* **`FDT_PROP` (0x00000003)**: Followed by:
-1. `uint32 len`: Length of the property's value.
-2. `uint32 nameoff`: Offset within the **Strings Block** for the property name.
-3. `data`: The actual value bytes (padded to 4-byte alignment).
-
-
-* **`FDT_NOP` (0x00000004)**: Ignored.
-* **`FDT_END` (0x00000009)**: Ends the entire structure block.
-
-### 4. Implementation Notes
-
-The emulator is targeting RISC-V, note:
-
-1. **Endianness**: emulator's internal memory is Little-Endian (RISC-V
-   standard), but the DTB is **strictly Big-Endian**. Use
-   `binary.BigEndian` to read the header and tokens.
-2. **Alignment**: Every section and property value must be aligned to
-   a **4-byte boundary**. If a node name is "uart", it takes 4 bytes +
-   1 null terminator = 5 bytes; you must skip 3 padding bytes before
-   the next token.
-3. **Passing to Linux**: The RISC-V ABI requires qthe **physical
-   address** of the DTB header to be stored into register **`a1`**.
-
-> **Canonical URL**: You can find the latest stable version (v0.4) of the full specification here: [https://www.devicetree.org/specifications/](https://www.devicetree.org/specifications/)
-
-# Building Linux Kernel
-
-``` shell
-cd ephemelier/riscv
-make run
-cd own/linux-7.0.11
-```
-
-## Configure
-
-``` shell
-make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- defconfig
-```
-
-We could also tune the kernel parameters with:
-
-``` shell
-make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- menuconfig
-```
-
-## Build
-
-``` shell
-make -j$(nproc) ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu-
-```
-
-## Debug
-
-``` shell
-mknod /dev/vda b 254 0
-mount -t ext2 /dev/vda /mnt
-```
-
-## Debugging ext2 images with Docker
-
-``` shell
-run-image:
-	docker run --privileged \
-	-v $(CURDIR):/workspace \
-	-v $(CURDIR)/ubuntu-26.04-preinstalled-server-riscv64.img:/image.ext2 \
-	-it riscv-toolchain
-```
-
-Inside Docker shell:
-
-``` shell
-$ kpartx -av /image.ext2
-add map loop0p1 (253:0): 0 9209823 linear 7:0 227328
-add map loop0p12 (253:1): 0 8192 linear 7:0 219136
-add map loop0p15 (253:2): 0 217088 linear 7:0 2048
-$ mkdir -p /mnt/ext2_inside
-$ mount /dev/mapper/loop0p1 /mnt/ext2_inside/
-$ file /mnt/ext2_inside/sbin/init
-/mnt/ext2_inside/sbin/init: symbolic link to ../lib/systemd/systemd
-$ file /mnt/ext2_inside/lib/systemd/systemd
-/mnt/ext2_inside/lib/systemd/systemd: ELF 64-bit LSB pie executable, UCB RISC-V, RVC, double-float ABI, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-riscv64-lp64d.so.1, BuildID[sha1]=16822c25a108c2b12ac2409154f34deaa82bfc1c, for GNU/Linux 4.15.0, stripped
 ```
