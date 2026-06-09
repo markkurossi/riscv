@@ -131,9 +131,9 @@ func (cpu *CPU) Run() error {
 						isa.CauseEcallVS, isa.CauseEcallM:
 
 					default:
-						fmt.Printf("CPU: trap %v\n", trap)
+						log.Printf("CPU: trap %v\n", trap)
 						if trap.Err != nil {
-							fmt.Printf("  caused by %v\n", trap.Err)
+							log.Printf("  caused by %v\n", trap.Err)
 						}
 						cpu.Dump(trap.PC)
 						cpu.disassembleKernel(trap.PC)
@@ -1689,7 +1689,7 @@ func (cpu *CPU) FuncName(pc uint64) (*SymEntry, uint64) {
 		// Kernel is loaded at 0x80200000 physical = 0xffffffff80000000 virtual.
 		// delta = 0xffffffff80000000 - 0x80200000 = 0xffffffff7fe00000
 		mapped = pc - 0x200000 + 0xffffffff00000000
-		fmt.Printf(" - mapped=%x\n", mapped)
+		log.Printf(" - mapped=%x\n", mapped)
 	}
 	entry := cpu.Symtab.Resolve(mapped)
 	if entry == nil {
