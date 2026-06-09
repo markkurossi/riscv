@@ -9,7 +9,9 @@ package cpu
 //lint:file-ignore ST1003 to match the CSR naming conventions.
 
 import (
+	"crypto/rand"
 	"fmt"
+	"log"
 
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/mmu"
@@ -39,6 +41,7 @@ const (
 	CsrVxsat         = 0x009
 	CsrVxrm          = 0x00a
 	CsrVcsr          = 0x00f
+	CsrSeed          = 0x015
 	CsrSstatus       = 0x100
 	CsrSie           = 0x104
 	CsrStvec         = 0x105
@@ -552,6 +555,16 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 	case CsrVlenb:
 		v = uint64(cpu.vpu.VLEN / 8)
 
+	case CsrSeed:
+		var buf [2]byte
+		_, err := rand.Read(buf[:])
+		if err != nil {
+			return 0, err
+		}
+		v = uint64(0x80000000)
+		v |= uint64(buf[0]) << 8
+		v |= uint64(buf[1])
+
 	default:
 		if csr >= 0xb03 && csr <= 0xb1f {
 			// Mhpmcounters
@@ -559,6 +572,11 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 			v = cpu.CSR[csr]
 		}
 	}
+
+	if false {
+		log.Printf("GetCSR(%v): %v", csr, v)
+	}
+
 	return v, nil
 }
 
