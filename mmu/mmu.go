@@ -97,7 +97,8 @@ func (satp Satp) PPN() uint64 {
 }
 
 func (satp Satp) String() string {
-	return fmt.Sprintf("mode=%v, ppn=%x", satp.Mode(), satp.PPN())
+	return fmt.Sprintf("mode=%v, asid=%x, ppn=%x",
+		satp.Mode(), satp.ASID(), satp.PPN())
 }
 
 // PTE defines the page table entry.
