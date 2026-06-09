@@ -347,3 +347,19 @@ $ make qemu-riscv64_smode_defconfig
 #
 $ make -j$(nproc)
 ```
+
+# NetBSD
+
+``` shell
+$ ./goemu netbsd.goemu
+<RET>
+fatload virtio 0:1 0x84000000 /EFI/BOOT/BOOTRISCV64.EFI
+setenv bootargs "boot hd0a:netbsd -v -s consdev=com0 speed=115200"
+bootefi 0x84000000 0x9eeae220
+```
+
+debugging in u-boot:
+
+``` shell
+=> part list virtio 0
+```
