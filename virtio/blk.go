@@ -528,9 +528,21 @@ func (vio *Blk) Store32(paddr, v uint64) error {
 	case 0x070: // Status
 		if v == 0 {
 			// Guest requested a device reset
-			vio.status = 0
+			vio.deviceFeaturesSel = 0
+			vio.driverFeaturesSel = 0
 			vio.driverFeatures[0] = 0
 			vio.driverFeatures[1] = 0
+			vio.status = 0
+			vio.queueSel = 0
+
+			for idx := range vio.queues {
+				vio.queues[idx].Num = 0
+				vio.queues[idx].Ready = 0
+				vio.queues[idx].DescPhys = 0
+				vio.queues[idx].AvailPhys = 0
+				vio.queues[idx].UsedPhys = 0
+				vio.queues[idx].lastAvailIdx = 0
+			}
 			return nil
 		}
 
