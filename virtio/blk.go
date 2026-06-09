@@ -66,6 +66,7 @@ type Blk struct {
 	IRQ      uint32
 	Mem      *memory.Memory
 	File     *os.File
+	Readonly bool
 	fileInfo os.FileInfo
 	id       []byte
 
@@ -176,21 +177,25 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 		}
 
 	case VIRTIO_BLK_T_OUT:
-		buf, err := vq.Blk.guestData(addr, uint64(data.Len))
-		if err != nil {
-			// XXX set status to err.
-			vq.Blk.logf("guestData(%v,%v) failed: %v",
-				addr, data.Len, err)
-			return err
-		}
-		n, err := vq.Blk.File.WriteAt(buf, fileOffset)
-		if err != nil {
-			vq.Blk.logf("failed to write to host file at offset %d: %v",
-				fileOffset, err)
-			opStatus = VIRTIO_BLK_S_IOERR
+		if vq.Blk.Readonly {
+			opStatus = VIRTIO_BLK_S_UNSUPP
 		} else {
-			vq.Blk.debugf("wrote %d/%d bytes from guest RAM addr %x",
-				n, data.Len, addr)
+			buf, err := vq.Blk.guestData(addr, uint64(data.Len))
+			if err != nil {
+				// XXX set status to err.
+				vq.Blk.logf("guestData(%v,%v) failed: %v",
+					addr, data.Len, err)
+				return err
+			}
+			n, err := vq.Blk.File.WriteAt(buf, fileOffset)
+			if err != nil {
+				vq.Blk.logf("failed to write to host file at offset %d: %v",
+					fileOffset, err)
+				opStatus = VIRTIO_BLK_S_IOERR
+			} else {
+				vq.Blk.debugf("wrote %d/%d bytes from guest RAM addr %x",
+					n, data.Len, addr)
+			}
 		}
 
 	case VIRTIO_BLK_T_GET_ID:

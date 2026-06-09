@@ -125,6 +125,7 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig) error {
 				deviceID = fmt.Sprintf("goemu-disk-%d", idx)
 			}
 			dev.blk.SetID(deviceID)
+			dev.blk.Readonly = drive.Readonly
 
 			virtioROM = dev.blk.End
 			virtioIRQ++
@@ -501,7 +502,7 @@ func makeDTB(initrdSize uint64, cfg *SystemConfig) []byte {
 		fdt.PropTabU32("linux,initrd-end", &tab[0], 2)
 	}
 
-	fdt.PropStr("stdout-path", "/uart@10000000:115200n8")
+	fdt.PropStr("stdout-path", "/soc/uart@10000000:115200n8")
 
 	fdt.EndNode() // chosen
 
