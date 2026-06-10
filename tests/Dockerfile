@@ -44,3 +44,4 @@ RUN apt-get install -y device-tree-compiler
 RUN apt-get install -y kpartx
 RUN apt-get update && apt-get install -y libssl-dev
 RUN apt-get update && apt-get install -y libgnutls28-dev uuid-dev
+RUN apt-get install -y zlib1g-dev
