@@ -1,14 +1,13 @@
 {
   "bios":    "opensbi/fw_jump.bin",
   "kernel":  "u-boot-2026.04/u-boot.bin",
-  "_kernel":  "netbsd/netbsd",
-  "_append":  "console=com0 root=sd0a",
-  "append":  "root=dk1",
+  "append":  "console=ttyS0,115200",
   "drives": [
     {
       "id":     "hd0",
       "format": "raw",
-      "file":   "netbsd/riscv64.img"
+      "_file":  "freebsd/FreeBSD-15.1-RC3-riscv-riscv64-memstick.img",
+      "file":   "freebsd/FreeBSD-15.1-RC3-riscv-riscv64-GENERICSD.img"
     }
   ],
   "devices": [
