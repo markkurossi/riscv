@@ -117,113 +117,122 @@ type VirtQueue struct {
 func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 	vq.Blk.debugf("chain: idx=%v", idx)
 
-	hdr, err := vq.loadDesc(idx)
+	blk, err := vq.loadDesc(idx)
 	if err != nil {
 		return err
 	}
-	if hdr.Len != 16 || hdr.Flags&VIRTQ_DESC_F_NEXT == 0 {
-		return fmt.Errorf("invalid blk header: %v", hdr)
+	if blk.Len != 16 || blk.Flags&VIRTQ_DESC_F_NEXT == 0 {
+		return fmt.Errorf("invalid blk header: %v", blk)
 	}
-	t, err := vq.Blk.readGuestUint32(hdr.Addr)
+	t, err := vq.Blk.readGuestUint32(blk.Addr)
 	if err != nil {
 		return err
 	}
-	sector, err := vq.Blk.readGuestUint64(hdr.Addr + 8)
+	sector, err := vq.Blk.readGuestUint64(blk.Addr + 8)
 	if err != nil {
 		return err
 	}
-
-	data, err := vq.loadDesc(hdr.Next)
-	if err != nil {
-		return err
-	}
-	if data.Flags&VIRTQ_DESC_F_NEXT == 0 {
-		return fmt.Errorf("invalid blk data: %v", data)
-	}
-
-	status, err := vq.loadDesc(data.Next)
-	if err != nil {
-		return err
-	}
-	if status.Len != 1 {
-		return fmt.Errorf("invalid blk status: %v", status)
-	}
+	vq.Blk.debugf("req header : %v\n", blk)
+	vq.Blk.debugf(" - type    : %v\n", blkTypeString(t))
+	vq.Blk.debugf(" - sector  : %v\n", sector)
 
 	fileOffset := int64(sector) * 512
-	addr := data.Addr
-
-	// Handle request type.
 
 	var opStatus uint8 = VIRTIO_BLK_S_OK
-	transferred := data.Len
+	var statusSeen bool
+	var transferred uint32
 
-	switch t {
-	case VIRTIO_BLK_T_IN:
-		buf, err := vq.Blk.guestData(addr, uint64(data.Len))
+	// Process data and status blocks.
+	for blk.Flags&VIRTQ_DESC_F_NEXT != 0 {
+		// Read the next block.
+		blk, err = vq.loadDesc(blk.Next)
 		if err != nil {
-			// XXX set status to err.
-			vq.Blk.logf("guestData(%v,%v) failed: %v",
-				addr, data.Len, err)
 			return err
 		}
-		n, err := vq.Blk.File.ReadAt(buf, fileOffset)
-		if err != nil {
-			vq.Blk.logf("failed to read from host file at offset %d: %v",
-				fileOffset, err)
-			opStatus = VIRTIO_BLK_S_IOERR
-		} else {
-			vq.Blk.debugf("read %d/%d bytes into guest RAM addr %x",
-				n, data.Len, addr)
-		}
+		if blk.Flags&VIRTQ_DESC_F_NEXT != 0 {
+			// Data block, handle request type.
+			addr := blk.Addr
 
-	case VIRTIO_BLK_T_OUT:
-		if vq.Blk.Readonly {
-			opStatus = VIRTIO_BLK_S_UNSUPP
+			switch t {
+			case VIRTIO_BLK_T_IN:
+				buf, err := vq.Blk.guestData(addr, uint64(blk.Len))
+				if err != nil {
+					vq.Blk.logf("guestData(%v,%v) failed: %v",
+						addr, blk.Len, err)
+					opStatus = VIRTIO_BLK_S_IOERR
+					continue
+				}
+				n, err := vq.Blk.File.ReadAt(buf, fileOffset)
+				if err != nil {
+					vq.Blk.logf("read failed from host file offset %d: %v",
+						fileOffset, err)
+					opStatus = VIRTIO_BLK_S_IOERR
+				} else {
+					vq.Blk.debugf("read %d/%d bytes into RAM addr %x",
+						n, blk.Len, addr)
+				}
+				fileOffset += int64(n)
+				transferred += uint32(n)
+
+			case VIRTIO_BLK_T_OUT:
+				if vq.Blk.Readonly {
+					opStatus = VIRTIO_BLK_S_UNSUPP
+				} else {
+					buf, err := vq.Blk.guestData(addr, uint64(blk.Len))
+					if err != nil {
+						vq.Blk.logf("guestData(%v,%v) failed: %v",
+							addr, blk.Len, err)
+						opStatus = VIRTIO_BLK_S_IOERR
+						continue
+					}
+					n, err := vq.Blk.File.WriteAt(buf, fileOffset)
+					if err != nil {
+						vq.Blk.logf("write failed to host file offset %d: %v",
+							fileOffset, err)
+						opStatus = VIRTIO_BLK_S_IOERR
+					} else {
+						vq.Blk.debugf("wrote %d/%d bytes from RAM addr %x",
+							n, blk.Len, addr)
+					}
+					fileOffset += int64(n)
+					transferred += uint32(n)
+				}
+
+			case VIRTIO_BLK_T_GET_ID:
+				buf, err := vq.Blk.guestData(addr, uint64(blk.Len))
+				if err != nil {
+					vq.Blk.logf("guestData(%v,%v) failed: %v",
+						addr, blk.Len, err)
+					opStatus = VIRTIO_BLK_S_IOERR
+					continue
+				}
+				transferred += uint32(copy(buf, vq.Blk.id))
+				vq.Blk.debugf("wrote %d/%d bytes from RAM addr %x",
+					transferred, blk.Len, addr)
+
+			default:
+				vq.Blk.logf("type %v not supported", blkTypeString(t))
+				opStatus = VIRTIO_BLK_S_UNSUPP
+			}
+
 		} else {
-			buf, err := vq.Blk.guestData(addr, uint64(data.Len))
+			// Status block.
+			statusSeen = true
+			if blk.Len != 1 {
+				return fmt.Errorf("invalid blk status: %v", blk)
+			}
+			err = vq.Blk.writeGuestUint8(blk.Addr, opStatus)
 			if err != nil {
-				// XXX set status to err.
-				vq.Blk.logf("guestData(%v,%v) failed: %v",
-					addr, data.Len, err)
 				return err
 			}
-			n, err := vq.Blk.File.WriteAt(buf, fileOffset)
-			if err != nil {
-				vq.Blk.logf("failed to write to host file at offset %d: %v",
-					fileOffset, err)
-				opStatus = VIRTIO_BLK_S_IOERR
-			} else {
-				vq.Blk.debugf("wrote %d/%d bytes from guest RAM addr %x",
-					n, data.Len, addr)
-			}
 		}
-
-	case VIRTIO_BLK_T_GET_ID:
-		buf, err := vq.Blk.guestData(addr, uint64(data.Len))
-		if err != nil {
-			// XXX set status to err.
-			vq.Blk.logf("guestData(%v,%v) failed: %v",
-				addr, data.Len, err)
-			return err
-		}
-		transferred = uint32(copy(buf, vq.Blk.id))
-		vq.Blk.debugf("wrote %d/%d bytes from guest RAM addr %x",
-			transferred, data.Len, addr)
-
-	default:
-		vq.Blk.logf("type %v not supported", blkTypeString(t))
-		opStatus = VIRTIO_BLK_S_UNSUPP
+	}
+	if !statusSeen {
+		return fmt.Errorf("invalid chain: no status block")
 	}
 
-	err = vq.Blk.writeGuestUint8(status.Addr, opStatus)
-	if err != nil {
-		return err
-	}
-	vq.Blk.debugf("req header: %v\n", hdr)
-	vq.Blk.debugf(" - type   : %v\n", blkTypeString(t))
-	vq.Blk.debugf(" - sector : %v\n", sector)
-	vq.Blk.debugf("req data  : %v\n", data)
-	vq.Blk.debugf("req status: %v\n", status)
+	vq.Blk.debugf("transferred: %v\n", transferred)
+	vq.Blk.debugf("req status : %v\n", opStatus)
 
 	// Update used ring.
 	err = vq.updateUsedRing(idx, transferred)
@@ -346,6 +355,23 @@ const (
 	VIRTIO_BLK_S_UNSUPP = 2
 )
 
+const (
+	VIRTIO_BLK_F_SIZE_MAX     = 1
+	VIRTIO_BLK_F_SEG_MAX      = 2
+	VIRTIO_BLK_F_GEOMETRY     = 4
+	VIRTIO_BLK_F_RO           = 5
+	VIRTIO_BLK_F_BLK_SIZE     = 6
+	VIRTIO_BLK_F_FLUSH        = 9
+	VIRTIO_BLK_F_TOPOLOGY     = 10
+	VIRTIO_BLK_F_CONFIG_WCE   = 11
+	VIRTIO_BLK_F_MQ           = 12
+	VIRTIO_BLK_F_DISCARD      = 13
+	VIRTIO_BLK_F_WRITE_ZEROES = 14
+	VIRTIO_BLK_F_LIFETIME     = 15
+	VIRTIO_BLK_F_SECURE_ERASE = 16
+	VIRTIO_BLK_F_ZONED        = 17
+)
+
 func (vio *Blk) logf(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	log.Print("virtio-blk: " + msg)
@@ -396,7 +422,7 @@ func (vio *Blk) Load32(paddr uint64) (uint32, error) {
 		case 0:
 			// Bits 0-31: Block-specific features (e.g., RO, Segments, etc.)
 			// Return 0 for now if you want a basic default disk
-			return 0, nil
+			return 1 << VIRTIO_BLK_F_SEG_MAX, nil
 		case 1:
 			// Bits 32-63: Generic VirtIO features
 			// Bit 32 is VIRTIO_F_VERSION_1 (1 << 0 of this upper page)
@@ -423,11 +449,18 @@ func (vio *Blk) Load32(paddr uint64) (uint32, error) {
 			statusString(vio.status), vio.status)
 		return vio.status, nil
 
+		// 5.2.4 Device configuration layout at offset 0x100.
+
 	case 0x100: // Disk size in sectors, low
 		return uint32(vio.size()), nil
 
 	case 0x104: // Disk size in sectors, high
 		return uint32(vio.size() >> 32), nil
+
+		// 0x108 size_max
+
+	case 0x10c:
+		return uint32(256), nil
 	}
 
 	return 0, nil
