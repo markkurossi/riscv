@@ -51,8 +51,9 @@ type CPU struct {
 
 	vpu *VPU
 
-	Reservation    uint64 // The address currently reserved
-	HasReservation bool   // Whether the reservation is active
+	// A (Atomic) Extension - reserved memory access.
+	Reservation      uint64
+	ReservationValid bool
 
 	decodeCache [4096]struct {
 		Raw   uint32
@@ -69,7 +70,9 @@ type CPU struct {
 	StartTime time.Time
 	Runtime   time.Duration
 
-	MMU *mmu.MMU
+	MMU         *mmu.MMU
+	codePagenum uint64
+	codePage    []byte
 
 	TrapHandler TrapHandler
 	Symtab      Symtab
@@ -163,9 +166,6 @@ func (cpu *CPU) loop() error {
 		return cpu.Trap(isa.CauseInstAddrMisaligned, cpu.PC, nil)
 	}
 
-	var codePagenum uint64
-	var codePage []byte
-
 dispatch:
 	for {
 		var instr isa.Instr
@@ -236,26 +236,26 @@ dispatch:
 			}
 		}
 
-		if memory.Page(cpu.PC) != codePagenum {
+		if memory.Page(cpu.PC) != cpu.codePagenum {
 			paddr, err := cpu.MMU.Map(cpu.PC, mmu.AccessExec)
 			if err != nil {
 				return err
 			}
-			codePage, err = cpu.MMU.Mem.Page(memory.Page(paddr))
+			cpu.codePage, err = cpu.MMU.Mem.Page(memory.Page(paddr))
 			if err != nil {
 				return cpu.Trap(isa.CauseInstAccessFault, paddr, err)
 			}
-			codePagenum = memory.Page(cpu.PC)
+			cpu.codePagenum = memory.Page(cpu.PC)
 		}
 		ofs := memory.PageOffset(cpu.PC)
-		raw := uint32(codePage[ofs]) | uint32(codePage[ofs+1])<<8
+		raw := uint32(cpu.codePage[ofs]) | uint32(cpu.codePage[ofs+1])<<8
 
 		if raw&0b11 == 0b11 {
 			// 32-bit instruction.
 			if cpu.PC>>12 == (cpu.PC+2)>>12 {
 				// Same page.
-				raw |= uint32(codePage[ofs+2]) << 16
-				raw |= uint32(codePage[ofs+3]) << 24
+				raw |= uint32(cpu.codePage[ofs+2]) << 16
+				raw |= uint32(cpu.codePage[ofs+3]) << 24
 			} else {
 				// 32-bit instruction crosses page boundary.
 				paddr, err := cpu.MMU.Map(cpu.PC+2, mmu.AccessExec)
@@ -443,6 +443,7 @@ dispatch:
 			cpu.SetMode(cpu.mstatus.SPP())
 			cpu.mstatus.SetSPP(isa.ModeU)
 			cpu.PC = cpu.CSR[CsrSepc]
+			cpu.ReservationValid = false
 			continue
 
 		case isa.Mret:
@@ -456,6 +457,7 @@ dispatch:
 			cpu.SetMode(cpu.mstatus.MPP())
 			cpu.mstatus.SetMPP(isa.ModeU)
 			cpu.PC = cpu.CSR[CsrMepc]
+			cpu.ReservationValid = false
 			continue
 
 		case isa.Ecall:
@@ -546,6 +548,7 @@ dispatch:
 			if err := cpu.MMU.Store64(addr, v); err != nil {
 				return err
 			}
+			cpu.ReservationValid = false
 
 		case isa.Fsw:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
@@ -553,11 +556,14 @@ dispatch:
 			if err := cpu.MMU.Store32(addr, uint64(v)); err != nil {
 				return err
 			}
+			cpu.ReservationValid = false
 
 		case isa.Fence:
 
 		case isa.SfenceVMA:
 			cpu.MMU.FlushTLB()
+			cpu.codePagenum = 0
+			cpu.ReservationValid = false
 
 		case isa.FeqS:
 			if float32(cpu.F[instr.Rs1]) == float32(cpu.F[instr.Rs2]) {
@@ -719,7 +725,7 @@ dispatch:
 			if err := cpu.MMU.Store8(addr, cpu.X[instr.Rs2]); err != nil {
 				return err
 			}
-			cpu.HasReservation = false
+			cpu.ReservationValid = false
 
 		case isa.Sd:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
@@ -729,32 +735,34 @@ dispatch:
 			tlb := &cpu.MMU.TLB[vpn&0xfff]
 
 			if cpu.mode <= isa.ModeS && tlb.VPN == vpn &&
-				tlb.Flags.Writable() && memory.Avail(addr, 8) {
+				tlb.Flags.Writable() && tlb.Flags.Dirty() &&
+				memory.Avail(addr, 8) {
 				// Fast path: TLB hit.
 				paddr := tlb.Page | (addr & uint64(tlb.OffsetMask))
 				bo.PutUint64(cpu.MMU.Mem.RAM[cpu.MMU.Mem.Offset(paddr):],
 					cpu.X[instr.Rs2])
 			} else {
 				// Slow path fallback.
+				tlb.Clear()
 				if err := cpu.MMU.Store64(addr, cpu.X[instr.Rs2]); err != nil {
 					return err
 				}
 			}
-			cpu.HasReservation = false
+			cpu.ReservationValid = false
 
 		case isa.Sh:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
 			if err := cpu.MMU.Store16(addr, cpu.X[instr.Rs2]); err != nil {
 				return err
 			}
-			cpu.HasReservation = false
+			cpu.ReservationValid = false
 
 		case isa.Sw:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
 			if err := cpu.MMU.Store32(addr, cpu.X[instr.Rs2]); err != nil {
 				return err
 			}
-			cpu.HasReservation = false
+			cpu.ReservationValid = false
 
 		case isa.Sll:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] << (cpu.X[instr.Rs2] & 0b111111)
@@ -1090,9 +1098,9 @@ dispatch:
 			}
 			cpu.X[instr.Rd] = uint64(int64(int32(v)))
 
-			// Register the reservation
+			// Register the reservation.
 			cpu.Reservation = addr
-			cpu.HasReservation = true
+			cpu.ReservationValid = true
 
 		case isa.LrD:
 			addr := cpu.X[instr.Rs1]
@@ -1104,38 +1112,38 @@ dispatch:
 
 			// Register the reservation
 			cpu.Reservation = addr
-			cpu.HasReservation = true
+			cpu.ReservationValid = true
 
 		case isa.ScW:
 			addr := cpu.X[instr.Rs1]
 
-			// SC succeeds only if the reservation matches
-			if cpu.HasReservation && cpu.Reservation == addr {
+			// SC succeeds only if the reservation matches.
+			if cpu.ReservationValid && cpu.Reservation == addr {
 				err := cpu.MMU.Store32(addr, cpu.X[instr.Rs2])
 				if err != nil {
-					cpu.HasReservation = false
+					cpu.ReservationValid = false
 					return err
 				}
 				cpu.X[instr.Rd] = 0 // 0 = Success
 			} else {
 				cpu.X[instr.Rd] = 1 // 1 = Failure
 			}
-			cpu.HasReservation = false
+			cpu.ReservationValid = false
 
 		case isa.ScD:
 			addr := cpu.X[instr.Rs1]
 
-			if cpu.HasReservation && cpu.Reservation == addr {
+			if cpu.ReservationValid && cpu.Reservation == addr {
 				err := cpu.MMU.Store64(addr, cpu.X[instr.Rs2])
 				if err != nil {
-					cpu.HasReservation = false
+					cpu.ReservationValid = false
 					return err
 				}
 				cpu.X[instr.Rd] = 0
 			} else {
 				cpu.X[instr.Rd] = 1
 			}
-			cpu.HasReservation = false
+			cpu.ReservationValid = false
 
 			// Floating point extension.
 
@@ -1775,10 +1783,35 @@ func (cpu *CPU) trace(raw uint32, instr isa.Instr, msg string) {
 		line = fmt.Sprintf("%s:  %04x       %v", addr, raw, instr)
 	}
 	if len(msg) == 0 {
-		op, ok := isa.Operands[instr.Op]
-		if ok && len(op.Desc) > 0 && instr.Op != cpu.lastDescOp {
-			cpu.lastDescOp = instr.Op
-			msg = op.Desc
+		if true {
+			switch instr.Op {
+			case isa.Auipc:
+				msg = fmt.Sprintf("pc=%x, imm=%x", cpu.PC, instr.Imm)
+
+			case isa.Addi:
+				msg = fmt.Sprintf("%v=%x, imm=%x",
+					instr.Rs1, cpu.X[instr.Rs1], instr.Imm)
+
+			case isa.Jal:
+				msg = fmt.Sprintf("imm=%x", instr.Imm)
+
+			default:
+				if instr.Rs1 != 0 {
+					msg = fmt.Sprintf("%v=%x", instr.Rs1, cpu.X[instr.Rs1])
+				}
+				if instr.Rs2 != 0 {
+					if len(msg) > 0 {
+						msg += ","
+					}
+					msg += fmt.Sprintf("%v=%x", instr.Rs2, cpu.X[instr.Rs2])
+				}
+			}
+		} else {
+			op, ok := isa.Operands[instr.Op]
+			if ok && len(op.Desc) > 0 && instr.Op != cpu.lastDescOp {
+				cpu.lastDescOp = instr.Op
+				msg = op.Desc
+			}
 		}
 	}
 	if len(msg) > 0 {
