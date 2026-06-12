@@ -1233,7 +1233,7 @@ func (instr Instr) String() string {
 	if instr.Op != Invalid {
 		switch instr.Op {
 		case Add, And, Div, Divu, Divw, Mul, Mulhu, Mulw, Or, Rem, Remw,
-			Slt, Sll, Sltu, Srl, Sub, Subw, Xor, AddUw, Maxu,
+			Slt, Sll, Sllw, Sltu, Srl, Sub, Subw, Xor, AddUw, Maxu,
 			CzeroEqz, CzeroNez:
 			// GroupOP, GroupOP32
 			return fmt.Sprintf("%v %v,%v,%v",
