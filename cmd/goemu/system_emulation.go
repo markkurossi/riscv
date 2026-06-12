@@ -7,6 +7,8 @@
 package main
 
 import (
+	"bytes"
+	"debug/elf"
 	"fmt"
 	"os"
 	"time"
@@ -50,7 +52,8 @@ const (
 
 func systemEmulation(params kernel.Params, cfg *SystemConfig) error {
 
-	mem := memory.New(memory.RAMBase, 0x20000000)
+	var ramSize uint64 = 0x20000000
+	mem := memory.New(memory.RAMBase, ramSize)
 
 	core := cpu.New(mem)
 	core.Trace = params.CPUtrace
@@ -152,11 +155,10 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig) error {
 	}
 	copy(mem.RAM[mem.Offset(OfsBIOS):], data)
 
-	data, err = os.ReadFile(cfg.Kernel)
+	err = loadKernel(cfg.Kernel, mem)
 	if err != nil {
 		return fmt.Errorf("failed to read kernel: %w", err)
 	}
-	copy(mem.RAM[mem.Offset(OfsKernel):], data)
 
 	var initrdSize uint64
 	if len(cfg.Initrd) > 0 {
@@ -168,7 +170,7 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig) error {
 		copy(mem.RAM[mem.Offset(OfsInitrd):], data)
 	}
 
-	dtb := makeDTB(initrdSize, cfg)
+	dtb := makeDTB(initrdSize, mem, cfg)
 	copy(mem.RAM[mem.Offset(OfsDTB):], dtb)
 
 	core.X[isa.A0] = 0
@@ -187,7 +189,48 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig) error {
 	return nil
 }
 
-func makeDTB(initrdSize uint64, cfg *SystemConfig) []byte {
+func loadKernel(file string, mem *memory.Memory) error {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return err
+	}
+
+	// Is it ELF?
+	if len(data) < 4 || !bytes.Equal(data[:4], []byte{0x7f, 0x45, 0x4c, 0x46}) {
+		// Raw image.
+		copy(mem.RAM[mem.Offset(OfsKernel):], data)
+		return nil
+	}
+
+	// ELF kernel.
+	f, err := elf.NewFile(bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	fmt.Printf("ELF: entry=%x\n", f.Entry)
+
+	for _, prog := range f.Progs {
+		switch prog.Type {
+		case elf.PT_LOAD:
+			fmt.Printf("ELF: loading %v bytes to %x\n", prog.Memsz, prog.Paddr)
+			if !mem.Contains(prog.Paddr) ||
+				!mem.Contains(prog.Paddr+prog.Memsz-1) {
+				return fmt.Errorf("prog out of range: %x...%x",
+					prog.Paddr, prog.Paddr+prog.Memsz)
+			}
+			n, err := prog.ReadAt(mem.RAM[mem.Offset(prog.Paddr):], 0)
+			if n == 0 && err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func makeDTB(initrdSize uint64, mem *memory.Memory, cfg *SystemConfig) []byte {
 	// Initialize FDT buffer
 	buf := make([]byte, 65536)
 	fdt := gofdt.NewFDT(buf)
@@ -213,7 +256,7 @@ func makeDTB(initrdSize uint64, cfg *SystemConfig) []byte {
 
 	fdt.BeginNode("cpus")
 
-	fdt.PropU32("#address-cells", 1)
+	fdt.PropU32("#address-cells", 2)
 	fdt.PropU32("#size-cells", 0)
 	fdt.PropU32("timebase-frequency", 100000000)
 
@@ -226,7 +269,11 @@ func makeDTB(initrdSize uint64, cfg *SystemConfig) []byte {
 	fdt.PropStr("device_type", "cpu")
 	fdt.PropStr("status", "okay")
 
-	fdt.PropU32("reg", 0)
+	regData := [4]uint32{
+		0x00000000,
+		0x00000000,
+	}
+	fdt.PropTabU32("reg", &regData[0], 2)
 
 	// The standard compatible string for the CPU node
 	fdt.PropStr("compatible", "riscv")
@@ -271,16 +318,17 @@ func makeDTB(initrdSize uint64, cfg *SystemConfig) []byte {
 	// RAM
 	// ---------------------------------------------------------------------
 
-	fdt.BeginNodeNum("memory", memory.RAMBase)
+	fdt.BeginNodeNum("memory", mem.RAMBase)
 
 	fdt.PropStr("device_type", "memory")
+	ramSize := mem.RAMEnd - mem.RAMBase
 
 	tab = [8]uint32{
 		uint32(memory.RAMBase >> 32),
 		uint32(memory.RAMBase),
 
-		0x0,
-		0x20000000, // 512 MB
+		uint32(ramSize >> 32),
+		uint32(ramSize),
 	}
 
 	fdt.PropTabU32("reg", &tab[0], 4)
@@ -407,7 +455,7 @@ func makeDTB(initrdSize uint64, cfg *SystemConfig) []byte {
 	// "syscon" and "simple-mfd" force Linux to initialize it as a
 	// multi-function register array
 	fdt.PropTabStr("compatible", "syscon", "simple-mfd")
-	regData := [4]uint32{
+	regData = [4]uint32{
 		uint32(SysconBase >> 32), uint32(SysconBase),
 		uint32(SysconSize >> 32), uint32(SysconSize),
 	}
