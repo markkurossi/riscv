@@ -7,7 +7,7 @@
 package dev
 
 import (
-	"fmt"
+	"log"
 
 	"github.com/markkurossi/riscv/isa"
 )
@@ -65,10 +65,12 @@ func (plic *PLIC) Load8(paddr uint64) (uint8, error) {
 	if paddr < plic.Start {
 		return 0, plic.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 	}
+	log.Printf("PLIC: Load8(0x%x)", paddr)
 	return 0, nil
 }
 
 func (plic *PLIC) Load16(paddr uint64) (uint16, error) {
+	log.Printf("PLIC: Load16(0x%x)", paddr)
 	return 0, nil
 }
 
@@ -111,6 +113,7 @@ func (plic *PLIC) Load32(paddr uint64) (uint32, error) {
 }
 
 func (plic *PLIC) Load64(paddr uint64) (uint64, error) {
+	log.Printf("PLIC: Load64(0x%x)", paddr)
 	return 0, nil
 }
 
@@ -118,12 +121,12 @@ func (plic *PLIC) Store8(paddr, v uint64) error {
 	if paddr < plic.Start {
 		return plic.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 	}
-	fmt.Printf("PLIC: 0x%x = 0x%x\r\n", paddr, v)
+	log.Printf("PLIC: 0x%x = 0x%x", paddr, v)
 	return nil
 }
 
 func (plic *PLIC) Store16(paddr, v uint64) error {
-	fmt.Printf("PLIC: 0x%x = 0x%02x\r\n", paddr, v)
+	log.Printf("PLIC: 0x%x = 0x%02x", paddr, v)
 	return nil
 }
 
@@ -147,7 +150,8 @@ func (plic *PLIC) Store32(paddr uint64, val uint64) error {
 	case offset >= 0x002000 && offset <= 0x002084:
 		// Stride is 0x80 bytes per context for enable bits
 		contextID := (offset - 0x2000) / 0x80
-		if contextID < MaxContexts {
+		wordOffset := (offset - 0x2000) % 0x80
+		if contextID < MaxContexts && wordOffset == 0 {
 			plic.Enables[contextID] = uint32(val)
 		}
 
@@ -174,7 +178,7 @@ func (plic *PLIC) Store32(paddr uint64, val uint64) error {
 }
 
 func (plic *PLIC) Store64(paddr, v uint64) error {
-	fmt.Printf("PLIC: 0x%x = 0x%08x\r\n", paddr, v)
+	log.Printf("PLIC: 0x%x = 0x%08x", paddr, v)
 	return nil
 }
 

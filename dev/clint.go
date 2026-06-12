@@ -7,7 +7,7 @@
 package dev
 
 import (
-	"fmt"
+	"log"
 
 	"github.com/markkurossi/riscv/isa"
 )
@@ -85,11 +85,11 @@ func (clint *CLINT) load(paddr uint64) (uint64, error) {
 				v >>= 32
 			}
 		} else {
-			fmt.Printf("CLINT: load: unknown register %x\r\n", ofs)
+			log.Printf("CLINT: load: unknown register %x", ofs)
 		}
 	}
 
-	fmt.Printf("CLINT.load(%x): %x\r\n", ofs, v)
+	log.Printf("CLINT.load(%x): %x", ofs, v)
 
 	return v, nil
 }
@@ -100,7 +100,7 @@ func (clint *CLINT) store(paddr, v uint64) error {
 	}
 	ofs := paddr - clint.Start
 
-	fmt.Printf("CLINT.store(%x): %x\r\n", ofs, v)
+	log.Printf("CLINT.store(%x): %x", ofs, v)
 
 	switch ofs {
 	case ClintOfsMsip:
@@ -128,7 +128,7 @@ func (clint *CLINT) store(paddr, v uint64) error {
 			clint.Mtime = updateRegisterHalf(clint.Mtime, ofs, v)
 			clint.Tick(clint.Mtime)
 		} else {
-			fmt.Printf("CLINT: store: unknown register %x = %x\r\n", ofs, v)
+			log.Printf("CLINT: store: unknown register %x = %x", ofs, v)
 		}
 	}
 
