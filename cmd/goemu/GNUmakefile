@@ -33,3 +33,10 @@ run-image:
 run-ls:
 	@echo "The ls -l bin/busybox"
 	@./goemu -fsroot image image/bin/ls -l bin/busybox
+
+netbsd_kernel_dir := ../../tests/netbsd/src/sys/arch/riscv/compile/obj/GENERIC64
+
+get-netbsd:
+	ls -l $(netbsd_kernel_dir)/netbsd
+	cp  $(netbsd_kernel_dir)/netbsd netbsd/
+	cp  $(netbsd_kernel_dir)/netbsd.map netbsd/
