@@ -25,6 +25,8 @@ func (cpu *CPU) Trap(cause, tval uint64, err error) error {
 
 func (cpu *CPU) trap(epc, cause, tval uint64, err error) error {
 
+	cpu.ReservationValid = false
+
 	if cpu.TrapHandler != nil {
 		t := isa.NewTrap(epc, cause, tval, nil)
 		handled, err := cpu.TrapHandler(cpu, t)

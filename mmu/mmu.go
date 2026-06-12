@@ -189,6 +189,14 @@ func (flags PTEFlags) User() bool {
 	return flags&PteU != 0
 }
 
+func (flags PTEFlags) Accessed() bool {
+	return flags&PteA != 0
+}
+
+func (flags PTEFlags) Dirty() bool {
+	return flags&PteD != 0
+}
+
 func (flags PTEFlags) CanAccess(access int) (bool, uint64) {
 	if int(flags)&access == access {
 		return true, 0
@@ -220,6 +228,11 @@ func (pte PTE) String() string {
 
 func (pte PTE) Flags() PTEFlags {
 	return PTEFlags(pte & 0b11111111)
+}
+
+func (pte PTE) SetFlags(flags PTEFlags) {
+	pte &^= 0b11111111
+	pte |= PTE(flags)
 }
 
 func (pte PTE) Valid() bool {
@@ -290,6 +303,14 @@ type TLBEntry struct {
 	UserMode   bool
 }
 
+func (te *TLBEntry) Clear() {
+	te.VPN = 0
+	te.Page = 0
+	te.Flags = 0
+	te.OffsetMask = 0
+	te.UserMode = false
+}
+
 func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
 	if mmu.satp.Mode() == SatpModeBare {
 		return vaddr, nil
@@ -305,9 +326,17 @@ func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
 	if tlb.VPN == vpn && tlb.Flags&PteV != 0 &&
 		tlb.UserMode == (mode == isa.ModeU) {
 
-		if int(tlb.Flags)&access == access {
+		var dirtyOk bool
+		if access&AccessWrite != 0 {
+			dirtyOk = tlb.Flags.Dirty()
+		} else {
+			dirtyOk = true
+		}
+
+		if dirtyOk && int(tlb.Flags)&access == access {
 			return tlb.Page | (vaddr & uint64(tlb.OffsetMask)), nil
 		}
+		tlb.Clear()
 	}
 
 	addr, err := mmu.mapSlow(vaddr, vpn, access)
@@ -382,12 +411,13 @@ func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 			if mmu.Hart.Mode() == isa.ModeS && vaddr&(1<<63) == 0 &&
 				!mmu.Hart.Mstatus().SUM() {
 				if false {
+					// XXX Linux boots now with this kludge disabled.
 					fmt.Printf("%v: %x, pte=%v, level=%v, SUM=%v, MXR=%v\n",
 						mmu.Hart.Mode(), vaddr, pte, level,
 						mmu.Hart.Mstatus().SUM(),
 						mmu.Hart.Mstatus().MXR())
+					return vaddr, PteU | PteV, 0, nil
 				}
-				return vaddr, PteU | PteV, 0, nil
 			}
 
 			var err error
@@ -409,7 +439,7 @@ func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 				mmu.Hart.Trap(isa.CauseLoadPageFault, vaddr, err)
 		}
 		if pte.Leaf() {
-			return mmu.mapLeaf(pte, vaddr, level, access)
+			return mmu.mapLeaf(pte, pteAddr, vaddr, level, access)
 		}
 
 		// Walk to the next level.
@@ -445,7 +475,7 @@ func acWithDesc(ac *AccessContext, desc string) *AccessContext {
 	return ac
 }
 
-func (mmu *MMU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
+func (mmu *MMU) mapLeaf(pte PTE, pteAddr, vaddr uint64, level, access int) (
 	uint64, PTEFlags, int, error) {
 
 	var ac *AccessContext
@@ -467,6 +497,10 @@ func (mmu *MMU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 	if mxr && pte.Executable() {
 		// MXR overrides read constraints if executable is active
 		readable = true
+	}
+	if pte.Writable() && !readable {
+		// W=1, R=0
+		return 0, 0, 0, mmu.Hart.Trap(isa.CauseStorePageFault, vaddr, ac)
 	}
 
 	// Check permissions.
@@ -552,7 +586,22 @@ func (mmu *MMU) mapLeaf(pte PTE, vaddr uint64, level, access int) (
 		panic("invalid level")
 	}
 
-	return page, pte.Flags(), level, nil
+	var flagsModified bool
+	flags := pte.Flags()
+	if !flags.Accessed() {
+		flags |= PteA
+		flagsModified = true
+	}
+	if access&AccessWrite != 0 && !flags.Dirty() {
+		flags |= PteD
+		flagsModified = true
+	}
+	if flagsModified {
+		pte.SetFlags(flags)
+		bo.PutUint64(mmu.Mem.RAM[mmu.Mem.Offset(pteAddr):], uint64(pte))
+	}
+
+	return page, flags, level, nil
 }
 
 func (mmu *MMU) Load8(vaddr uint64) (uint8, error) {
