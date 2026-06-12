@@ -101,7 +101,7 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 	}
 	switch paddr - uart.Start {
 	case 0:
-		var v byte
+		var v byte = 0xff
 
 		uart.m.Lock()
 		if len(uart.input) > 0 {
