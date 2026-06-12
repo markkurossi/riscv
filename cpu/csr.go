@@ -17,6 +17,10 @@ import (
 	"github.com/markkurossi/riscv/mmu"
 )
 
+const (
+	debugCSR = false
+)
+
 type CSR int
 
 func (csr CSR) String() string {
@@ -87,6 +91,8 @@ const (
 	CsrMimpid        = 0xf13
 	CsrMhartid       = 0xf14
 	CsrScountinhibit = 0xfb0
+
+	CsrGoemuDebug = 0x7c0
 )
 
 var csrs = map[int]string{
@@ -573,7 +579,7 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 		}
 	}
 
-	if false {
+	if debugCSR {
 		log.Printf("GetCSR(%v): %v", csr, v)
 	}
 
@@ -585,6 +591,10 @@ func (cpu *CPU) SetCSR(csr CSR, v uint64) error {
 }
 
 func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
+
+	if debugCSR {
+		log.Printf("SetCSR(%v, %v)", csr, v)
+	}
 
 	if cpu.Mode() < csr.Privilege() && false {
 		return cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
@@ -633,6 +643,8 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 	case CsrSatp:
 		satp := mmu.Satp(v)
 		cpu.MMU.SetSatp(satp)
+		cpu.codePagenum = 0
+		cpu.codePage = nil
 
 		// Save Satp to CSR so that it can be queried.
 		cpu.CSR[csr] = v
@@ -641,6 +653,10 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 			cpu.traceFunc(cpu.PC)
 			cpu.tracef(raw, instr, "Satp: %v", satp)
 		}
+
+	case CsrGoemuDebug:
+		cpu.DebugTrace = v&0b1 != 0
+		cpu.CSR[csr] = v
 
 	default:
 		cpu.CSR[csr] = v
