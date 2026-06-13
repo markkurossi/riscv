@@ -94,11 +94,11 @@ type MMIO struct {
 	interruptStatus   uint32
 
 	queueSel uint32
-	queues   []VirtQueueNew
+	queues   []Queue
 }
 
 type Handler interface {
-	ExecuteDescriptorChain(vq *VirtQueueNew, idx uint16) (uint32, error)
+	ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error)
 }
 
 func (vio *MMIO) Device() *MMIO {
@@ -107,7 +107,7 @@ func (vio *MMIO) Device() *MMIO {
 
 func (vio *MMIO) InitQueues(count int) {
 	for range count {
-		vio.queues = append(vio.queues, VirtQueueNew{
+		vio.queues = append(vio.queues, Queue{
 			MMIO: vio,
 		})
 	}

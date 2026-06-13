@@ -6,11 +6,13 @@
 
 package virtio
 
+//lint:file-ignore ST1003 to match the C coding style for constants.
+
 import (
 	"fmt"
 )
 
-type VirtQueueNew struct {
+type Queue struct {
 	MMIO         *MMIO
 	Num          uint32 // Set by guest (num of descs allocated, <= NumMax)
 	Ready        uint32 // Guest writes 1 to activate
@@ -20,7 +22,7 @@ type VirtQueueNew struct {
 	lastAvailIdx uint16
 }
 
-func (vq *VirtQueueNew) loadDesc(idx uint16) (*VirtioDescNew, error) {
+func (vq *Queue) loadDesc(idx uint16) (*Desc, error) {
 	desc := vq.DescPhys + uint64(idx*16)
 
 	addr, err := vq.MMIO.readGuestUint64(desc)
@@ -40,7 +42,7 @@ func (vq *VirtQueueNew) loadDesc(idx uint16) (*VirtioDescNew, error) {
 		return nil, err
 	}
 
-	return &VirtioDescNew{
+	return &Desc{
 		Addr:  addr,
 		Len:   l,
 		Flags: flags,
@@ -54,14 +56,14 @@ const (
 	VIRTQ_DESC_F_INDIRECT = 4 // List of buffer descriptors.
 )
 
-type VirtioDescNew struct {
+type Desc struct {
 	Addr  uint64 // Guest Physical Address
 	Len   uint32 // Length of the buffer
 	Flags uint16 // VIRTIO_DESC_F_NEXT (1), VIRTIO_DESC_F_WRITE (2)
 	Next  uint16 // If flag NEXT is set, the index of the next descriptor
 }
 
-func (desc *VirtioDescNew) String() string {
+func (desc *Desc) String() string {
 	return fmt.Sprintf("Buf=%v@%x,Flags=%x,Next=%x",
 		desc.Len, desc.Addr, desc.Flags, desc.Next)
 }

@@ -58,9 +58,7 @@ func (blk *Blk) SetID(id string) {
 	blk.id = append(blk.id, 0)
 }
 
-func (blk *Blk) ExecuteDescriptorChain(vq *VirtQueueNew, idx uint16) (
-	uint32, error) {
-
+func (blk *Blk) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	blk.debugf("chain: idx=%v", idx)
 
 	req, err := vq.loadDesc(idx)
@@ -235,20 +233,20 @@ const (
 	VIRTIO_BLK_F_ZONED        = 17
 )
 
-func (vio *Blk) Load32(paddr uint64) (uint32, error) {
-	offset := paddr - vio.Start
+func (blk *Blk) Load32(paddr uint64) (uint32, error) {
+	offset := paddr - blk.Start
 
-	vio.debugf("Load32(%v)", mmioReg(offset))
+	blk.debugf("Load32(%v)", mmioReg(offset))
 
 	switch offset {
 
 	// 5.2.4 Device configuration layout at offset 0x100.
 
 	case 0x100: // Disk size in sectors, low
-		return uint32(vio.size()), nil
+		return uint32(blk.size()), nil
 
 	case 0x104: // Disk size in sectors, high
-		return uint32(vio.size() >> 32), nil
+		return uint32(blk.size() >> 32), nil
 
 	case 0x108: // size_max
 		return 4096, nil
@@ -258,19 +256,19 @@ func (vio *Blk) Load32(paddr uint64) (uint32, error) {
 
 	default:
 		// Standard MMIO registres
-		return vio.MMIO.Load32(paddr)
+		return blk.MMIO.Load32(paddr)
 	}
 }
 
-func (vio *Blk) size() uint64 {
+func (blk *Blk) size() uint64 {
 	var err error
 
-	if vio.fileInfo == nil {
-		vio.fileInfo, err = vio.File.Stat()
+	if blk.fileInfo == nil {
+		blk.fileInfo, err = blk.File.Stat()
 		if err != nil {
-			vio.logf("failed to stat image: %v", err)
+			blk.logf("failed to stat image: %v", err)
 			return 0
 		}
 	}
-	return uint64((vio.fileInfo.Size() + 511) / 512)
+	return uint64((blk.fileInfo.Size() + 511) / 512)
 }
