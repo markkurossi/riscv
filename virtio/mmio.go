@@ -47,6 +47,8 @@ var mmioRegs = map[uint64]string{
 	0x0fc: "ConfigGeneration",
 	0x100: "CapacityLow",
 	0x104: "CapacityHigh",
+	0x108: "SizeMax",
+	0x10c: "SeqMax",
 }
 
 func mmioReg(ofs uint64) string {

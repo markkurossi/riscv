@@ -22,6 +22,8 @@ import (
 const (
 	BlkSize  = 4096
 	BlkDebug = false
+
+	queueNumMax = 512
 )
 
 const (
@@ -114,23 +116,23 @@ type VirtQueue struct {
 	lastAvailIdx uint16
 }
 
-func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
+func (vq *VirtQueue) executeDescriptorChain(idx uint16) (uint32, error) {
 	vq.Blk.debugf("chain: idx=%v", idx)
 
 	blk, err := vq.loadDesc(idx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if blk.Len != 16 || blk.Flags&VIRTQ_DESC_F_NEXT == 0 {
-		return fmt.Errorf("invalid blk header: %v", blk)
+		return 0, fmt.Errorf("invalid blk header: %v", blk)
 	}
 	t, err := vq.Blk.readGuestUint32(blk.Addr)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	sector, err := vq.Blk.readGuestUint64(blk.Addr + 8)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	vq.Blk.debugf("req header : %v\n", blk)
 	vq.Blk.debugf(" - type    : %v\n", blkTypeString(t))
@@ -147,7 +149,7 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 		// Read the next block.
 		blk, err = vq.loadDesc(blk.Next)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		if blk.Flags&VIRTQ_DESC_F_NEXT != 0 {
 			// Data block, handle request type.
@@ -219,29 +221,22 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) error {
 			// Status block.
 			statusSeen = true
 			if blk.Len != 1 {
-				return fmt.Errorf("invalid blk status: %v", blk)
+				return 0, fmt.Errorf("invalid blk status: %v", blk)
 			}
 			err = vq.Blk.writeGuestUint8(blk.Addr, opStatus)
 			if err != nil {
-				return err
+				return 0, err
 			}
 		}
 	}
 	if !statusSeen {
-		return fmt.Errorf("invalid chain: no status block")
+		return 0, fmt.Errorf("invalid chain: no status block")
 	}
 
 	vq.Blk.debugf("transferred: %v\n", transferred)
 	vq.Blk.debugf("req status : %v\n", opStatus)
 
-	// Update used ring.
-	err = vq.updateUsedRing(idx, transferred)
-	if err != nil {
-		// XXX update status[0].
-		return err
-	}
-
-	return nil
+	return transferred, nil
 }
 
 func (vq *VirtQueue) updateUsedRing(idx uint16, bytesTransferred uint32) error {
@@ -431,7 +426,7 @@ func (vio *Blk) Load32(paddr uint64) (uint32, error) {
 
 	case 0x034: // QueueNumMax
 		if vio.queueSel < uint32(len(vio.queues)) {
-			return 256, nil
+			return queueNumMax, nil
 		}
 		return 0, nil
 
@@ -457,10 +452,11 @@ func (vio *Blk) Load32(paddr uint64) (uint32, error) {
 	case 0x104: // Disk size in sectors, high
 		return uint32(vio.size() >> 32), nil
 
-		// 0x108 size_max
+	case 0x108: // size_max
+		return 4096, nil
 
-	case 0x10c:
-		return uint32(256), nil
+	case 0x10c: // seg_max
+		return queueNumMax - 2, nil
 	}
 
 	return 0, nil
@@ -527,36 +523,54 @@ func (vio *Blk) Store32(paddr, v uint64) error {
 			// Lower the interrupt line
 			vio.debugf("clearing PLIC interrupt %v", vio.IRQ)
 			vio.Plic.SetInterruptRequest(vio.IRQ, false)
+		} else {
+			vio.debugf("setting PLIC interrupt %v", vio.IRQ)
+			vio.Plic.SetInterruptRequest(vio.IRQ, true)
 		}
 
 		// Buffer Base Address Registers (rv64 writes lower then upper halves)
 
 	case 0x080: // QueueDescLow
-		vio.queues[0].DescPhys =
-			(vio.queues[0].DescPhys & 0xffffffff00000000) | (v & 0xffffffff)
+		if vio.queueSel < uint32(len(vio.queues)) {
+			vio.queues[vio.queueSel].DescPhys =
+				(vio.queues[vio.queueSel].DescPhys & 0xffffffff00000000) |
+					(v & 0xffffffff)
+		}
 
 	case 0x084: // QueueDescHigh
-		vio.queues[0].DescPhys =
-			(vio.queues[0].DescPhys & 0x00000000ffffffff) |
-				(uint64(v&0xffffffff) << 32)
+		if vio.queueSel < uint32(len(vio.queues)) {
+			vio.queues[vio.queueSel].DescPhys =
+				(vio.queues[vio.queueSel].DescPhys & 0x00000000ffffffff) |
+					(uint64(v&0xffffffff) << 32)
+		}
 
 	case 0x090: // QueueDriverLow (Available Ring)
-		vio.queues[0].AvailPhys =
-			(vio.queues[0].AvailPhys & 0xffffffff00000000) | (v & 0xffffffff)
+		if vio.queueSel < uint32(len(vio.queues)) {
+			vio.queues[vio.queueSel].AvailPhys =
+				(vio.queues[vio.queueSel].AvailPhys & 0xffffffff00000000) |
+					(v & 0xffffffff)
+		}
 
 	case 0x094: // QueueDriverHigh
-		vio.queues[0].AvailPhys =
-			(vio.queues[0].AvailPhys & 0x00000000ffffffff) |
-				(uint64(v&0xffffffff) << 32)
+		if vio.queueSel < uint32(len(vio.queues)) {
+			vio.queues[vio.queueSel].AvailPhys =
+				(vio.queues[vio.queueSel].AvailPhys & 0x00000000ffffffff) |
+					(uint64(v&0xffffffff) << 32)
+		}
 
 	case 0x0a0: // QueueDeviceLow (Used Ring)
-		vio.queues[0].UsedPhys =
-			(vio.queues[0].UsedPhys & 0xffffffff00000000) | (v & 0xffffffff)
+		if vio.queueSel < uint32(len(vio.queues)) {
+			vio.queues[vio.queueSel].UsedPhys =
+				(vio.queues[vio.queueSel].UsedPhys & 0xffffffff00000000) |
+					(v & 0xffffffff)
+		}
 
 	case 0x0a4: // QueueDeviceHigh
-		vio.queues[0].UsedPhys =
-			(vio.queues[0].UsedPhys & 0x00000000ffffffff) |
-				(uint64(v&0xffffffff) << 32)
+		if vio.queueSel < uint32(len(vio.queues)) {
+			vio.queues[vio.queueSel].UsedPhys =
+				(vio.queues[vio.queueSel].UsedPhys & 0x00000000ffffffff) |
+					(uint64(v&0xffffffff) << 32)
+		}
 
 	case 0x070: // Status
 		if v == 0 {
@@ -684,40 +698,75 @@ func (vio *Blk) processQueue(idx uint32) {
 		return
 	}
 
-	// 1. Read the driver's current Available Ring Index from guest memory
-	//
-	//   Avail Ring layout: flags (2 bytes), idx (2 bytes), ring[...]
-	//   (array of uint16)
-	paddr := vio.queues[idx].AvailPhys + 2
-	for {
-		availIdx, err := vio.readGuestUint16(paddr)
+	vq := &vio.queues[idx]
+	availIdxAddr := vq.AvailPhys + 2
+
+	// Read the boundary target limit from the driver
+	availIdx, err := vio.readGuestUint16(availIdxAddr)
+	if err != nil {
+		vio.logf("guest memory access: %v", err)
+		return
+	}
+
+	// Read the baseline state of the used index ring counter ONCE
+	// before looping
+	usedIdxAddr := vq.UsedPhys + 2
+	usedIdx, err := vio.readGuestUint16(usedIdxAddr)
+	if err != nil {
+		vio.logf("guest memory access: %v", err)
+		return
+	}
+
+	var processedAny bool
+
+	// Process all pending descriptors currently batched in this pass
+	for vq.lastAvailIdx != availIdx {
+		ringOffset := uint64(uint32(vq.lastAvailIdx) % vq.Num)
+		ringElementPhys := vq.AvailPhys + 4 + (ringOffset * 2)
+		descHeadIdx, err := vio.readGuestUint16(ringElementPhys)
 		if err != nil {
 			vio.logf("guest memory access: %v", err)
 			return
 		}
-		vio.debugf("queue: idx: %v/%v", vio.queues[idx].lastAvailIdx, availIdx)
 
-		if vio.queues[idx].lastAvailIdx == availIdx {
-			// Queue drained.
-			break
-		}
-		ringOffset := uint64(uint32(vio.queues[idx].lastAvailIdx) %
-			vio.queues[idx].Num)
-		paddr := vio.queues[idx].AvailPhys + 4 + (ringOffset * 2)
-		descHeadIdx, err := vio.readGuestUint16(paddr)
-		if err != nil {
-			vio.logf("guest memory access: %v", err)
-			return
-		}
-		vio.debugf("queue: idx=%v, ringOffset=%v, paddr=%x, headIdx=%v",
-			vio.queues[idx].lastAvailIdx, ringOffset, paddr, descHeadIdx)
-
-		err = vio.queues[idx].executeDescriptorChain(descHeadIdx)
+		// Execute the chain (Modify executeDescriptorChain to NOT
+		// call updateUsedRing inside it!)
+		transferred, err := vq.executeDescriptorChain(descHeadIdx)
 		if err != nil {
 			vio.logf("execute descriptor chain: %v", err)
 			return
 		}
 
-		vio.queues[idx].lastAvailIdx++
+		// Write back this completed entry into the Used Ring array
+		elemAddr := vq.UsedPhys + 4 + (uint64(uint32(usedIdx)%vq.Num) * 8)
+		vio.writeGuestUint32(elemAddr, uint32(descHeadIdx))
+		vio.writeGuestUint32(elemAddr+4, transferred)
+
+		usedIdx++
+		vq.lastAvailIdx++
+		processedAny = true
+	}
+
+	if processedAny {
+		// Flush the collective index batch change back to guest RAM ONCE
+		vio.writeGuestUint16(usedIdxAddr, usedIdx)
+
+		// Read the guest's Available Ring flags (offset 0 of
+		// AvailPhys) to see if they have suppressed interrupts
+		availFlags, err := vio.readGuestUint16(vq.AvailPhys)
+		if err != nil {
+			vio.logf("guest memory access: %v", err)
+			return
+		}
+
+		// Bit 0 of avail ring flags is VIRTQ_AVAIL_F_NO_INTERRUPT (1)
+		if (availFlags & 1) == 0 {
+			// Only inject the interrupt if the driver hasn't
+			// explicitly suppressed it!
+			vio.interruptStatus |= 0x1
+			vio.Plic.SetInterruptRequest(vio.IRQ, true)
+		} else {
+			vio.debugf("interrupt suppressed by guest driver")
+		}
 	}
 }
