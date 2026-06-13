@@ -5,8 +5,9 @@
 </p>
 
 <p align="center">
-Linux-capable RV64GC RISC-V emulator written in Go with SV39 virtual
-memory, privilege modes, and device emulation.
+RV64GC RISC-V emulator written in Go capable of booting Linux, NetBSD,
+and FreeBSD with OpenSBI, U-Boot, SV39 virtual memory, and VirtIO
+devices.
 <br>
 OpenSBI &#8594; U-Boot &#8594; {BuildRoot,Ubuntu,NetBSD,FreeBSD}
 </p>
@@ -18,7 +19,14 @@ OpenSBI &#8594; U-Boot &#8594; {BuildRoot,Ubuntu,NetBSD,FreeBSD}
 - SV39 virtual memory and page tables
 - OpenSBI support
 - VirtIO block storage support
-- Linux kernel boot support (Ubuntu-24.04, Buildroot)
+- Operating Systems:
+  - OpenSBI
+  - U-Boot
+  - EFI Boot
+  - Buildroot Linux
+  - Ubuntu 24.04
+  - NetBSD 11.99
+  - FreeBSD 15.1
 - Linux syscall emulation mode
 - Device emulation:
   - NS16550A UART
@@ -35,10 +43,26 @@ operating systems, and the RISC-V privileged architecture.
 
 ## Current status
 
-The emulator now boots OpenSBI and Linux 7.x to a functional
-Ubuntu24.04.4 shell. The machine supports privilege transitions,
-virtual memory, interrupts, timer devices, and enough platform
-hardware to run a Linux userspace environment.
+The emulator successfully boots and runs:
+
+| OS              | Status                                              |
+|-----------------|-----------------------------------------------------|
+| Buildroot Linux | Shell login                                         |
+| Ubuntu 24.04    | Multi-user userspace                                |
+| NetBSD 11.99    | Multi-user userspace, package build, clean shutdown |
+| FreeBSD 15.1    | Multi-user userspace                                |
+
+Recent milestones:
+
+- OpenSBI 1.6 support
+- U-Boot 2026.04 support
+- EFI boot support
+- SV39 virtual memory
+- User/Supervisor/Machine modes
+- VirtIO block devices
+- NetBSD userspace and C compiler
+- FreeBSD userspace
+- Clean OS shutdown via SBI
 
 ![Linux Boot](docs/linux-shell.png)
 
@@ -153,25 +177,52 @@ Hello, RISC-V!
 
 ```text
 +--------------------+
-| Linux / Userspace  |
+| Linux / NetBSD /   |
+| FreeBSD Userspace  |
++--------------------+
+| Linux / NetBSD /   |
+| FreeBSD Kernel     |
++--------------------+
+| U-Boot / EFI       |
 +--------------------+
 | OpenSBI            |
 +--------------------+
-| Emulator Core      |
-|  - RV64GC CPU      |
-|  - MMU (SV39)      |
-|  - CSR subsystem   |
-|  - Trap handling   |
+| RV64GC CPU         |
+| SV39 MMU           |
+| CSR subsystem      |
+| Interrupts         |
 +--------------------+
-| Devices            |
+| VirtIO Block       |
 | UART               |
 | PLIC               |
 | ACLINT             |
-| Syscon             |
+| Goldfish RTC       |
+| Syscon Poweroff    |
 +--------------------+
 ```
 
 ## Benchmarks
+
+## Real Workloads
+
+NetBSD 11.99:
+
+- Boot to login prompt
+- Compile Hello World with GCC
+- Run user binaries
+- Multi-minute uptime
+- Clean shutdown
+
+Example:
+
+``` shell
+$ time cc -o hello hello.c
+33.57 real
+32.15 user
+1.30 sys
+```
+
+## Fibonacci
 
 Performance improvements are tracked as the emulator evolves. The
 numbers below show the effect of individual optimizations. They are
@@ -200,11 +251,8 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 
 ## Near term
 
- - [x] UART interrupt wiring in DTB
- - [x] Host terminal polling
- - [x] Proper wfi sleep behavior
- - [x] Add VirtIO block device (virtio-blk)
- - [ ] Add VirtIO networking
+ - [ ] VirtIO networking
+ - [ ] VirtIO RNG
  - [ ] Process-local page tables in emulator mode
  - [ ] Full syscall coverage in emulator mode
 
