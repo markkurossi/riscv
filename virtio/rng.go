@@ -28,7 +28,7 @@ func NewRng(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 
 	rng := &Rng{
 		MMIO: MMIO{
-			Level:    LogInfo,
+			Level:    LogError,
 			Name:     "virtio-rng",
 			DeviceID: RngDeviceID,
 			Hart:     hart,
@@ -49,7 +49,7 @@ func NewRng(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 func (rng *Rng) ExecuteDescriptorChain(vq *VirtQueueNew, idx uint16) (
 	uint32, error) {
 
-	rng.debugf("chain      : idx=%v", idx)
+	rng.debugf("chain: idx=%v", idx)
 
 	var transferred uint32
 
@@ -58,7 +58,7 @@ func (rng *Rng) ExecuteDescriptorChain(vq *VirtQueueNew, idx uint16) (
 		if err != nil {
 			return 0, err
 		}
-		rng.debugf("req        : %v", req)
+		rng.debugf("req: %v", req)
 
 		if req.Flags&VIRTQ_DESC_F_WRITE != 0 {
 			buf, err := rng.guestData(req.Addr, uint64(req.Len))
@@ -72,7 +72,7 @@ func (rng *Rng) ExecuteDescriptorChain(vq *VirtQueueNew, idx uint16) (
 				return 0, err
 			}
 
-			rng.infof("chain: idx=%v, len=%v, addr=%x, tx=%v",
+			rng.infof("idx=%v, len=%v, addr=%x, tx=%v",
 				idx, req.Len, req.Addr, n)
 
 			transferred += uint32(n)
@@ -84,7 +84,7 @@ func (rng *Rng) ExecuteDescriptorChain(vq *VirtQueueNew, idx uint16) (
 		idx = req.Next
 	}
 
-	rng.debugf("chain: idx=%vtransferred: %v", transferred)
+	rng.debugf("transferred: %v", transferred)
 
 	return transferred, nil
 }

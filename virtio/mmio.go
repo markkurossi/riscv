@@ -10,6 +10,7 @@ package virtio
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/markkurossi/riscv/dev"
 	"github.com/markkurossi/riscv/isa"
@@ -35,6 +36,40 @@ const (
 	LogInfo
 	LogDebug
 )
+
+const (
+	DeviceStatusAcknowledge      = 1
+	DeviceStatusDriver           = 2
+	DeviceStatusFailed           = 128
+	DeviceStatusFeaturesOK       = 8
+	DeviceStatusDriverOK         = 4
+	DeviceStatusDeviceNeedsReset = 64
+)
+
+func statusString(status uint32) string {
+	var result []string
+
+	if status&DeviceStatusAcknowledge != 0 {
+		result = append(result, "ACKNOWLEDGE")
+	}
+	if status&DeviceStatusDriver != 0 {
+		result = append(result, "DRIVER")
+	}
+	if status&DeviceStatusFailed != 0 {
+		result = append(result, "FAILED")
+	}
+	if status&DeviceStatusFeaturesOK != 0 {
+		result = append(result, "FEATURES_OK")
+	}
+	if status&DeviceStatusDriverOK != 0 {
+		result = append(result, "DRIVER_OK")
+	}
+	if status&DeviceStatusDeviceNeedsReset != 0 {
+		result = append(result, "DEVICE_NEEDS_RESET")
+	}
+
+	return strings.Join(result, ",")
+}
 
 var (
 	_ mmu.ROM = &MMIO{}
@@ -435,7 +470,6 @@ func (vio *MMIO) ProcessQueue(idx uint32) {
 
 	if processedAny {
 		// Flush the collective index batch change back to guest RAM ONCE
-		vio.infof("usedIdx=%v", usedIdx)
 		vio.writeGuestUint16(usedIdxAddr, usedIdx)
 
 		// Read the guest's Available Ring flags (offset 0 of
