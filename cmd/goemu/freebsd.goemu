@@ -1,7 +1,8 @@
 {
   "bios":    "opensbi/fw_jump.bin",
   "kernel":  "u-boot-2026.04/u-boot.bin",
-  "append":  "console=ttyS0,115200",
+  "_append":  "console=ttyS0,115200",
+  "append":  "-v",
   "drives": [
     {
       "id":     "hd0",
