@@ -1150,6 +1150,17 @@ func Decode(raw uint32) (Instr, error) {
 				group, funct2, raw)
 		}
 
+	case GroupNMSUB:
+		funct2 := raw >> 25 & 0b11
+		switch funct2 {
+		case 0b01:
+			instr.Imm = int32(raw >> 27 & 0b11111)
+			instr.Op = FnmsubD
+		default:
+			return instr, fmt.Errorf("%v: funct2=%02b, raw=%08x",
+				group, funct2, raw)
+		}
+
 	default:
 		if group>>2 == 0b111 {
 			return instr,

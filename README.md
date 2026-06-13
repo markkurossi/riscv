@@ -7,6 +7,8 @@
 <p align="center">
 Linux-capable RV64GC RISC-V emulator written in Go with SV39 virtual
 memory, privilege modes, and device emulation.
+<br>
+OpenSBI &#8594; U-Boot &#8594; {BuildRoot,Ubuntu,NetBSD,FreeBSD}
 </p>
 
 ## Features
@@ -368,12 +370,3 @@ debugging in u-boot:
 
 [   1.0000030] WARNING: system needs entropy for security; see entropy(7)
 Waiting for entropy...[   7.4499016] entropy: pid 445 (dd) waiting for entropy(7)
-
-  000393f4:  4ae4744b   Instr: Op=invalid      # decode failed: group NMSUB not implemented yet: raw=4ae4744b
-3ff86b2006:  62b775cb   Instr: Op=invalid      # decode failed: group NMSUB not implemented yet: raw=62b775cb
-
-# FreeBSD
-
-## Bugs
-
-142e9ec1de:  42f6f6cb   Instr: Op=invalid      # decode failed: group NMSUB not implemented yet: raw=42f6f6cb
