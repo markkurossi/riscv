@@ -9,17 +9,454 @@ package virtio
 
 import (
 	"fmt"
+	"log"
+
+	"github.com/markkurossi/riscv/dev"
+	"github.com/markkurossi/riscv/isa"
+	"github.com/markkurossi/riscv/memory"
+	"github.com/markkurossi/riscv/mmu"
 )
 
 const (
 	Magic    = 0x74726976 // "virt"
 	Version  = 0x2
-	DeviceID = 0x2
 	VendorID = 0x476f4d55 // "GoMU"
 
 	FeatureAnyLayout = 1 << 28
 	FeatureVersion1  = 1 << 31
+
+	queueNumMax = 512
 )
+
+type LogLevel int
+
+const (
+	LogError LogLevel = iota
+	LogInfo
+	LogDebug
+)
+
+var (
+	_ mmu.ROM = &MMIO{}
+)
+
+type MMIO struct {
+	Level    LogLevel
+	Name     string
+	DeviceID uint32
+	Hart     isa.Hart
+	Start    uint64
+	End      uint64
+	Plic     *dev.PLIC
+	IRQ      uint32
+	Mem      *memory.Memory
+	Handler  Handler
+
+	deviceFeaturesSel uint32
+	driverFeaturesSel uint32
+	driverFeatures    [2]uint32
+	status            uint32
+	interruptStatus   uint32
+
+	queueSel uint32
+	queues   []VirtQueueNew
+}
+
+type Handler interface {
+	ExecuteDescriptorChain(vq *VirtQueueNew, idx uint16) (uint32, error)
+}
+
+func (vio *MMIO) Device() *MMIO {
+	return vio
+}
+
+func (vio *MMIO) InitQueues(count int) {
+	for range count {
+		vio.queues = append(vio.queues, VirtQueueNew{
+			MMIO: vio,
+		})
+	}
+}
+
+func (vio *MMIO) logf(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	log.Print(vio.Name + ": " + msg)
+}
+
+func (vio *MMIO) debugf(format string, args ...interface{}) {
+	if vio.Level < LogDebug {
+		return
+	}
+	msg := fmt.Sprintf(format, args...)
+	log.Print(vio.Name + ": " + msg)
+}
+
+func (vio *MMIO) infof(format string, args ...interface{}) {
+	if vio.Level < LogInfo {
+		return
+	}
+	msg := fmt.Sprintf(format, args...)
+	log.Print(vio.Name + ": " + msg)
+}
+
+// Halt implements mmu.ROM.Halt.
+func (vio *MMIO) Halt() error {
+	return nil
+}
+
+func (vio *MMIO) Contains(paddr uint64) bool {
+	return vio.Start <= paddr && paddr < vio.End
+}
+
+func (vio *MMIO) Load8(paddr uint64) (uint8, error) {
+	return 0, fmt.Errorf("MMIO.Load8 not implemented yet")
+}
+
+func (vio *MMIO) Load16(paddr uint64) (uint16, error) {
+	return 0, fmt.Errorf("MMIO.Load16 not implemented yet")
+}
+
+func (vio *MMIO) Load32(paddr uint64) (uint32, error) {
+	offset := paddr - vio.Start
+
+	vio.debugf("Load32(%v)", mmioReg(offset))
+
+	switch offset {
+	case 0x000:
+		return Magic, nil
+	case 0x004:
+		return Version, nil
+	case 0x008:
+		return vio.DeviceID, nil
+	case 0x00c:
+		return VendorID, nil
+	case 0x010: // DeviceFeatures
+		switch vio.deviceFeaturesSel {
+		case 0:
+			// Bits 0-31: Block-specific features (e.g., RO, Segments, etc.)
+			// Return 0 for now if you want a basic default disk
+			return 1 << VIRTIO_BLK_F_SEG_MAX, nil
+		case 1:
+			// Bits 32-63: Generic VirtIO features
+			// Bit 32 is VIRTIO_F_VERSION_1 (1 << 0 of this upper page)
+			return 1 << 0, nil
+		}
+
+	case 0x034: // QueueNumMax
+		if vio.queueSel < uint32(len(vio.queues)) {
+			return queueNumMax, nil
+		}
+		return 0, nil
+
+	case 0x044: // QueueReady
+		if vio.queueSel < uint32(len(vio.queues)) {
+			return vio.queues[vio.queueSel].Ready, nil
+		}
+		return 0, nil
+
+	case 0x060: // InterruptStatus
+		return vio.interruptStatus, nil
+
+	case 0x070:
+		vio.debugf("Load32(%v) => %v[0x%x]\n", mmioReg(offset),
+			statusString(vio.status), vio.status)
+		return vio.status, nil
+	}
+	return 0, nil
+}
+
+func (vio *MMIO) Load64(paddr uint64) (uint64, error) {
+	return 0, fmt.Errorf("MMIO.Load64 not implemented yet")
+}
+
+func (vio *MMIO) Store8(paddr, v uint64) error {
+	return fmt.Errorf("MMIO.Store8 not implemented yet")
+}
+
+func (vio *MMIO) Store16(paddr, v uint64) error {
+	return fmt.Errorf("MMIO.Store16 not implemented yet")
+}
+
+func (vio *MMIO) Store32(paddr, v uint64) error {
+	offset := paddr - vio.Start
+
+	vio.debugf("Store32(%v, 0x%08x)", mmioReg(offset), v)
+
+	switch offset {
+	case 0x014: // DeviceFeaturesSel
+		vio.deviceFeaturesSel = uint32(v)
+
+	case 0x024: // DriverFeaturesSel
+		vio.driverFeaturesSel = uint32(v)
+
+	case 0x020: // DriverFeatures
+		if vio.driverFeaturesSel < 2 {
+			vio.driverFeatures[vio.driverFeaturesSel] = uint32(v)
+		}
+
+	case 0x030: // QueueSel
+		vio.queueSel = uint32(v)
+
+	case 0x038: // QueueNum (Guest setting chosen queue size)
+		if vio.queueSel < uint32(len(vio.queues)) {
+			vio.queues[vio.queueSel].Num = uint32(v)
+		}
+
+	case 0x044: // QueueReady
+		if vio.queueSel < uint32(len(vio.queues)) {
+			vio.queues[vio.queueSel].Ready = uint32(v)
+		}
+
+	case 0x050: // QueueNotify
+		vio.ProcessQueue(uint32(v))
+
+	case 0x064: // InterruptACK The guest writes a bitmask of the bits
+		vio.debugf("InterruptACK status=%x", vio.interruptStatus)
+
+		// it has acknowledged and wants cleared
+		vio.interruptStatus &^= uint32(v)
+		vio.debugf("interruptStatus: %x\n", vio.interruptStatus)
+
+		// If the guest has cleared all active interrupts, we can
+		// de-assert the PLIC line
+		if vio.interruptStatus == 0 {
+			// Lower the interrupt line
+			vio.debugf("clearing PLIC interrupt %v", vio.IRQ)
+			vio.Plic.SetInterruptRequest(vio.IRQ, false)
+		} else {
+			vio.debugf("setting PLIC interrupt %v", vio.IRQ)
+			vio.Plic.SetInterruptRequest(vio.IRQ, true)
+		}
+
+		// Buffer Base Address Registers (rv64 writes lower then upper halves)
+
+	case 0x080: // QueueDescLow
+		if vio.queueSel < uint32(len(vio.queues)) {
+			vio.queues[vio.queueSel].DescPhys =
+				(vio.queues[vio.queueSel].DescPhys & 0xffffffff00000000) |
+					(v & 0xffffffff)
+		}
+
+	case 0x084: // QueueDescHigh
+		if vio.queueSel < uint32(len(vio.queues)) {
+			vio.queues[vio.queueSel].DescPhys =
+				(vio.queues[vio.queueSel].DescPhys & 0x00000000ffffffff) |
+					(uint64(v&0xffffffff) << 32)
+		}
+
+	case 0x090: // QueueDriverLow (Available Ring)
+		if vio.queueSel < uint32(len(vio.queues)) {
+			vio.queues[vio.queueSel].AvailPhys =
+				(vio.queues[vio.queueSel].AvailPhys & 0xffffffff00000000) |
+					(v & 0xffffffff)
+		}
+
+	case 0x094: // QueueDriverHigh
+		if vio.queueSel < uint32(len(vio.queues)) {
+			vio.queues[vio.queueSel].AvailPhys =
+				(vio.queues[vio.queueSel].AvailPhys & 0x00000000ffffffff) |
+					(uint64(v&0xffffffff) << 32)
+		}
+
+	case 0x0a0: // QueueDeviceLow (Used Ring)
+		if vio.queueSel < uint32(len(vio.queues)) {
+			vio.queues[vio.queueSel].UsedPhys =
+				(vio.queues[vio.queueSel].UsedPhys & 0xffffffff00000000) |
+					(v & 0xffffffff)
+		}
+
+	case 0x0a4: // QueueDeviceHigh
+		if vio.queueSel < uint32(len(vio.queues)) {
+			vio.queues[vio.queueSel].UsedPhys =
+				(vio.queues[vio.queueSel].UsedPhys & 0x00000000ffffffff) |
+					(uint64(v&0xffffffff) << 32)
+		}
+
+	case 0x070: // Status
+		if v == 0 {
+			// Guest requested a device reset
+			vio.deviceFeaturesSel = 0
+			vio.driverFeaturesSel = 0
+			vio.driverFeatures[0] = 0
+			vio.driverFeatures[1] = 0
+			vio.status = 0
+			vio.queueSel = 0
+
+			for idx := range vio.queues {
+				vio.queues[idx].Num = 0
+				vio.queues[idx].Ready = 0
+				vio.queues[idx].DescPhys = 0
+				vio.queues[idx].AvailPhys = 0
+				vio.queues[idx].UsedPhys = 0
+				vio.queues[idx].lastAvailIdx = 0
+			}
+			return nil
+		}
+
+		// Standard status update protocol sequence
+		vio.status |= uint32(v)
+
+		if v&8 != 0 { // VIRTIO_CONFIG_S_FEATURES_OK (8)
+			// Validate that the driver acknowledged
+			// VIRTIO_F_VERSION_1 (bit 32 -> page 1, bit 0)
+			if (vio.driverFeatures[1] & 1) == 0 {
+				// If driver rejected version 1, clear the FEATURES_OK
+				// bit to signal failure
+				vio.status &= ^uint32(8)
+			}
+		}
+	}
+	return nil
+}
+
+func (vio *MMIO) Store64(paddr, v uint64) error {
+	return fmt.Errorf("MMIO.Store64 not implemented yet")
+}
+
+func (vio *MMIO) guestData(addr, l uint64) ([]byte, error) {
+	if !vio.Mem.Contains(addr) {
+		return nil, fmt.Errorf("invalid addr %x", addr)
+	}
+	ofs := vio.Mem.Offset(addr)
+	return vio.Mem.RAM[ofs : ofs+l], nil
+}
+
+func (vio *MMIO) readGuestUint8(addr uint64) (uint8, error) {
+	if !vio.Mem.Contains(addr) {
+		return 0, fmt.Errorf("invalid addr %x", addr)
+	}
+	return vio.Mem.RAM[vio.Mem.Offset(addr)], nil
+}
+
+func (vio *MMIO) readGuestUint16(addr uint64) (uint16, error) {
+	if !vio.Mem.Contains(addr) {
+		return 0, fmt.Errorf("invalid addr %x", addr)
+	}
+	return vio.Mem.BO.Uint16(vio.Mem.RAM[vio.Mem.Offset(addr):]), nil
+}
+
+func (vio *MMIO) readGuestUint32(addr uint64) (uint32, error) {
+	if !vio.Mem.Contains(addr) {
+		return 0, fmt.Errorf("invalid addr %x", addr)
+	}
+	return vio.Mem.BO.Uint32(vio.Mem.RAM[vio.Mem.Offset(addr):]), nil
+}
+
+func (vio *MMIO) readGuestUint64(addr uint64) (uint64, error) {
+	if !vio.Mem.Contains(addr) {
+		return 0, fmt.Errorf("invalid addr %x", addr)
+	}
+	return vio.Mem.BO.Uint64(vio.Mem.RAM[vio.Mem.Offset(addr):]), nil
+}
+
+func (vio *MMIO) writeGuestUint8(addr uint64, v uint8) error {
+	if !vio.Mem.Contains(addr) {
+		return fmt.Errorf("invalid addr %x", addr)
+	}
+	vio.Mem.RAM[vio.Mem.Offset(addr)] = v
+
+	return nil
+}
+
+func (vio *MMIO) writeGuestUint16(addr uint64, v uint16) error {
+	if !vio.Mem.Contains(addr) {
+		return fmt.Errorf("invalid addr %x", addr)
+	}
+	vio.Mem.BO.PutUint16(vio.Mem.RAM[vio.Mem.Offset(addr):], v)
+
+	return nil
+}
+
+func (vio *MMIO) writeGuestUint32(addr uint64, v uint32) error {
+	if !vio.Mem.Contains(addr) {
+		return fmt.Errorf("invalid addr %x", addr)
+	}
+	vio.Mem.BO.PutUint32(vio.Mem.RAM[vio.Mem.Offset(addr):], v)
+
+	return nil
+}
+
+func (vio *MMIO) ProcessQueue(idx uint32) {
+	vio.debugf("QueueNotify(%v)", idx)
+
+	if idx >= uint32(len(vio.queues)) {
+		vio.logf("invalid queue index  %v", idx)
+		return
+	}
+
+	vq := &vio.queues[idx]
+	availIdxAddr := vq.AvailPhys + 2
+
+	// Read the boundary target limit from the driver
+	availIdx, err := vio.readGuestUint16(availIdxAddr)
+	if err != nil {
+		vio.logf("guest memory access: %v", err)
+		return
+	}
+
+	// Read the baseline state of the used index ring counter ONCE
+	// before looping
+	usedIdxAddr := vq.UsedPhys + 2
+	usedIdx, err := vio.readGuestUint16(usedIdxAddr)
+	if err != nil {
+		vio.logf("guest memory access: %v", err)
+		return
+	}
+
+	var processedAny bool
+
+	// Process all pending descriptors currently batched in this pass
+	for vq.lastAvailIdx != availIdx {
+		ringOffset := uint64(uint32(vq.lastAvailIdx) % vq.Num)
+		ringElementPhys := vq.AvailPhys + 4 + (ringOffset * 2)
+		descHeadIdx, err := vio.readGuestUint16(ringElementPhys)
+		if err != nil {
+			vio.logf("guest memory access: %v", err)
+			return
+		}
+
+		// Execute the chain (Modify executeDescriptorChain to NOT
+		// call updateUsedRing inside it!)
+		transferred, err := vio.Handler.ExecuteDescriptorChain(vq, descHeadIdx)
+		if err != nil {
+			vio.logf("execute descriptor chain: %v", err)
+			return
+		}
+
+		// Write back this completed entry into the Used Ring array
+		elemAddr := vq.UsedPhys + 4 + (uint64(uint32(usedIdx)%vq.Num) * 8)
+		vio.writeGuestUint32(elemAddr, uint32(descHeadIdx))
+		vio.writeGuestUint32(elemAddr+4, transferred)
+
+		usedIdx++
+		vq.lastAvailIdx++
+		processedAny = true
+	}
+
+	if processedAny {
+		// Flush the collective index batch change back to guest RAM ONCE
+		vio.infof("usedIdx=%v", usedIdx)
+		vio.writeGuestUint16(usedIdxAddr, usedIdx)
+
+		// Read the guest's Available Ring flags (offset 0 of
+		// AvailPhys) to see if they have suppressed interrupts
+		availFlags, err := vio.readGuestUint16(vq.AvailPhys)
+		if err != nil {
+			vio.logf("guest memory access: %v", err)
+			return
+		}
+
+		// Bit 0 of avail ring flags is VIRTQ_AVAIL_F_NO_INTERRUPT (1)
+		if (availFlags & 1) == 0 {
+			// Only inject the interrupt if the driver hasn't
+			// explicitly suppressed it!
+			vio.interruptStatus |= 0x1
+			vio.Plic.SetInterruptRequest(vio.IRQ, true)
+		} else {
+			vio.debugf("interrupt suppressed by guest driver")
+		}
+	}
+}
 
 var mmioRegs = map[uint64]string{
 	0x000: "Magic",

@@ -98,10 +98,19 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig) error {
 	}
 
 	// Create VirtIO devices.
+	var virtioDevices []*virtio.MMIO
 
 	var virtioROM uint64 = VirtioROMBase
 	var virtioIRQ uint32 = VirtioIRQBase
 
+	// Entropy Source / RNG.
+	rng := virtio.NewRng(core, virtioROM, plic, virtioIRQ, mem)
+	rom.Segments = append(rom.Segments, rng)
+	virtioROM = rng.End
+	virtioIRQ++
+	virtioDevices = append(virtioDevices, rng.Device())
+
+	// Devices from the configuration.
 	for idx, dev := range cfg.Devices {
 		switch dev.Type {
 		case "virtio-blk-device":
@@ -170,7 +179,7 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig) error {
 		copy(mem.RAM[mem.Offset(OfsInitrd):], data)
 	}
 
-	dtb := makeDTB(initrdSize, mem, cfg)
+	dtb := makeDTB(initrdSize, mem, virtioDevices, cfg)
 	copy(mem.RAM[mem.Offset(OfsDTB):], dtb)
 
 	core.X[isa.A0] = 0
@@ -230,7 +239,9 @@ func loadKernel(file string, mem *memory.Memory) error {
 	return nil
 }
 
-func makeDTB(initrdSize uint64, mem *memory.Memory, cfg *SystemConfig) []byte {
+func makeDTB(initrdSize uint64, mem *memory.Memory,
+	virtioDevices []*virtio.MMIO, cfg *SystemConfig) []byte {
+
 	// Initialize FDT buffer
 	buf := make([]byte, 65536)
 	fdt := gofdt.NewFDT(buf)
@@ -499,6 +510,23 @@ func makeDTB(initrdSize uint64, mem *memory.Memory, cfg *SystemConfig) []byte {
 	fdt.EndNode()
 
 	// Create VirtualIO devices.
+	for _, dev := range virtioDevices {
+		fdt.BeginNodeNum(dev.Name, dev.Start)
+		fdt.PropStr("compatible", "virtio,mmio")
+
+		// Address and size.
+		size := dev.End - dev.Start
+		regData = [4]uint32{
+			uint32(dev.Start >> 32), uint32(dev.Start),
+			uint32(size >> 32), uint32(size),
+		}
+		fdt.PropTabU32("reg", &regData[0], 4)
+
+		// Connect to PLIC (phandle=2).
+		interrupts := [2]uint32{2, dev.IRQ}
+		fdt.PropTabU32("interrupts-extended", &interrupts[0], 2)
+		fdt.EndNode()
+	}
 	for _, dev := range cfg.Devices {
 		switch dev.Type {
 		case "virtio-blk-device": // VirtIO Block Device.

@@ -20,10 +20,9 @@ import (
 )
 
 const (
-	BlkSize  = 4096
-	BlkDebug = false
-
-	queueNumMax = 512
+	BlkDeviceID = 0x2
+	BlkSize     = 4096
+	BlkDebug    = false
 )
 
 const (
@@ -108,6 +107,7 @@ func (vio *Blk) SetID(id string) {
 
 type VirtQueue struct {
 	Blk          *Blk
+	MMIO         *MMIO
 	Num          uint32 // Set by guest (num of descs allocated, <= NumMax)
 	Ready        uint32 // Guest writes 1 to activate
 	DescPhys     uint64 // 64-bit Guest Physical Address of Descriptor Table
@@ -239,35 +239,6 @@ func (vq *VirtQueue) executeDescriptorChain(idx uint16) (uint32, error) {
 	return transferred, nil
 }
 
-func (vq *VirtQueue) updateUsedRing(idx uint16, bytesTransferred uint32) error {
-	usedIdxAddr := vq.UsedPhys + 2
-	usedIdx, err := vq.Blk.readGuestUint16(usedIdxAddr)
-	if err != nil {
-		return err
-	}
-
-	vq.Blk.debugf("updateUsedRing: usedIdx=%v, idx=%v, transferred=%v",
-		usedIdx, idx, bytesTransferred)
-	vq.Blk.Hart.SetTrace(true)
-
-	elemAddr := vq.UsedPhys + 4 + (uint64(uint32(usedIdx)%vq.Num) * 8)
-
-	// ID of the descriptor chain head
-	vq.Blk.writeGuestUint32(elemAddr, uint32(idx))
-	vq.Blk.writeGuestUint32(elemAddr+4, bytesTransferred)
-
-	// 2. Increment the Used Ring total tracker index
-	vq.Blk.writeGuestUint16(usedIdxAddr, usedIdx+1)
-
-	// 3. Set the Interrupt Status Register to notify the guest
-	vq.Blk.interruptStatus |= 0x1 // Virtqueue Interrupt 0x1
-
-	// 4. Assert your PLIC line!
-	vq.Blk.Plic.SetInterruptRequest(vq.Blk.IRQ, true)
-
-	return nil
-}
-
 func (vq *VirtQueue) loadDesc(idx uint16) (*VirtioDesc, error) {
 	desc := vq.DescPhys + uint64(idx*16)
 
@@ -295,12 +266,6 @@ func (vq *VirtQueue) loadDesc(idx uint16) (*VirtioDesc, error) {
 		Next:  next,
 	}, nil
 }
-
-const (
-	VIRTQ_DESC_F_NEXT     = 1 // Next field valid.
-	VIRTQ_DESC_F_WRITE    = 2 // Device write-only (otherwise read-only)
-	VIRTQ_DESC_F_INDIRECT = 4 // List of buffer descriptors.
-)
 
 type VirtioDesc struct {
 	Addr  uint64 // Guest Physical Address
@@ -409,7 +374,7 @@ func (vio *Blk) Load32(paddr uint64) (uint32, error) {
 	case 0x004:
 		return Version, nil
 	case 0x008:
-		return DeviceID, nil
+		return BlkDeviceID, nil
 	case 0x00c:
 		return VendorID, nil
 	case 0x010: // DeviceFeatures
