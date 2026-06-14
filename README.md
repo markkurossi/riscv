@@ -414,7 +414,12 @@ debugging in u-boot:
 => part list virtio 0
 ```
 
-## Bugs
+# FreeBSD
 
-[   1.0000030] WARNING: system needs entropy for security; see entropy(7)
-Waiting for entropy...[   7.4499016] entropy: pid 445 (dd) waiting for entropy(7)
+Press space to enter FreeBSD boot console:
+
+``` shell
+<SPACE>
+OK set boot_verbose=1
+OK boot
+```
