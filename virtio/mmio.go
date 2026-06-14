@@ -79,6 +79,7 @@ type MMIO struct {
 	Level    LogLevel
 	Name     string
 	DeviceID uint32
+	Features uint32
 	Hart     isa.Hart
 	Start    uint64
 	End      uint64
@@ -168,11 +169,10 @@ func (vio *MMIO) Load32(paddr uint64) (uint32, error) {
 	case 0x010: // DeviceFeatures
 		switch vio.deviceFeaturesSel {
 		case 0:
-			// Bits 0-31: Block-specific features (e.g., RO, Segments, etc.)
-			// Return 0 for now if you want a basic default disk
-			return 1 << VIRTIO_BLK_F_SEG_MAX, nil
+			// Bits 0-31: device specific features.
+			return vio.Features, nil
 		case 1:
-			// Bits 32-63: Generic VirtIO features
+			// Bits 32-63: Generic VirtIO features.
 			// Bit 32 is VIRTIO_F_VERSION_1 (1 << 0 of this upper page)
 			return 1 << 0, nil
 		}
