@@ -74,23 +74,21 @@ Recent milestones:
 - [x] Basic Go binaries
 - [ ] Full Linux userspace compatibility
 
-### Linux system emulation
+### System emulation and supervisor mode
 
-- [x] OpenSBI boot
-- [x] Device Tree support
-- [x] Machine/Supervisor/User privilege modes
-- [x] SV39 MMU
-- [x] Interrupt handling
-- [x] ACLINT timer/IPI support
-- [x] PLIC interrupt controller
+- [ ] ACLINT timer/IPI support
 - [ ] Parse kernel PE32+ header: load address, symbols
 - [ ] VirtIO
   - [x] virtio-blk
+  - [x] virtio-rng
+  - [ ] virtio-console
+  - [ ] virtio-net
+- [ ] Rewrite UART with FIFOs
+- [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
 - [x] Initramfs loading
 - [x] Buildroot shell login
 - [x] System shutdown support
 - [ ] SMP support
-- [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
 
 ## Quick start
 
