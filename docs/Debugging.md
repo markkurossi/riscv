@@ -13,7 +13,7 @@ find . | cpio -o -H newc | gzip > ../rootfs.cpio.gz
 ## Device Tree
 
 ``` shell
-$ dtc -I dtb -O dts -o source.dts goemu.dtb
+$ dtc -I dtb -O dts -o goemu.txt goemu.dtb
 ```
 
 ## Building Linux Kernel
