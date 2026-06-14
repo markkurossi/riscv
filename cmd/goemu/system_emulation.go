@@ -64,15 +64,8 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig) error {
 		End:   PLICBase + PLICSize,
 	}
 
-	uart := &dev.UART{
-		Hart:   core,
-		Start:  UARTBase,
-		End:    UARTBase + UARTSize,
-		Plic:   plic,
-		IRQ:    UARTIRQ,
-		Color:  params.Color,
-		Cooked: params.Cooked,
-	}
+	uart := dev.NewUART(core, UARTBase, UARTSize, plic, UARTIRQ,
+		params.Color, params.Cooked)
 
 	rom := &ROM{
 		Hart: core,
@@ -288,6 +281,8 @@ func makeDTB(initrdSize uint64, mem *memory.Memory,
 
 	// The standard compatible string for the CPU node
 	fdt.PropStr("compatible", "riscv")
+
+	fdt.PropU32("clock-frequency", 100000000)
 
 	// The legacy ISA string (Mandatory for many versions)
 	// Note: Use 'g' as an alias for 'imafd' to stay compatible
