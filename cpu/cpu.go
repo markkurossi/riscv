@@ -675,6 +675,21 @@ dispatch:
 			}
 			cpu.X[instr.Rd] = uint64(hi)
 
+		case isa.Mulhsu:
+			rs1Val := cpu.X[instr.Rs1] // Treated as SIGNED
+			rs2Val := cpu.X[instr.Rs2] // Treated as UNSIGNED
+
+			// Perform standard unsigned 64x64 -> 128 multiplication.
+			hi, _ := bits.Mul64(rs1Val, rs2Val)
+
+			// If rs1 is negative when viewed as a signed 64-bit int,
+			// apply the 2's complement high-word compensation.
+			if int64(rs1Val) < 0 {
+				hi -= rs2Val
+			}
+
+			cpu.X[instr.Rd] = hi
+
 		case isa.Mulhu:
 			hi, _ := bits.Mul64(cpu.X[instr.Rs1], cpu.X[instr.Rs2])
 			cpu.X[instr.Rd] = hi
