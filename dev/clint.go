@@ -16,6 +16,8 @@ const (
 	ClintOfsMsip     = 0
 	ClintOfsMtimecmp = 0x4000
 	ClintOfsMtime    = 0xbff8
+
+	clintDebug = false
 )
 
 type CLINT struct {
@@ -72,7 +74,8 @@ func (clint *CLINT) load(paddr uint64) (uint64, error) {
 		v = clint.Mtime
 
 	default:
-		// Support split 32-bit register window accesses commonly used by kernels
+		// Support split 32-bit register window accesses commonly used
+		// by kernels
 		if ofs >= ClintOfsMtimecmp && ofs < ClintOfsMtimecmp+8 {
 			v = clint.Mtimecmp
 			if ofs&4 != 0 {
@@ -89,7 +92,9 @@ func (clint *CLINT) load(paddr uint64) (uint64, error) {
 		}
 	}
 
-	log.Printf("CLINT.load(%x): %x", ofs, v)
+	if clintDebug {
+		log.Printf("CLINT.load(%x): %x", ofs, v)
+	}
 
 	return v, nil
 }
@@ -100,13 +105,16 @@ func (clint *CLINT) store(paddr, v uint64) error {
 	}
 	ofs := paddr - clint.Start
 
-	log.Printf("CLINT.store(%x): %x", ofs, v)
+	if clintDebug {
+		log.Printf("CLINT.store(%x): %x", ofs, v)
+	}
 
 	switch ofs {
 	case ClintOfsMsip:
 		clint.Msip = v
 		if clint.Msip&1 != 0 {
-			clint.Hart.SetInterrupt(isa.IntMSIP) // Machine Software Interrupt (Bit 3)
+			// Machine Software Interrupt (Bit 3)
+			clint.Hart.SetInterrupt(isa.IntMSIP)
 		} else {
 			clint.Hart.ClearInterrupt(isa.IntMSIP)
 		}
