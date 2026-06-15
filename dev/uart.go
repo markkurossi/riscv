@@ -81,6 +81,28 @@ func (r UARTWReg) String() string {
 	return fmt.Sprintf("UART-%02x", r)
 }
 
+// IER bit descriptions.
+var IERBits = []string{
+	"Received data available",
+	"Transmitter holding register empty",
+	"Receiver line status register change",
+	"Modem status register change",
+	"Sleep mode (16750 only)",
+	"Low power mode (16750 only)",
+	"reserved",
+	"reserved",
+}
+
+// FCR: FIFO Control Register bit descriptions.
+var FCRBits = []string{
+	"Enable FIFO’s",
+	"Clear receive FIFO",
+	"Clear transmit FIFO",
+	"Select DMA mode 1",
+	"Reserved",
+	"Enable 64 byte FIFO (16750)",
+}
+
 // LCR: line control register (R/W)
 const (
 	LCRDataBits       = 0b00000011
@@ -89,6 +111,18 @@ const (
 	LCRBreakSignalBit = 0b01000000
 	LCRDLABBit        = 0b10000000
 )
+
+// MCR: Modem control register bit descriptions.
+var MCRBits = []string{
+	"Data terminal ready",
+	"Request to send",
+	"Auxiliary output 1",
+	"Auxiliary output 2",
+	"Loopback mode",
+	"Autoflow control (16750 only)",
+	"Reserved",
+	"Reserved",
+}
 
 type UART struct {
 	logger.Logger
@@ -210,14 +244,15 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 		if len(uart.input) > 0 {
 			v = uart.input[0]
 			uart.input = uart.input[1:]
-			if len(uart.input) == 0 {
-				uart.inputAvail.Store(false)
-				uart.isrPending &^= 0x01 // Clear receiver interrupt flag
+		}
 
-				if uart.isrPending == 0 && uart.Plic != nil {
-					uart.Plic.Pending &^= (1 << uart.IRQ)
-					uart.Plic.ReevaluateInterrupts()
-				}
+		if len(uart.input) == 0 {
+			uart.inputAvail.Store(false)
+			uart.isrPending &^= 0x01 // Clear receiver interrupt flag
+
+			if uart.isrPending == 0 && uart.Plic != nil {
+				uart.Plic.Pending &^= (1 << uart.IRQ)
+				uart.Plic.ReevaluateInterrupts()
 			}
 		}
 		uart.m.Unlock()
@@ -250,17 +285,20 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 				uart.Plic.Pending &^= (1 << uart.IRQ)
 				uart.Plic.ReevaluateInterrupts()
 			}
+			uart.Infof("IIR read: %08b: THR empty", iir)
 			return iir, nil
 		}
 
 		if uart.inputAvail.Load() {
 			// Received Data Available interrupt (0x04)
 			iir |= 0x04
+			uart.Infof("IIR read: %08b: Received data available", iir)
 			return iir, nil
 		}
 
 		// Bit 0 is 1 if NO interrupt is pending
 		iir |= 0x01
+		uart.Infof("IIR read: %08b: no interrupt pending", iir)
 		return iir, nil
 
 	case RRegLCR: // Line Control
@@ -270,7 +308,7 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 		return uart.MCR, nil
 
 	case RRegLSR: // Line Status
-		// Transmitter Empty (0x20)  + Transmitter Idle (0x40).
+		// THR is empty (0x20) + THR is empty, and line is idle (0x40).
 		var status byte = 0x60
 
 		if uart.inputAvail.Load() {
@@ -280,6 +318,7 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 		return status, nil
 
 	case RRegMSR: // Modem Status
+		uart.Infof("MSR read")
 		return 0, nil
 
 	case RRegSCR: // Scratch
@@ -326,9 +365,12 @@ func (uart *UART) Store8(paddr, v uint64) error {
 			os.Stdout.Write([]byte{byte(v)})
 		}
 
-		// Check if Transmitter Holding Register Ready Interrupt is enabled
+		// Check if Transmitter Holding Register Ready Interrupt is
+		// enabled.
 		if (uart.IER & 0x02) != 0 {
-			uart.isrPending |= 0x02 // Mark THRE interrupt active internally
+			// Mark THRE interrupt active internally
+			uart.isrPending |= 0x02
+
 			if uart.Plic != nil {
 				uart.Plic.Pending |= (1 << uart.IRQ)
 				uart.Plic.ReevaluateInterrupts()
@@ -347,19 +389,81 @@ func (uart *UART) Store8(paddr, v uint64) error {
 
 			return nil
 		}
+		if v != 0 {
+			uart.Infof("IER: Interrupt Enable Register store:")
+			for i, desc := range IERBits {
+				if v&(1<<i) != 0 {
+					uart.Infof("  %v: %v", i, desc)
+				}
+			}
+		}
 		uart.IER = byte(v)
+
+		// XXX does this fix it?
+		if (uart.IER & 0x02) != 0 {
+			// Mark THRE interrupt active internally
+			uart.isrPending |= 0x02
+
+			if uart.Plic != nil {
+				uart.Plic.Pending |= (1 << uart.IRQ)
+				uart.Plic.ReevaluateInterrupts()
+			}
+		}
 
 	case WRegFCR:
 		uart.FCR = byte(v)
+		if v != 0 {
+			uart.Infof("FCR: FIFO Control Register store:")
+			for i, desc := range FCRBits {
+				if v&(1<<i) != 0 {
+					uart.Infof("  %v: %v", i, desc)
+				}
+			}
+			var trigger string
+			switch v >> 6 {
+			case 0:
+				trigger = "1 byte"
+			case 1:
+				trigger = "4 bytes"
+			case 2:
+				trigger = "8 bytes"
+			case 3:
+				trigger = "14 bytes"
+			}
+			uart.Infof("   : FIFO interrupt trigger: %v", trigger)
+		}
 
 	case WRegLCR:
 		uart.LCR = byte(v)
+		uart.Infof("LCR: Line Control Register store:")
+		uart.Infof("   : %d data bits", v&0b11+5)
+		uart.Infof("   : %d stop bits", v>>2&0b1+1)
+		if v&0b00111000 != 0 {
+			uart.Infof("   : parity: %08b", v&0b00111000)
+		}
+		if v&0b01000000 != 0 {
+			uart.Infof("  6: Break signal enabled")
+		}
+		if v&0b10000000 != 0 {
+			uart.Infof("  7: DLAB : DLL and DLM accessible")
+		} else {
+			uart.Infof("  7: DLAB : RBR, THR and IER accessible")
+		}
 
 	case WRegMCR:
 		uart.MCR = byte(v)
+		if v != 0 {
+			uart.Infof("MCR: Modem Control Register store:")
+			for i, desc := range MCRBits {
+				if v&(1<<i) != 0 {
+					uart.Infof("  %v: %v", i, desc)
+				}
+			}
+		}
 
 	case WRegSCR:
 		uart.SCR = byte(v)
+		uart.Infof("SCR: %08b", v)
 	}
 	return nil
 }
