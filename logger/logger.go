@@ -12,14 +12,17 @@ import (
 	"log"
 )
 
+// Level defines logging leve.
 type Level int
 
+// Logging levels.
 const (
 	Error Level = iota
 	Info
 	Debug
 )
 
+// Logger implements debug logger.
 type Logger struct {
 	Level Level
 	Name  string
@@ -30,6 +33,7 @@ func (logger *Logger) logf(level, format string, args ...interface{}) {
 	log.Printf("%s: %s: %s", logger.Name, level, msg)
 }
 
+// Debugf logs a debugging message.
 func (logger *Logger) Debugf(format string, args ...interface{}) {
 	if logger.Level < Debug {
 		return
@@ -37,6 +41,7 @@ func (logger *Logger) Debugf(format string, args ...interface{}) {
 	logger.logf("DEBUG", format, args...)
 }
 
+// Infof logs an info message.
 func (logger *Logger) Infof(format string, args ...interface{}) {
 	if logger.Level < Info {
 		return
@@ -44,6 +49,7 @@ func (logger *Logger) Infof(format string, args ...interface{}) {
 	logger.logf("INFO", format, args...)
 }
 
+// Errorf logs an error message.
 func (logger *Logger) Errorf(format string, args ...interface{}) {
 	logger.logf("ERROR", format, args...)
 }
