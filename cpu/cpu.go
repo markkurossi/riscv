@@ -324,11 +324,11 @@ dispatch:
 		case isa.Invalid:
 			cpu.tracef(raw, instr, "invalid: %v", instr)
 			cpu.Dump(cpu.PC)
+			err = fmt.Errorf("invalid %v[0x%x]", instr, raw)
 			if true {
 				return err
 			} else {
-				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-					fmt.Errorf("invalid %v[0x%x]", instr, raw))
+				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), err)
 			}
 
 		case isa.Add:
