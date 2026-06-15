@@ -45,12 +45,12 @@ operating systems, and the RISC-V privileged architecture.
 
 The emulator successfully boots and runs:
 
-| OS              | Status                                              |
-|-----------------|-----------------------------------------------------|
-| Buildroot Linux | Shell login                                         |
-| Ubuntu 24.04    | Multi-user userspace                                |
-| NetBSD 11.99    | Multi-user userspace, package build, clean shutdown |
-| FreeBSD 15.1    | Multi-user userspace                                |
+| OS              | Status                                   |
+|-----------------|------------------------------------------|
+| Buildroot Linux | Shell login                              |
+| Ubuntu 24.04    | Multi-user userspace                     |
+| NetBSD 11.99    | Multi-user userspace, cc, clean shutdown |
+| FreeBSD 15.1    | Multi-user userspace, cc, clean shutdown |
 
 Recent milestones:
 
