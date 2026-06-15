@@ -96,14 +96,8 @@ func (uart *UART) Run() {
 				uart.Plic.ReevaluateInterrupts()
 			}
 		}
-		uart.m.Unlock()
-
 		uart.inputAvail.Store(true)
-
-		if uart.Plic != nil && (uart.EIR&0x01) != 0 {
-			uart.Plic.Pending |= (1 << uart.IRQ)
-			uart.Plic.ReevaluateInterrupts()
-		}
+		uart.m.Unlock()
 	}
 }
 
@@ -124,11 +118,6 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 	}
 	switch paddr - uart.Start {
 	case 0:
-		// Check if DLAB bit (Bit 7) is set in LCR
-		if (uart.LCR & 0x80) != 0 {
-			return uart.DLL, nil
-		}
-
 		var v byte = 0xff
 
 		uart.m.Lock()
@@ -150,11 +139,6 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 		return v, nil
 
 	case 1:
-		// Check if DLAB bit (Bit 7) is set in LCR
-		if (uart.LCR & 0x80) != 0 {
-			return uart.DLM, nil
-		}
-
 		// Return Interrupt Enable Register
 		return uart.EIR, nil
 
@@ -163,11 +147,8 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 		uart.m.Lock()
 		defer uart.m.Unlock()
 
-		var iir byte
-		if uart.FCR&0x01 != 0 {
-			// 16550A standard values: FIFO enabled (0xC0)
-			iir = 0xC0
-		}
+		// 16550A standard values: FIFO enabled (0xC0)
+		var iir byte = 0xC0
 
 		if (uart.isrPending & 0x02) != 0 {
 			// Transmitter Holding Register Empty has priority or is active
@@ -193,12 +174,6 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 		iir |= 0x01
 		return iir, nil
 
-	case 3: // LCR Read
-		return uart.LCR, nil
-
-	case 4: // MCR Read
-		return uart.MCR, nil
-
 	case 5:
 		// Transmitter Empty (0x20)  + Transmitter Idle (0x40).
 		var status byte = 0x60
@@ -208,16 +183,6 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 			status |= 0x01
 		}
 		return status, nil
-
-	case 6: // MSR (Modem Status Register)
-		// Standard terminal connections:
-		// Bit 4: CTS (Clear to Send) = 1
-		// Bit 5: DSR (Data Set Ready) = 1
-		// Bit 7: DCD (Data Carrier Detect) = 1 -> CRUCIAL FOR FreeBSD PPS
-		return 0xB0, nil
-
-	case 7:
-		return uart.SCR, nil
 	}
 	return 0, nil
 }
@@ -244,12 +209,6 @@ func (uart *UART) Store8(paddr, v uint64) error {
 
 	switch paddr - uart.Start {
 	case 0:
-		// Check if DLAB bit (Bit 7) is set in LCR
-		if (uart.LCR & 0x80) != 0 {
-			uart.DLL = byte(v)
-			return nil
-		}
-
 		if uart.Color {
 			uart.Hart.ColorOn()
 			os.Stdout.Write([]byte{byte(v)})
@@ -268,11 +227,6 @@ func (uart *UART) Store8(paddr, v uint64) error {
 		}
 
 	case 1:
-		// Check if DLAB bit (Bit 7) is set in LCR
-		if (uart.LCR & 0x80) != 0 {
-			uart.DLM = byte(v)
-			return nil
-		}
 		uart.EIR = byte(v)
 
 	case 2:
@@ -283,15 +237,6 @@ func (uart *UART) Store8(paddr, v uint64) error {
 
 	case 4:
 		uart.MCR = byte(v)
-
-	case 5: // LSR Write (ignored or clears errors on standard chips)
-		return nil
-
-	case 6: // MSR Write (read-only register physically, writes are ignored)
-		return nil
-
-	case 7:
-		uart.SCR = byte(v)
 	}
 	return nil
 }
