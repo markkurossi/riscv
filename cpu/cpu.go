@@ -1235,6 +1235,11 @@ dispatch:
 		case isa.FclassD:
 			cpu.X[instr.Rd] = fclassD(cpu.F[instr.Rs1])
 
+		case isa.FmaddS:
+			// Imm is Rs3
+			cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1])*
+				float32(cpu.F[instr.Rs2]) + float32(cpu.F[instr.Imm]))
+
 		case isa.FmaddD:
 			// Imm is Rs3
 			cpu.F[instr.Rd] = cpu.F[instr.Rs1]*cpu.F[instr.Rs2] +
