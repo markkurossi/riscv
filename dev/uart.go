@@ -161,7 +161,7 @@ func NewUART(hart isa.Hart, start, size uint64, plic *PLIC, irq uint32,
 	uart := &UART{
 		Logger: logger.Logger{
 			Name:  "UART",
-			Level: logger.Info,
+			Level: logger.Error,
 		},
 		Hart:   hart,
 		Start:  start,
@@ -365,17 +365,9 @@ func (uart *UART) Store8(paddr, v uint64) error {
 			os.Stdout.Write([]byte{byte(v)})
 		}
 
-		// Check if Transmitter Holding Register Ready Interrupt is
-		// enabled.
-		if (uart.IER & 0x02) != 0 {
-			// Mark THRE interrupt active internally
-			uart.isrPending |= 0x02
-
-			if uart.Plic != nil {
-				uart.Plic.Pending |= (1 << uart.IRQ)
-				uart.Plic.ReevaluateInterrupts()
-			}
-		}
+		// Check if CPU wants to know that the THR is empty via an
+		// interrupt.
+		uart.checkInterrupts()
 
 	case WRegIER:
 		if uart.LCR&LCRDLABBit != 0 {
@@ -399,16 +391,8 @@ func (uart *UART) Store8(paddr, v uint64) error {
 		}
 		uart.IER = byte(v)
 
-		// XXX does this fix it?
-		if (uart.IER & 0x02) != 0 {
-			// Mark THRE interrupt active internally
-			uart.isrPending |= 0x02
-
-			if uart.Plic != nil {
-				uart.Plic.Pending |= (1 << uart.IRQ)
-				uart.Plic.ReevaluateInterrupts()
-			}
-		}
+		// Check if CPU expects state changes via interrupts.
+		uart.checkInterrupts()
 
 	case WRegFCR:
 		uart.FCR = byte(v)
@@ -481,4 +465,20 @@ func (uart *UART) Store32(paddr, v uint64) error {
 func (uart *UART) Store64(paddr, v uint64) error {
 	fmt.Printf("ROM.store64: %x = %v\n", paddr, v)
 	return nil
+}
+
+func (uart *UART) checkInterrupts() {
+
+	// Check if Transmitter Holding Register Ready Interrupt is
+	// enabled.
+	if (uart.IER & 0x02) != 0 {
+		// Mark THRE interrupt active internally
+		uart.isrPending |= 0x02
+
+		if uart.Plic != nil {
+			uart.Plic.Pending |= (1 << uart.IRQ)
+			uart.Plic.ReevaluateInterrupts()
+		}
+	}
+
 }
