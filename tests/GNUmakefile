@@ -23,3 +23,6 @@ LIBCSRCS := $(wildcard ephemelier/*.c)
 
 world: world.c
 	$(RISCVCC) $(RISCVCFLAGS) $(INCLUDES) -o $@ $+ $(LIBCSRCS)
+
+goemu.txt: goemu.dtb
+	dtc -I dtb -O dts -o $@ $+
