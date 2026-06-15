@@ -286,7 +286,7 @@ func makeDTB(initrdSize uint64, mem *memory.Memory,
 
 	// The legacy ISA string (Mandatory for many versions)
 	// Note: Use 'g' as an alias for 'imafd' to stay compatible
-	fdt.PropStr("riscv,isa", "rv64gc")
+	fdt.PropStr("riscv,isa", "rv64gc_sstc")
 
 	// Modern granular ISA description
 	fdt.PropStr("riscv,isa-base", "rv64i")
@@ -296,6 +296,7 @@ func makeDTB(initrdSize uint64, mem *memory.Memory,
 	// blob.
 	fdt.PropTabStr("riscv,isa-extensions",
 		"i", "m", "a", "f", "d", "c", "zicsr", "zifencei", "zicntr", "zihpm",
+		"sstc",
 	)
 
 	fdt.PropStr("mmu-type", "riscv,sv39")
