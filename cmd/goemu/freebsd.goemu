@@ -7,8 +7,7 @@
     {
       "id":     "hd0",
       "format": "raw",
-      "_file":  "freebsd/FreeBSD-15.1-RC3-riscv-riscv64-memstick.img",
-      "file":   "freebsd/FreeBSD-15.1-RC3-riscv-riscv64-GENERICSD.img"
+      "file":   "freebsd/FreeBSD-15.1-RELEASE-riscv-riscv64-GENERICSD.img"
     }
   ],
   "devices": [
