@@ -133,6 +133,17 @@ $ ./goemu -bios opensbi/fw_jump.bin \
           -append "earlycon=sbi console=ttyS0,115200 root=/dev/vda ro rootwait"
 ```
 
+The `cmd/goemu` directory contains `*.goemu` files for different
+operation systems. The use OpenSBI and U-Boot for the boot process but
+you must load the corresponding Operating System image to boot.
+
+ - [BuildRoot](cmd/goemu/buildroot.goemu) - self-contained
+ - [FreeBSD](cmd/goemu/freebsd.goemu) - download FreeBSD-15.1-RELEASE
+   image
+ - [NetBSD](cmd/goemu/netbsd.goemu) - download NetBSD 11.99 image
+ - [Ubuntu-24.04](cmd/goemu/u-boot-ubuntu-24-04.goemu) - download
+   Ubuntu-24.04.4 image
+
 ## Emulator Example
 
 The `goemu` provides also a primitive Linux userspace emulation:
