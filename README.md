@@ -6,14 +6,19 @@
 
 <p align="center">
 RV64GC RISC-V emulator written in Go capable of booting Linux, NetBSD,
-and FreeBSD with OpenSBI, U-Boot, SV39 virtual memory, and VirtIO
-devices.
+and FreeBSD userspace environments with OpenSBI, U-Boot, SV39 virtual
+memory, and VirtIO devices
 </p>
+
 <p align="center">
-OpenSBI &#8594; {BuildRoot Linux}<br>
+OpenSBI &#8594; BuildRoot Linux<br>
 OpenSBI &#8594; U-Boot &#8594; EFI &#8594; {NetBSD,FreeBSD}<br>
-OpenSBI &#8594; U-Boot &#8594; GRUB &#8594; EFI &#8594; {Ubuntu Linux}
+OpenSBI &#8594; U-Boot &#8594; EFI &#8594; GRUB &#8594; Ubuntu Linux
 </p>
+
+Current status: Boots Linux, NetBSD, and FreeBSD to multi-user
+userspace with VirtIO block devices, serial console, timers,
+interrupts, and SV39 virtual memory.
 
 ## Features
 
@@ -44,37 +49,10 @@ The project is intended as a readable and hackable implementation of a
 modern RISC-V platform, suitable for learning emulator internals,
 operating systems, and the RISC-V privileged architecture.
 
-## Current status
-
-The emulator successfully boots and runs:
-
-| OS              | Status                                   |
-|-----------------|------------------------------------------|
-| Buildroot Linux | Shell login                              |
-| Ubuntu 24.04    | Multi-user userspace                     |
-| NetBSD 11.99    | Multi-user userspace, cc, clean shutdown |
-| FreeBSD 15.1    | Multi-user userspace, cc, clean shutdown |
-
-Recent milestones:
-
-- OpenSBI 1.6 support
-- U-Boot 2026.04 support
-- EFI boot support
-- SV39 virtual memory
-- User/Supervisor/Machine modes
-- VirtIO block devices
-- NetBSD userspace and C compiler
-- FreeBSD userspace
-- Clean OS shutdown via SBI
-
 ![Linux Boot](docs/linux-shell.png)
 
 ### Userspace emulation
 
-- [x] Standalone binaries
-- [x] Statically linked binaries
-- [x] Dynamically linked binaries
-- [x] Basic Go binaries
 - [ ] Full Linux userspace compatibility
 
 ### System emulation and supervisor mode
@@ -86,11 +64,7 @@ Recent milestones:
   - [x] virtio-rng
   - [ ] virtio-console
   - [ ] virtio-net
-- [x] Rewrite UART with FIFOs
 - [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
-- [x] Initramfs loading
-- [x] Buildroot shell login
-- [x] System shutdown support
 - [ ] SMP support
 
 ## Quick start
