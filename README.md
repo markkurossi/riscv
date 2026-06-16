@@ -49,21 +49,23 @@ operating systems, and the RISC-V privileged architecture.
 ![NetBSD](docs/netbsd.png)
 ![FreeBSD](docs/freebsd.png)
 
-### Userspace emulation
-
-- [ ] Full Linux userspace compatibility
-
 ### System emulation and supervisor mode
 
-- [ ] ACLINT timer/IPI support
-- [ ] Parse kernel PE32+ header: load address, symbols
 - [ ] VirtIO
   - [x] virtio-blk
   - [x] virtio-rng
-  - [ ] virtio-console
   - [ ] virtio-net
+  - [ ] virtio-gpu
+  - [ ] virtio-console
 - [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
 - [ ] SMP support
+- [ ] ACLINT timer/IPI support
+- [ ] Parse Linux kernel PE32+ header: load address, symbols
+- [ ] JIT experiments
+
+### Userspace emulation
+
+- [ ] Full Linux userspace compatibility
 
 ## Quick start
 
@@ -219,24 +221,6 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 | Optimized Instr struct   | 159.65 |
 | Added interrupt handling | 147.38 |
 
-
-# Development roadmap
-
-## Near term
-
- - [ ] VirtIO networking
- - [ ] VirtIO RNG
- - [ ] Process-local page tables in emulator mode
- - [ ] Full syscall coverage in emulator mode
-
-## Longer term
-
- - [ ] SMP support
- - [ ] Additional VirtIO devices
- - [ ] Additional ISA extensions
- - [ ] JIT experiments
- - [ ] Performance optimizations
-
 # Appendix
 
 ## Benchmark history
@@ -255,11 +239,7 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 | Optimized Instr struct |  0.385 |  4.022 | 0m44.167s | 159.65 |    0.124 |
 | Interrupts             |  0.416 |  4.321 | 0m49.085s | 148.61 |    0.134 |
 
-## Internal roadmap
-
- - [ ] Does Image have a PE header? Does it also contain System.map?
-
-## MMU Refactoring
+## Userspace Emulation - MMU Refactoring
 
  - [x] Fix page table MMU code to run the existing samples
  - [ ] Refactor the entire emulator stack
@@ -272,20 +252,12 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
          traps should fill page table.
  - [x] sfence.vma must clear MMU's TLB entries
  - [x] Remove `Raw uint32` from `Instr`?
-
-## Step 2 - MMU and Linux syscalls
-
  - [x] MMU with page tables
    - [ ] Move pagetable to processes
  - [ ] Refactor emulator source files
  - [ ] Rethink FD handling.
  - [ ] Run most Linux and Go binaries
  - [ ] Proper Linux syscall support
-
-## Step 3 - Supervisor mode
-
- - [x] Supervisor mode
- - [x] Boot Linux kernel
 
 ### Kernel memory map
 
