@@ -71,3 +71,13 @@ Program Headers:
 ``` shell
 $ ./build.sh -m riscv -a riscv64 -U -u release
 ```
+
+## Booting FreeBSD on QEMU
+
+``` shell
+$ qemu-system-riscv64 -machine virt -m 2048 -nographic \
+    -bios fw_jump.bin \
+    -kernel u-boot.bin \
+    -drive file=FreeBSD-15.1-RC3-riscv-riscv64-GENERICSD.img,format=raw,id=hd0,if=none \
+    -device virtio-blk-device,drive=hd0
+```
