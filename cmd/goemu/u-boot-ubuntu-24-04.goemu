@@ -1,0 +1,18 @@
+{
+  "bios":    "opensbi/fw_jump.bin",
+  "kernel":  "u-boot-2026.04/u-boot.bin",
+  "append":  "earlycon=sbi console=ttyS0,115200 root=/dev/vda1 ro rootwait systemd.mask=systemd-networkd-wait-online.service",
+  "drives": [
+    {
+      "id":     "hd0",
+      "format": "raw",
+      "file":   "ubuntu-24.04/ubuntu-24.04.4-preinstalled-server-riscv64.img"
+    }
+  ],
+  "devices": [
+    {
+      "type":  "virtio-blk-device",
+      "drive": "hd0"
+    }
+  ]
+}
