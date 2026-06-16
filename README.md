@@ -16,10 +16,6 @@ OpenSBI &#8594; U-Boot &#8594; EFI &#8594; {NetBSD,FreeBSD}<br>
 OpenSBI &#8594; U-Boot &#8594; EFI &#8594; GRUB &#8594; Ubuntu Linux
 </p>
 
-Current status: Boots Linux, NetBSD, and FreeBSD to multi-user
-userspace with VirtIO block devices, serial console, timers,
-interrupts, and SV39 virtual memory.
-
 ## Features
 
 - RV64GC instruction set support
