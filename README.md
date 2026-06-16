@@ -8,8 +8,11 @@
 RV64GC RISC-V emulator written in Go capable of booting Linux, NetBSD,
 and FreeBSD with OpenSBI, U-Boot, SV39 virtual memory, and VirtIO
 devices.
-<br>
-OpenSBI &#8594; U-Boot &#8594; {BuildRoot,Ubuntu,NetBSD,FreeBSD}
+</p>
+<p align="center">
+OpenSBI &#8594; {BuildRoot Linux}<br>
+OpenSBI &#8594; U-Boot &#8594; EFI &#8594; {NetBSD,FreeBSD}<br>
+OpenSBI &#8594; U-Boot &#8594; GRUB &#8594; EFI &#8594; {Ubuntu Linux}
 </p>
 
 ## Features
