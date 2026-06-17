@@ -34,5 +34,6 @@ go.work.sum
 cmd/riscv-objdump/riscv-objdump
 cmd/riscv-objdump/elf
 cmd/goemu/goemu
+cmd/time/time
 
 ,cpu
