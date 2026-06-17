@@ -12,6 +12,8 @@ import (
 	"github.com/markkurossi/riscv/memory"
 )
 
+// UserCString reads a null-terminated C-string from virtual address
+// vaddr.
 func (mmu *MMU) UserCString(vaddr uint64) (string, error) {
 	var data []byte
 
@@ -34,6 +36,7 @@ func (mmu *MMU) UserCString(vaddr uint64) (string, error) {
 	}
 }
 
+// CopyFromUser copies data from virtual address vaddr to buf.
 func (mmu *MMU) CopyFromUser(vaddr uint64, buf []byte) error {
 	for len(buf) > 0 {
 		l := memory.PageSize - vaddr%memory.PageSize
@@ -51,6 +54,7 @@ func (mmu *MMU) CopyFromUser(vaddr uint64, buf []byte) error {
 	return nil
 }
 
+// CopyToUser copies data to virtual address vaddr.
 func (mmu *MMU) CopyToUser(vaddr uint64, data []byte) error {
 	for len(data) > 0 {
 		l := memory.PageSize - vaddr%memory.PageSize
@@ -74,6 +78,70 @@ func (mmu *MMU) CopyToUser(vaddr uint64, data []byte) error {
 		data = data[l:]
 		vaddr += l
 	}
+	return nil
+}
+
+// SetMapSv39 sets a page table mapping from vpage to ppage with
+// flags.
+func SetMapSv39(mem *memory.Memory, satp Satp, vpage, ppage uint64,
+	flags PTEFlags) error {
+
+	if satp.Mode() != SatpModeSv39 {
+		return fmt.Errorf("invalid page-table mode: %v", satp.Mode())
+	}
+
+	flags |= PteV
+
+	root := satp.PPN()
+	base := root << 12
+
+	// Walk levels 2-1.
+	for level := 2; level > 0; level-- {
+		idx := (vpage >> uint64(9*level)) & 0b111111111
+		pteAddr := base + idx*8
+
+		pte := PTE(bo.Uint64(mem.RAM[mem.Offset(pteAddr):]))
+
+		if pte.Valid() {
+			if pte.Leaf() {
+				return fmt.Errorf("superpage exists")
+			}
+			// Walk to the next level.
+			base = pte.PPN() << 12
+		} else {
+			// Lazy allocation of next level page.
+			newPage, err := mem.AllocPage()
+			if err != nil {
+				return err
+			}
+			newPageAddr := newPage << 12
+
+			// Clear page.
+			page, err := mem.Page(newPage)
+			if err != nil {
+				return err
+			}
+			clear(page)
+
+			bo.PutUint64(mem.RAM[mem.Offset(pteAddr):],
+				uint64(MakePTE(newPage, PteV)))
+
+			base = newPageAddr
+		}
+	}
+
+	// Level 0.
+
+	idx := vpage & 0b111111111
+	pteAddr := base + idx*8
+
+	pte := PTE(bo.Uint64(mem.RAM[mem.Offset(pteAddr):]))
+	if pte.Valid() {
+		return fmt.Errorf("mapping already exists: %v", pte)
+	}
+
+	bo.PutUint64(mem.RAM[mem.Offset(pteAddr):], uint64(MakePTE(ppage, flags)))
+
 	return nil
 }
 

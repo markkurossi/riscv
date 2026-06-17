@@ -397,34 +397,10 @@ func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 		pte := PTE(bo.Uint64(mmu.Mem.RAM[mmu.Mem.Offset(pteAddr):]))
 
 		if !pte.Valid() {
-
-			// XXX Check the RISC-V Specification:
-			//  - Volume II: RISC-V Privileged ISA Specification
-			//    - 12.1.3.1. Addressing and Memory Protection
-			//
-			// https://docs.riscv.org/reference/isa/priv/supervisor.html#translation
-			//
-			// The condition below is true and if we allow the direct mapping,
-			// the Linux boot succeeds. If we cause a page fault for the
-			// missing identity mapping, Linux dies in the page fault
-			// handling.
-			if mmu.Hart.Mode() == isa.ModeS && vaddr&(1<<63) == 0 &&
-				!mmu.Hart.Mstatus().SUM() {
-				if false {
-					// XXX Linux boots now with this kludge disabled.
-					fmt.Printf("%v: %x, pte=%v, level=%v, SUM=%v, MXR=%v\n",
-						mmu.Hart.Mode(), vaddr, pte, level,
-						mmu.Hart.Mstatus().SUM(),
-						mmu.Hart.Mstatus().MXR())
-					return vaddr, PteU | PteV, 0, nil
-				}
-			}
-
 			var err error
 			if debugMMU {
 				err = fmt.Errorf("PTE not valid: %v", pte)
 			}
-
 			if access&AccessWrite != 0 {
 				return 0, 0, 0,
 					mmu.Hart.Trap(isa.CauseStorePageFault, vaddr, err)
@@ -433,7 +409,6 @@ func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 				return 0, 0, 0,
 					mmu.Hart.Trap(isa.CauseInstPageFault, vaddr, err)
 			}
-
 			// Default to load page fault.
 			return 0, 0, 0,
 				mmu.Hart.Trap(isa.CauseLoadPageFault, vaddr, err)
@@ -604,6 +579,7 @@ func (mmu *MMU) mapLeaf(pte PTE, pteAddr, vaddr uint64, level, access int) (
 	return page, flags, level, nil
 }
 
+// Load8 loads a 8-bit value from the virtual address vaddr.
 func (mmu *MMU) Load8(vaddr uint64) (uint8, error) {
 	paddr, err := mmu.Map(vaddr, AccessRead)
 	if err != nil {
@@ -615,6 +591,7 @@ func (mmu *MMU) Load8(vaddr uint64) (uint8, error) {
 	return mmu.Mem.RAM[mmu.Mem.Offset(paddr)], nil
 }
 
+// Load16 loads a 16-bit value from the virtual address vaddr.
 func (mmu *MMU) Load16(vaddr uint64) (uint16, error) {
 	if memory.Avail(vaddr, 2) {
 		paddr, err := mmu.Map(vaddr, AccessRead)
@@ -626,15 +603,14 @@ func (mmu *MMU) Load16(vaddr uint64) (uint16, error) {
 		}
 		if mmu.Mem.Contains(paddr) {
 			return bo.Uint16(mmu.Mem.RAM[mmu.Mem.Offset(paddr):]), nil
-		} else {
-			if debugMMU {
-				err = fmt.Errorf("%v: Load16(%x): addr out of obunds [%x...%x[",
-					mmu.Hart.Mode(), paddr,
-					mmu.Mem.RAMBase, mmu.Mem.RAMBase+uint64(len(mmu.Mem.RAM)))
-				fmt.Printf("%v\r\n", err)
-			}
-			return 0, mmu.Hart.Trap(isa.CauseLoadPageFault, vaddr, err)
 		}
+		if debugMMU {
+			err = fmt.Errorf("%v: Load16(%x): addr out of obunds [%x...%x[",
+				mmu.Hart.Mode(), paddr,
+				mmu.Mem.RAMBase, mmu.Mem.RAMBase+uint64(len(mmu.Mem.RAM)))
+			log.Printf("%v", err)
+		}
+		return 0, mmu.Hart.Trap(isa.CauseLoadPageFault, vaddr, err)
 	}
 
 	var page uint64
@@ -661,6 +637,7 @@ func (mmu *MMU) Load16(vaddr uint64) (uint16, error) {
 	return result, nil
 }
 
+// Load32 loads a 32-bit value from the virtual address vaddr.
 func (mmu *MMU) Load32(vaddr uint64) (uint32, error) {
 	if memory.Avail(vaddr, 4) {
 		paddr, err := mmu.Map(vaddr, AccessRead)
@@ -697,6 +674,7 @@ func (mmu *MMU) Load32(vaddr uint64) (uint32, error) {
 	return result, nil
 }
 
+// Load64 loads a 64-bit value from the virtual address vaddr.
 func (mmu *MMU) Load64(vaddr uint64) (uint64, error) {
 	if memory.Avail(vaddr, 8) {
 		paddr, err := mmu.Map(vaddr, AccessRead)
@@ -738,6 +716,7 @@ func (mmu *MMU) Load64(vaddr uint64) (uint64, error) {
 	return result, nil
 }
 
+// Store8 stores a 8-bit value to virtual address vaddr.
 func (mmu *MMU) Store8(vaddr, v uint64) error {
 	paddr, err := mmu.Map(vaddr, AccessWrite)
 	if err != nil {
@@ -760,6 +739,7 @@ func (mmu *MMU) Store8(vaddr, v uint64) error {
 	return nil
 }
 
+// Store16 stores a 16-bit value to virtual address vaddr.
 func (mmu *MMU) Store16(vaddr, v uint64) error {
 	if memory.Avail(vaddr, 2) {
 		paddr, err := mmu.Map(vaddr, AccessWrite)
@@ -780,6 +760,7 @@ func (mmu *MMU) Store16(vaddr, v uint64) error {
 	return mmu.CopyToUser(vaddr, buf[:])
 }
 
+// Store32 stores a 32-bit value to virtual address vaddr.
 func (mmu *MMU) Store32(vaddr, v uint64) error {
 	if memory.Avail(vaddr, 4) {
 		paddr, err := mmu.Map(vaddr, AccessWrite)
@@ -799,6 +780,7 @@ func (mmu *MMU) Store32(vaddr, v uint64) error {
 	return mmu.CopyToUser(vaddr, buf[:])
 }
 
+// Store64 stores a 64-bit value to virtual address vaddr.
 func (mmu *MMU) Store64(vaddr, v uint64) error {
 	if memory.Avail(vaddr, 8) {
 		paddr, err := mmu.Map(vaddr, AccessWrite)
@@ -824,66 +806,4 @@ func (mmu *MMU) Store64(vaddr, v uint64) error {
 	bo.PutUint64(buf[:], v)
 
 	return mmu.CopyToUser(vaddr, buf[:])
-}
-
-func SetMapSv39(mem *memory.Memory, satp Satp, vpage, ppage uint64,
-	flags PTEFlags) error {
-
-	if satp.Mode() != SatpModeSv39 {
-		return fmt.Errorf("invalid page-table mode: %v", satp.Mode())
-	}
-
-	flags |= PteV
-
-	root := satp.PPN()
-	base := root << 12
-
-	// Walk levels 2-1.
-	for level := 2; level > 0; level-- {
-		idx := (vpage >> uint64(9*level)) & 0b111111111
-		pteAddr := base + idx*8
-
-		pte := PTE(bo.Uint64(mem.RAM[mem.Offset(pteAddr):]))
-
-		if pte.Valid() {
-			if pte.Leaf() {
-				return fmt.Errorf("superpage exists")
-			}
-			// Walk to the next level.
-			base = pte.PPN() << 12
-		} else {
-			// Lazy allocation of next level page.
-			newPage, err := mem.AllocPage()
-			if err != nil {
-				return err
-			}
-			newPageAddr := newPage << 12
-
-			// Clear page.
-			page, err := mem.Page(newPage)
-			if err != nil {
-				return err
-			}
-			clear(page)
-
-			bo.PutUint64(mem.RAM[mem.Offset(pteAddr):],
-				uint64(MakePTE(newPage, PteV)))
-
-			base = newPageAddr
-		}
-	}
-
-	// Level 0.
-
-	idx := vpage & 0b111111111
-	pteAddr := base + idx*8
-
-	pte := PTE(bo.Uint64(mem.RAM[mem.Offset(pteAddr):]))
-	if pte.Valid() {
-		return fmt.Errorf("mapping already exists: %v", pte)
-	}
-
-	bo.PutUint64(mem.RAM[mem.Offset(pteAddr):], uint64(MakePTE(ppage, flags)))
-
-	return nil
 }
