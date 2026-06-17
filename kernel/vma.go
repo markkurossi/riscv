@@ -225,6 +225,9 @@ func (kern *Kernel) compactVMA() error {
 			kern.VMA = kern.VMA[:len(kern.VMA)-1]
 			if vma.Source != nil {
 				// XXX file refcounts
+				if false {
+					fmt.Printf("MMAP source refcounts not implemented yet\n")
+				}
 			}
 		} else {
 			prev = vma
