@@ -60,18 +60,18 @@ func (rtc *GoldfishRTC) Load64(paddr uint64) (uint64, error) {
 
 // The Goldfish RTC hardware registers are read-only for standard timekeeping
 
-func (rtc *GoldfishRTC) Store8(paddr, v uint64) error {
+func (rtc *GoldfishRTC) Store8(paddr uint64, v uint8) error {
 	return nil
 }
 
-func (rtc *GoldfishRTC) Store16(paddr, v uint64) error {
+func (rtc *GoldfishRTC) Store16(paddr uint64, v uint16) error {
 	return nil
 }
 
-func (rtc *GoldfishRTC) Store32(paddr, v uint64) error {
+func (rtc *GoldfishRTC) Store32(paddr uint64, v uint32) error {
 	return nil
 }
 
-func (rtc *GoldfishRTC) Store64(paddr, v uint64) error {
+func (rtc *GoldfishRTC) Store64(paddr uint64, v uint64) error {
 	return nil
 }

@@ -117,7 +117,7 @@ func (plic *PLIC) Load64(paddr uint64) (uint64, error) {
 	return 0, nil
 }
 
-func (plic *PLIC) Store8(paddr, v uint64) error {
+func (plic *PLIC) Store8(paddr uint64, v uint8) error {
 	if paddr < plic.Start {
 		return plic.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 	}
@@ -125,12 +125,12 @@ func (plic *PLIC) Store8(paddr, v uint64) error {
 	return nil
 }
 
-func (plic *PLIC) Store16(paddr, v uint64) error {
+func (plic *PLIC) Store16(paddr uint64, v uint16) error {
 	log.Printf("PLIC: 0x%x = 0x%02x", paddr, v)
 	return nil
 }
 
-func (plic *PLIC) Store32(paddr uint64, val uint64) error {
+func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 	if paddr < plic.Start {
 		return plic.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 	}
@@ -177,7 +177,7 @@ func (plic *PLIC) Store32(paddr uint64, val uint64) error {
 	return nil
 }
 
-func (plic *PLIC) Store64(paddr, v uint64) error {
+func (plic *PLIC) Store64(paddr uint64, v uint64) error {
 	log.Printf("PLIC: 0x%x = 0x%08x", paddr, v)
 	return nil
 }

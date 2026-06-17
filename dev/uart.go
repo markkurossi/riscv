@@ -46,7 +46,7 @@ func (r UARTRReg) String() string {
 	if ok {
 		return name
 	}
-	return fmt.Sprintf("UART-%02x", r)
+	return fmt.Sprintf("%02x", uint8(r))
 }
 
 type UARTWReg uint8
@@ -78,10 +78,11 @@ func (r UARTWReg) String() string {
 	if ok {
 		return name
 	}
-	return fmt.Sprintf("UART-%02x", r)
+	return fmt.Sprintf("%02x", uint8(r))
 }
 
-// IER bit descriptions.
+// IERBits provides mapping from Interrupt Enable Register bits to
+// their descriptions.
 var IERBits = []string{
 	"Received data available",
 	"Transmitter holding register empty",
@@ -93,7 +94,8 @@ var IERBits = []string{
 	"reserved",
 }
 
-// FCR: FIFO Control Register bit descriptions.
+// FCRBits provide mapping from FIFO Control Register bit to their
+// descriptions.
 var FCRBits = []string{
 	"Enable FIFO’s",
 	"Clear receive FIFO",
@@ -112,7 +114,8 @@ const (
 	LCRDLABBit        = 0b10000000
 )
 
-// MCR: Modem control register bit descriptions.
+// MCRBits provide mapping from Modem Control Register bits to their
+// descriptions.
 var MCRBits = []string{
 	"Data terminal ready",
 	"Request to send",
@@ -340,7 +343,7 @@ func (uart *UART) Load64(paddr uint64) (uint64, error) {
 	return 0, nil
 }
 
-func (uart *UART) Store8(paddr, v uint64) error {
+func (uart *UART) Store8(paddr uint64, v uint8) error {
 	if paddr < uart.Start {
 		return uart.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 	}
@@ -354,15 +357,15 @@ func (uart *UART) Store8(paddr, v uint64) error {
 	switch reg {
 	case WRegTHR:
 		if uart.LCR&LCRDLABBit != 0 {
-			uart.DLL = byte(v)
+			uart.DLL = v
 			return nil
 		}
 		if uart.Color {
 			uart.Hart.ColorOn()
-			os.Stdout.Write([]byte{byte(v)})
+			os.Stdout.Write([]byte{v})
 			uart.Hart.ColorOff()
 		} else {
-			os.Stdout.Write([]byte{byte(v)})
+			os.Stdout.Write([]byte{v})
 		}
 
 		// Check if CPU wants to know that the THR is empty via an
@@ -371,7 +374,7 @@ func (uart *UART) Store8(paddr, v uint64) error {
 
 	case WRegIER:
 		if uart.LCR&LCRDLABBit != 0 {
-			uart.DLM = byte(v)
+			uart.DLM = v
 
 			// Baud rate: ClockFrequency/16*Divisor
 
@@ -389,13 +392,13 @@ func (uart *UART) Store8(paddr, v uint64) error {
 				}
 			}
 		}
-		uart.IER = byte(v)
+		uart.IER = v
 
 		// Check if CPU expects state changes via interrupts.
 		uart.checkInterrupts()
 
 	case WRegFCR:
-		uart.FCR = byte(v)
+		uart.FCR = v
 		if v != 0 {
 			uart.Infof("FCR: FIFO Control Register store:")
 			for i, desc := range FCRBits {
@@ -418,7 +421,7 @@ func (uart *UART) Store8(paddr, v uint64) error {
 		}
 
 	case WRegLCR:
-		uart.LCR = byte(v)
+		uart.LCR = v
 		uart.Infof("LCR: Line Control Register store:")
 		uart.Infof("   : %d data bits", v&0b11+5)
 		uart.Infof("   : %d stop bits", v>>2&0b1+1)
@@ -435,7 +438,7 @@ func (uart *UART) Store8(paddr, v uint64) error {
 		}
 
 	case WRegMCR:
-		uart.MCR = byte(v)
+		uart.MCR = v
 		if v != 0 {
 			uart.Infof("MCR: Modem Control Register store:")
 			for i, desc := range MCRBits {
@@ -446,23 +449,23 @@ func (uart *UART) Store8(paddr, v uint64) error {
 		}
 
 	case WRegSCR:
-		uart.SCR = byte(v)
+		uart.SCR = v
 		uart.Infof("SCR: %08b", v)
 	}
 	return nil
 }
 
-func (uart *UART) Store16(paddr, v uint64) error {
+func (uart *UART) Store16(paddr uint64, v uint16) error {
 	fmt.Printf("ROM.store16: %x = %v\n", paddr, v)
 	return nil
 }
 
-func (uart *UART) Store32(paddr, v uint64) error {
+func (uart *UART) Store32(paddr uint64, v uint32) error {
 	fmt.Printf("ROM.store32: %x = %v\n", paddr, v)
 	return nil
 }
 
-func (uart *UART) Store64(paddr, v uint64) error {
+func (uart *UART) Store64(paddr uint64, v uint64) error {
 	fmt.Printf("ROM.store64: %x = %v\n", paddr, v)
 	return nil
 }

@@ -46,7 +46,7 @@ func (syscon *Syscon) Load64(paddr uint64) (uint64, error) {
 	return 0, nil
 }
 
-func (syscon *Syscon) Store8(paddr, v uint64) error {
+func (syscon *Syscon) Store8(paddr uint64, v uint8) error {
 	if paddr < syscon.Start {
 		return syscon.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 	}
@@ -54,12 +54,12 @@ func (syscon *Syscon) Store8(paddr, v uint64) error {
 	return nil
 }
 
-func (syscon *Syscon) Store16(paddr, v uint64) error {
+func (syscon *Syscon) Store16(paddr uint64, v uint16) error {
 	syscon.Hart.Shutdown()
 	return nil
 }
 
-func (syscon *Syscon) Store32(paddr, v uint64) error {
+func (syscon *Syscon) Store32(paddr uint64, v uint32) error {
 	if v != PoweroffMagic {
 		fmt.Printf("Syscon.Store32: 0x%x = 0x%04x\n", paddr, v)
 	} else {
@@ -68,7 +68,7 @@ func (syscon *Syscon) Store32(paddr, v uint64) error {
 	return nil
 }
 
-func (syscon *Syscon) Store64(paddr, v uint64) error {
+func (syscon *Syscon) Store64(paddr uint64, v uint64) error {
 	syscon.Hart.Shutdown()
 	return nil
 }

@@ -553,7 +553,7 @@ dispatch:
 		case isa.Fsw:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
 			v := math.Float32bits(float32(cpu.F[instr.Rs2]))
-			if err := cpu.MMU.Store32(addr, uint64(v)); err != nil {
+			if err := cpu.MMU.Store32(addr, uint32(v)); err != nil {
 				return err
 			}
 			cpu.ReservationValid = false
@@ -737,7 +737,8 @@ dispatch:
 
 		case isa.Sb:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			if err := cpu.MMU.Store8(addr, cpu.X[instr.Rs2]); err != nil {
+			err = cpu.MMU.Store8(addr, uint8(cpu.X[instr.Rs2]))
+			if err != nil {
 				return err
 			}
 			cpu.ReservationValid = false
@@ -767,14 +768,16 @@ dispatch:
 
 		case isa.Sh:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			if err := cpu.MMU.Store16(addr, cpu.X[instr.Rs2]); err != nil {
+			err = cpu.MMU.Store16(addr, uint16(cpu.X[instr.Rs2]))
+			if err != nil {
 				return err
 			}
 			cpu.ReservationValid = false
 
 		case isa.Sw:
 			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			if err := cpu.MMU.Store32(addr, cpu.X[instr.Rs2]); err != nil {
+			err = cpu.MMU.Store32(addr, uint32(cpu.X[instr.Rs2]))
+			if err != nil {
 				return err
 			}
 			cpu.ReservationValid = false
@@ -963,7 +966,7 @@ dispatch:
 			if err != nil {
 				return err
 			}
-			err = cpu.MMU.Store32(addr, cpu.X[instr.Rs2])
+			err = cpu.MMU.Store32(addr, uint32(cpu.X[instr.Rs2]))
 			if err != nil {
 				return err
 			}
@@ -988,7 +991,7 @@ dispatch:
 			if err != nil {
 				return err
 			}
-			t := uint64(int64(int32(v) + int32(cpu.X[instr.Rs2])))
+			t := uint32(int32(v) + int32(cpu.X[instr.Rs2]))
 			err = cpu.MMU.Store32(addr, t)
 			if err != nil {
 				return err
@@ -1014,7 +1017,7 @@ dispatch:
 			if err != nil {
 				return err
 			}
-			t := uint64(int64(int32(v) & int32(cpu.X[instr.Rs2])))
+			t := uint32(int32(v) & int32(cpu.X[instr.Rs2]))
 			err = cpu.MMU.Store32(addr, t)
 			if err != nil {
 				return err
@@ -1040,7 +1043,7 @@ dispatch:
 			if err != nil {
 				return err
 			}
-			t := uint64(int64(int32(v) | int32(cpu.X[instr.Rs2])))
+			t := uint32(int32(v) | int32(cpu.X[instr.Rs2]))
 			err = cpu.MMU.Store32(addr, t)
 			if err != nil {
 				return err
@@ -1066,7 +1069,7 @@ dispatch:
 			if err != nil {
 				return err
 			}
-			t := uint64(int64(int32(v) ^ int32(cpu.X[instr.Rs2])))
+			t := uint32(int32(v) ^ int32(cpu.X[instr.Rs2]))
 			err = cpu.MMU.Store32(addr, t)
 			if err != nil {
 				return err
@@ -1099,7 +1102,7 @@ dispatch:
 			if v > t {
 				t = v
 			}
-			err = cpu.MMU.Store32(addr, uint64(t))
+			err = cpu.MMU.Store32(addr, t)
 			if err != nil {
 				return err
 			}
@@ -1134,7 +1137,7 @@ dispatch:
 
 			// SC succeeds only if the reservation matches.
 			if cpu.ReservationValid && cpu.Reservation == addr {
-				err := cpu.MMU.Store32(addr, cpu.X[instr.Rs2])
+				err := cpu.MMU.Store32(addr, uint32(cpu.X[instr.Rs2]))
 				if err != nil {
 					cpu.ReservationValid = false
 					return err
@@ -1589,7 +1592,7 @@ dispatch:
 				v := srcVec[i]
 
 				targetAddr := baseAddr + i
-				err := cpu.MMU.Store8(targetAddr, uint64(v))
+				err := cpu.MMU.Store8(targetAddr, v)
 				if err != nil {
 					cpu.vpu.VStart = i
 					return err

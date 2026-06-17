@@ -77,7 +77,7 @@ func (rom *ROM) Load64(paddr uint64) (uint64, error) {
 	return 0, rom.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
 }
 
-func (rom *ROM) Store8(paddr, v uint64) error {
+func (rom *ROM) Store8(paddr uint64, v uint8) error {
 	for _, seg := range rom.Segments {
 		if seg.Contains(paddr) {
 			return seg.Store8(paddr, v)
@@ -86,7 +86,7 @@ func (rom *ROM) Store8(paddr, v uint64) error {
 	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 }
 
-func (rom *ROM) Store16(paddr, v uint64) error {
+func (rom *ROM) Store16(paddr uint64, v uint16) error {
 	for _, seg := range rom.Segments {
 		if seg.Contains(paddr) {
 			return seg.Store16(paddr, v)
@@ -95,7 +95,7 @@ func (rom *ROM) Store16(paddr, v uint64) error {
 	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 }
 
-func (rom *ROM) Store32(paddr, v uint64) error {
+func (rom *ROM) Store32(paddr uint64, v uint32) error {
 	for _, seg := range rom.Segments {
 		if seg.Contains(paddr) {
 			return seg.Store32(paddr, v)
@@ -104,7 +104,7 @@ func (rom *ROM) Store32(paddr, v uint64) error {
 	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 }
 
-func (rom *ROM) Store64(paddr, v uint64) error {
+func (rom *ROM) Store64(paddr uint64, v uint64) error {
 	for _, seg := range rom.Segments {
 		if seg.Contains(paddr) {
 			return seg.Store64(paddr, v)

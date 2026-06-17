@@ -46,14 +46,14 @@ const (
 type ROM interface {
 	Halt() error
 	Contains(paddr uint64) bool
-	Load8(padr uint64) (uint8, error)
-	Load16(padr uint64) (uint16, error)
-	Load32(padr uint64) (uint32, error)
-	Load64(padr uint64) (uint64, error)
-	Store8(padr, v uint64) error
-	Store16(padr, v uint64) error
-	Store32(padr, v uint64) error
-	Store64(padr, v uint64) error
+	Load8(paddr uint64) (uint8, error)
+	Load16(paddr uint64) (uint16, error)
+	Load32(paddr uint64) (uint32, error)
+	Load64(paddr uint64) (uint64, error)
+	Store8(paddr uint64, v uint8) error
+	Store16(paddr uint64, v uint16) error
+	Store32(paddr uint64, v uint32) error
+	Store64(paddr uint64, v uint64) error
 }
 
 type MMU struct {
@@ -717,7 +717,7 @@ func (mmu *MMU) Load64(vaddr uint64) (uint64, error) {
 }
 
 // Store8 stores a 8-bit value to virtual address vaddr.
-func (mmu *MMU) Store8(vaddr, v uint64) error {
+func (mmu *MMU) Store8(vaddr uint64, v uint8) error {
 	paddr, err := mmu.Map(vaddr, AccessWrite)
 	if err != nil {
 		return err
@@ -740,7 +740,7 @@ func (mmu *MMU) Store8(vaddr, v uint64) error {
 }
 
 // Store16 stores a 16-bit value to virtual address vaddr.
-func (mmu *MMU) Store16(vaddr, v uint64) error {
+func (mmu *MMU) Store16(vaddr uint64, v uint16) error {
 	if memory.Avail(vaddr, 2) {
 		paddr, err := mmu.Map(vaddr, AccessWrite)
 		if err != nil {
@@ -761,7 +761,7 @@ func (mmu *MMU) Store16(vaddr, v uint64) error {
 }
 
 // Store32 stores a 32-bit value to virtual address vaddr.
-func (mmu *MMU) Store32(vaddr, v uint64) error {
+func (mmu *MMU) Store32(vaddr uint64, v uint32) error {
 	if memory.Avail(vaddr, 4) {
 		paddr, err := mmu.Map(vaddr, AccessWrite)
 		if err != nil {
@@ -781,18 +781,10 @@ func (mmu *MMU) Store32(vaddr, v uint64) error {
 }
 
 // Store64 stores a 64-bit value to virtual address vaddr.
-func (mmu *MMU) Store64(vaddr, v uint64) error {
+func (mmu *MMU) Store64(vaddr uint64, v uint64) error {
 	if memory.Avail(vaddr, 8) {
 		paddr, err := mmu.Map(vaddr, AccessWrite)
 		if err != nil {
-			if false {
-				log.Printf("here: vaddr=%016x, err=%v", vaddr, err)
-				if trap, ok := errors.AsType[*isa.Trap](err); ok {
-					if trap.Err != nil {
-						log.Printf("  caused by %v\n", trap.Err)
-					}
-				}
-			}
 			return err
 		}
 		if paddr < mmu.Mem.RAMBase {

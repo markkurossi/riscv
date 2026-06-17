@@ -15,5 +15,6 @@ var (
 	_ mmu.ROM = &CLINT{}
 	_ mmu.ROM = &PLIC{}
 	_ mmu.ROM = &GoldfishRTC{}
+	_ mmu.ROM = &Syscon{}
 	_ mmu.ROM = &UART{}
 )

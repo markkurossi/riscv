@@ -204,52 +204,52 @@ func (vio *MMIO) Load64(paddr uint64) (uint64, error) {
 	return 0, fmt.Errorf("MMIO.Load64 not implemented yet")
 }
 
-func (vio *MMIO) Store8(paddr, v uint64) error {
+func (vio *MMIO) Store8(paddr uint64, v uint8) error {
 	return fmt.Errorf("MMIO.Store8 not implemented yet")
 }
 
-func (vio *MMIO) Store16(paddr, v uint64) error {
+func (vio *MMIO) Store16(paddr uint64, v uint16) error {
 	return fmt.Errorf("MMIO.Store16 not implemented yet")
 }
 
-func (vio *MMIO) Store32(paddr, v uint64) error {
+func (vio *MMIO) Store32(paddr uint64, v uint32) error {
 	offset := paddr - vio.Start
 
 	vio.debugf("Store32(%v, 0x%08x)", mmioReg(offset), v)
 
 	switch offset {
 	case 0x014: // DeviceFeaturesSel
-		vio.deviceFeaturesSel = uint32(v)
+		vio.deviceFeaturesSel = v
 
 	case 0x024: // DriverFeaturesSel
-		vio.driverFeaturesSel = uint32(v)
+		vio.driverFeaturesSel = v
 
 	case 0x020: // DriverFeatures
 		if vio.driverFeaturesSel < 2 {
-			vio.driverFeatures[vio.driverFeaturesSel] = uint32(v)
+			vio.driverFeatures[vio.driverFeaturesSel] = v
 		}
 
 	case 0x030: // QueueSel
-		vio.queueSel = uint32(v)
+		vio.queueSel = v
 
 	case 0x038: // QueueNum (Guest setting chosen queue size)
 		if vio.queueSel < uint32(len(vio.queues)) {
-			vio.queues[vio.queueSel].Num = uint32(v)
+			vio.queues[vio.queueSel].Num = v
 		}
 
 	case 0x044: // QueueReady
 		if vio.queueSel < uint32(len(vio.queues)) {
-			vio.queues[vio.queueSel].Ready = uint32(v)
+			vio.queues[vio.queueSel].Ready = v
 		}
 
 	case 0x050: // QueueNotify
-		vio.ProcessQueue(uint32(v))
+		vio.ProcessQueue(v)
 
 	case 0x064: // InterruptACK The guest writes a bitmask of the bits
 		vio.debugf("InterruptACK status=%x", vio.interruptStatus)
 
 		// it has acknowledged and wants cleared
-		vio.interruptStatus &^= uint32(v)
+		vio.interruptStatus &^= v
 		vio.debugf("interruptStatus: %x\n", vio.interruptStatus)
 
 		// If the guest has cleared all active interrupts, we can
@@ -269,42 +269,42 @@ func (vio *MMIO) Store32(paddr, v uint64) error {
 		if vio.queueSel < uint32(len(vio.queues)) {
 			vio.queues[vio.queueSel].DescPhys =
 				(vio.queues[vio.queueSel].DescPhys & 0xffffffff00000000) |
-					(v & 0xffffffff)
+					uint64(v)
 		}
 
 	case 0x084: // QueueDescHigh
 		if vio.queueSel < uint32(len(vio.queues)) {
 			vio.queues[vio.queueSel].DescPhys =
 				(vio.queues[vio.queueSel].DescPhys & 0x00000000ffffffff) |
-					(uint64(v&0xffffffff) << 32)
+					(uint64(v) << 32)
 		}
 
 	case 0x090: // QueueDriverLow (Available Ring)
 		if vio.queueSel < uint32(len(vio.queues)) {
 			vio.queues[vio.queueSel].AvailPhys =
 				(vio.queues[vio.queueSel].AvailPhys & 0xffffffff00000000) |
-					(v & 0xffffffff)
+					uint64(v)
 		}
 
 	case 0x094: // QueueDriverHigh
 		if vio.queueSel < uint32(len(vio.queues)) {
 			vio.queues[vio.queueSel].AvailPhys =
 				(vio.queues[vio.queueSel].AvailPhys & 0x00000000ffffffff) |
-					(uint64(v&0xffffffff) << 32)
+					(uint64(v) << 32)
 		}
 
 	case 0x0a0: // QueueDeviceLow (Used Ring)
 		if vio.queueSel < uint32(len(vio.queues)) {
 			vio.queues[vio.queueSel].UsedPhys =
 				(vio.queues[vio.queueSel].UsedPhys & 0xffffffff00000000) |
-					(v & 0xffffffff)
+					uint64(v)
 		}
 
 	case 0x0a4: // QueueDeviceHigh
 		if vio.queueSel < uint32(len(vio.queues)) {
 			vio.queues[vio.queueSel].UsedPhys =
 				(vio.queues[vio.queueSel].UsedPhys & 0x00000000ffffffff) |
-					(uint64(v&0xffffffff) << 32)
+					(uint64(v) << 32)
 		}
 
 	case 0x070: // Status
@@ -329,7 +329,7 @@ func (vio *MMIO) Store32(paddr, v uint64) error {
 		}
 
 		// Standard status update protocol sequence
-		vio.status |= uint32(v)
+		vio.status |= v
 
 		if v&8 != 0 { // VIRTIO_CONFIG_S_FEATURES_OK (8)
 			// Validate that the driver acknowledged
@@ -344,7 +344,7 @@ func (vio *MMIO) Store32(paddr, v uint64) error {
 	return nil
 }
 
-func (vio *MMIO) Store64(paddr, v uint64) error {
+func (vio *MMIO) Store64(paddr uint64, v uint64) error {
 	return fmt.Errorf("MMIO.Store64 not implemented yet")
 }
 

@@ -179,16 +179,16 @@ func (clint *CLINT) Load64(paddr uint64) (uint64, error) {
 	return clint.load(paddr)
 }
 
-func (clint *CLINT) Store8(paddr uint64, v uint64) error {
-	return clint.store(paddr, v)
+func (clint *CLINT) Store8(paddr uint64, v uint8) error {
+	return clint.store(paddr, uint64(v))
 }
 
-func (clint *CLINT) Store16(paddr uint64, v uint64) error {
-	return clint.store(paddr, v)
+func (clint *CLINT) Store16(paddr uint64, v uint16) error {
+	return clint.store(paddr, uint64(v))
 }
 
-func (clint *CLINT) Store32(paddr uint64, v uint64) error {
-	return clint.store(paddr, v)
+func (clint *CLINT) Store32(paddr uint64, v uint32) error {
+	return clint.store(paddr, uint64(v))
 }
 
 func (clint *CLINT) Store64(paddr uint64, v uint64) error {
