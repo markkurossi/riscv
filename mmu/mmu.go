@@ -56,6 +56,7 @@ type ROM interface {
 	Store64(paddr uint64, v uint64) error
 }
 
+// MMU implements the memory management unit.
 type MMU struct {
 	satp Satp
 	Hart isa.Hart
@@ -65,33 +66,45 @@ type MMU struct {
 	TLB [4096]TLBEntry
 }
 
+// Satp returns the MMU's current Supervisor Address Translation and
+// Protection (SATP) value.
 func (mmu *MMU) Satp() Satp {
 	return mmu.satp
 }
 
+// SetSatp sets the satp configuration. All subsequent address
+// translations will use the satp accordingly.
 func (mmu *MMU) SetSatp(satp Satp) {
 	mmu.satp = satp
 	clear(mmu.TLB[:])
 }
 
+// FlushTLB flushes the MMU's TLB.
 func (mmu *MMU) FlushTLB() {
 	clear(mmu.TLB[:])
 }
 
+// Satp defines the Supervisor Address Translation and Protection
+// configuration.
 type Satp uint64
 
+// NewSATP creates a new satp with mode and page table root physical
+// page number (PPN).
 func NewSATP(mode int, ppn uint64) Satp {
 	return Satp(mode)<<60 | Satp(ppn&0x7ffffffffff)
 }
 
+// Mode returns the satp mode.
 func (satp Satp) Mode() int {
 	return int(satp >> 60)
 }
 
+// ASID returns the satp Address Space ID (ASID).
 func (satp Satp) ASID() uint16 {
 	return uint16(satp >> 44)
 }
 
+// PPN returns the satp PPN.
 func (satp Satp) PPN() uint64 {
 	return uint64(satp & 0x7ffffffffff)
 }
@@ -109,8 +122,10 @@ func (satp Satp) String() string {
 //	+---------------+------------+---------+---------+---+-+-+-+-+-+-+-+-+
 type PTE uint64
 
+// PTEFlags define page table entry flags.
 type PTEFlags uint8
 
+// Page table entry flags.
 const (
 	PteV PTEFlags = 1 << iota // Valid
 	PteR                      // Readable
@@ -169,34 +184,42 @@ func (flags PTEFlags) String() string {
 	return result
 }
 
+// Valid tests if the entry is valid.
 func (flags PTEFlags) Valid() bool {
 	return flags&PteV != 0
 }
 
+// Readable tests if the page is readable.
 func (flags PTEFlags) Readable() bool {
 	return flags&PteR != 0
 }
 
+// Writable tests if the page is writable.
 func (flags PTEFlags) Writable() bool {
 	return flags&PteW != 0
 }
 
+// Executable tests if the page is executable.
 func (flags PTEFlags) Executable() bool {
 	return flags&PteX != 0
 }
 
+// User tests if the page is for user-mode.
 func (flags PTEFlags) User() bool {
 	return flags&PteU != 0
 }
 
+// Accessed tests if the page has been accessed.
 func (flags PTEFlags) Accessed() bool {
 	return flags&PteA != 0
 }
 
+// Dirty tests if the page has been modified.
 func (flags PTEFlags) Dirty() bool {
 	return flags&PteD != 0
 }
 
+// CanAccess tests if the page can be accessed with the mode access.
 func (flags PTEFlags) CanAccess(access int) (bool, uint64) {
 	if int(flags)&access == access {
 		return true, 0
@@ -210,6 +233,8 @@ func (flags PTEFlags) CanAccess(access int) (bool, uint64) {
 	return false, isa.CauseLoadPageFault
 }
 
+// MakePTE creates a new pate table entry for the physical page number
+// ppn and flags.
 func MakePTE(ppn uint64, flags PTEFlags) PTE {
 	return PTE(ppn<<10 | uint64(flags&0b11111111))
 }
@@ -226,51 +251,63 @@ func (pte PTE) String() string {
 	return result
 }
 
+// Flags return the page table entry flags.
 func (pte PTE) Flags() PTEFlags {
 	return PTEFlags(pte & 0b11111111)
 }
 
+// SetFlags set the page table entry flags.
 func (pte PTE) SetFlags(flags PTEFlags) {
 	pte &^= 0b11111111
 	pte |= PTE(flags)
 }
 
+// Valid tests if the entry is valid.
 func (pte PTE) Valid() bool {
 	return pte.Flags().Valid()
 }
 
+// Readable tests if the page is readable.
 func (pte PTE) Readable() bool {
 	return pte.Flags()&PteR != 0
 }
 
+// Writable tests if the page is writable.
 func (pte PTE) Writable() bool {
 	return pte.Flags()&PteW != 0
 }
 
+// Executable tests if the page is executable.
 func (pte PTE) Executable() bool {
 	return pte.Flags()&PteX != 0
 }
 
+// User tests if the page is for user-mode.
 func (pte PTE) User() bool {
 	return pte.Flags()&PteU != 0
 }
 
+// Leaf tests if the page table entry is a leaf entry.
 func (pte PTE) Leaf() bool {
 	return (pte.Flags() & (PteR | PteW | PteX)) != 0
 }
 
+// PPN returns the entry's physical page number.
 func (pte PTE) PPN() uint64 {
 	return uint64(pte) >> 10
 }
 
+// PPN0 returns the entry's physical page number level 0.
 func (pte PTE) PPN0() uint64 {
 	return pte.PPN() & 0x1FF
 }
 
+// PPN1 returns the entry's physical page number level 1.
 func (pte PTE) PPN1() uint64 {
 	return pte.PPN() >> 9 & 0x1FF
 }
 
+// PPN2 returns the entry's physical page number level 2.
 func (pte PTE) PPN2() uint64 {
 	return pte.PPN() >> 18
 }
@@ -295,6 +332,7 @@ func index(va uint64, level int) uint64 {
 	return uint64((va >> (12 + (9 * level))) & 0x1FF)
 }
 
+// TLBEntry defines a Translation Lookaside Buffer (TLB) entry.
 type TLBEntry struct {
 	VPN        uint64
 	Page       uint64
@@ -303,6 +341,7 @@ type TLBEntry struct {
 	UserMode   bool
 }
 
+// Clear clears the TLB entry.
 func (te *TLBEntry) Clear() {
 	te.VPN = 0
 	te.Page = 0
@@ -311,6 +350,9 @@ func (te *TLBEntry) Clear() {
 	te.UserMode = false
 }
 
+// Map maps the virtual address to physical address. The map enforces
+// the access flags and generates memory access faults if the page
+// table mapping does not allow the specified page access.
 func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
 	if mmu.satp.Mode() == SatpModeBare {
 		return vaddr, nil
@@ -385,6 +427,7 @@ func (mmu *MMU) mapSlow(vaddr, vpn uint64, access int) (uint64, error) {
 	return page | (vaddr & uint64(tlb.OffsetMask)), nil
 }
 
+// MapSv39 does a Sv39 page table lookup for the virtual address.
 func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 	uint64, PTEFlags, int, error) {
 
@@ -425,6 +468,8 @@ func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 		fmt.Errorf("no leaf page found"))
 }
 
+// AccessContext provides detailed information about virtual memory access
+// faults.
 type AccessContext struct {
 	Addr   uint64
 	PTE    PTE
