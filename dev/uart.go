@@ -17,8 +17,10 @@ import (
 	"golang.org/x/term"
 )
 
+// UARTRReg implements UART read registers.
 type UARTRReg uint8
 
+// Readable registers.
 const (
 	RRegRBR UARTRReg = iota // receive buffer
 	RRegIER                 // interrupt enable
@@ -49,8 +51,10 @@ func (r UARTRReg) String() string {
 	return fmt.Sprintf("%02x", uint8(r))
 }
 
+// UARTWReg implements UART write registers.
 type UARTWReg uint8
 
+// Writable registers.
 const (
 	WRegTHR         UARTWReg = iota // transmitter holding
 	WRegIER                         // interrupt enable
@@ -127,6 +131,8 @@ var MCRBits = []string{
 	"Reserved",
 }
 
+// UART implements the UART 16550A universal asynchronous
+// receiver-transmitter.
 type UART struct {
 	logger.Logger
 	Hart   isa.Hart
@@ -158,6 +164,7 @@ type UART struct {
 	isrPending uint8
 }
 
+// NewUART creates a new UART.
 func NewUART(hart isa.Hart, start, size uint64, plic *PLIC, irq uint32,
 	color, cooked bool) *UART {
 
@@ -185,6 +192,7 @@ func NewUART(hart isa.Hart, start, size uint64, plic *PLIC, irq uint32,
 	return uart
 }
 
+// Run is a go-routine handling UART input.
 func (uart *UART) Run() {
 	if !uart.Cooked {
 		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
@@ -216,6 +224,7 @@ func (uart *UART) Run() {
 	}
 }
 
+// Halt implements MMIO.Halt.
 func (uart *UART) Halt() error {
 	if uart.oldState != nil {
 		term.Restore(int(os.Stdin.Fd()), uart.oldState)
@@ -223,10 +232,12 @@ func (uart *UART) Halt() error {
 	return nil
 }
 
+// Contains implements MMIO.Contains.
 func (uart *UART) Contains(paddr uint64) bool {
 	return paddr >= uart.Start && paddr < uart.End
 }
 
+// Load8 implements MMIO.Load8.
 func (uart *UART) Load8(paddr uint64) (uint8, error) {
 	if paddr < uart.Start {
 		return 0, uart.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
@@ -331,18 +342,22 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 	return 0, nil
 }
 
+// Load16 implements MMIO.Load16.
 func (uart *UART) Load16(paddr uint64) (uint16, error) {
 	return 0, nil
 }
 
+// Load32 implements MMIO.Load32.
 func (uart *UART) Load32(paddr uint64) (uint32, error) {
 	return 0, nil
 }
 
+// Load64 implements MMIO.Load64.
 func (uart *UART) Load64(paddr uint64) (uint64, error) {
 	return 0, nil
 }
 
+// Store8 implements MMIO.Store8.
 func (uart *UART) Store8(paddr uint64, v uint8) error {
 	if paddr < uart.Start {
 		return uart.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
@@ -455,16 +470,19 @@ func (uart *UART) Store8(paddr uint64, v uint8) error {
 	return nil
 }
 
+// Store16 implements MMIO.Store16.
 func (uart *UART) Store16(paddr uint64, v uint16) error {
 	fmt.Printf("ROM.store16: %x = %v\n", paddr, v)
 	return nil
 }
 
+// Store32 implements MMIO.Store32.
 func (uart *UART) Store32(paddr uint64, v uint32) error {
 	fmt.Printf("ROM.store32: %x = %v\n", paddr, v)
 	return nil
 }
 
+// Store64 implements MMIO.Store64.
 func (uart *UART) Store64(paddr uint64, v uint64) error {
 	fmt.Printf("ROM.store64: %x = %v\n", paddr, v)
 	return nil
