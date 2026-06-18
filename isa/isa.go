@@ -13,6 +13,7 @@ import (
 	"strings"
 )
 
+// Processor extension flags.
 const (
 	MisaA uint64 = 1 << iota // Atomic extension
 	MisaB                    // B extension
@@ -27,7 +28,7 @@ const (
 	MisaK                    // Reserved
 	MisaL                    // Reserved
 	MisaM                    // Integer Multiply/Divide extension
-	MisaN                    // Tentatively reserved for User-Level Interrupts extension
+	MisaN                    // Reserved for User-Level Interrupts extension
 	MisaO                    // Reserved
 	MisaP                    // Tentatively reserved for Packed-SIMD extension
 	MisaQ                    // Quad-precision floating-point extension
@@ -44,8 +45,10 @@ const (
 	MisaMXL uint64 = 2 << 62
 )
 
+// PrivilegeMode defines the CPU privilege modes.
 type PrivilegeMode uint8
 
+// Privilege modes.
 const (
 	ModeU PrivilegeMode = iota
 	ModeS
@@ -68,25 +71,25 @@ func (m PrivilegeMode) String() string {
 	return fmt.Sprintf("{PrivilegeMode %d}", int(m))
 }
 
-// XXX Thise are interrupt cause code.
+// Interrupt causes. For interrupts, these are 1<<cause.
 //
-// Bit  Name   Meaning
-// ─────────────────────────────────────────
+//	Bit  Name   Meaning
+//	─────────────────────────────────────────
 //
-//		0   USIP   User Software Interrupt (mip only, pending)
-//		1   SSIP   Supervisor Software Interrupt
-//		2   —      reserved
-//		3   MSIP   Machine Software Interrupt
-//		4   UTIP   User Timer Interrupt
-//		5   STIP   Supervisor Timer Interrupt
-//		6   —      reserved
-//		7   MTIP   Machine Timer Interrupt
-//		8   UEIP   User External Interrupt
-//		9   SEIP   Supervisor External Interrupt
-//	   10   —      reserved
-//	   11   MEIP   Machine External Interrupt
-//	   12   —      reserved (SGEIP in hypervisor ext)
-//	   13+  —      platform-defined / reserved
+//	 0   USIP   User Software Interrupt (mip only, pending)
+//	 1   SSIP   Supervisor Software Interrupt
+//	 2   —      reserved
+//	 3   MSIP   Machine Software Interrupt
+//	 4   UTIP   User Timer Interrupt
+//	 5   STIP   Supervisor Timer Interrupt
+//	 6   —      reserved
+//	 7   MTIP   Machine Timer Interrupt
+//	 8   UEIP   User External Interrupt
+//	 9   SEIP   Supervisor External Interrupt
+//	10   —      reserved
+//	11   MEIP   Machine External Interrupt
+//	12   —      reserved (SGEIP in hypervisor ext)
+//	13+  —      platform-defined / reserved
 const (
 	IntUSIP = 1 << iota
 	IntSSIP
@@ -102,6 +105,8 @@ const (
 	IntMEIP
 )
 
+// IntString returns a string description of the pending interrupts in
+// v.
 func IntString(v uint64) string {
 	var result []string
 	if v&IntMEIP != 0 {
@@ -207,8 +212,10 @@ func (g Group) String() string {
 	return fmt.Sprintf("{Group %x}", int(g))
 }
 
+// VType implements the vector type register.
 type VType int32
 
+// VLMUL returns the group multiplier (LMUL).
 func (vt VType) VLMUL() float32 {
 	switch vt & 0b111 {
 	case 0b000:
@@ -230,14 +237,17 @@ func (vt VType) VLMUL() float32 {
 	}
 }
 
+// VSEW returns the selected element width (SEW).
 func (vt VType) VSEW() uint8 {
 	return uint8(8 << ((vt >> 3) & 0b111))
 }
 
+// VTA returns the vector tail agnostic (VTA) flag.
 func (vt VType) VTA() bool {
 	return vt&(1<<6) != 0
 }
 
+// VMA returns the vector mask agnostic (VMA) flag.
 func (vt VType) VMA() bool {
 	return vt&(1<<7) != 0
 }
@@ -280,7 +290,7 @@ func (vt VType) String() string {
 // ISA (RV32I/RV64I) has about 40–50 instructions. The M (Multiply), A
 // (Atomic), F/D (Floating Point), and C (Compressed) extensions,
 // bring us around 120–150 unique opcodes. The current maximum value
-// Rorw is 157 so we have 98 opcodes left.
+// Rorw is 182 so we have 74 opcodes left.
 type Op uint8
 
 // Known RISC-V opcodes.
@@ -548,6 +558,7 @@ type OpInfo struct {
 	Desc  string
 }
 
+// Operands provides information about RISC-V instructions.
 var Operands = map[Op]OpInfo{
 	Invalid: OpInfo{
 		Name: "invalid",
@@ -1139,6 +1150,7 @@ func (op Op) String() string {
 // Register defines RISC-V registers.
 type Register uint8
 
+// RISC-V registers.
 const (
 	Zero Register = iota
 	Ra

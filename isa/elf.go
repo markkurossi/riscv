@@ -12,6 +12,7 @@ import (
 	"fmt"
 )
 
+// DecodeELF decodes the ELF file.
 func DecodeELF(file string) error {
 	f, err := elf.Open(file)
 	if err != nil {

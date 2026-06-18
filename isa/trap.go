@@ -12,6 +12,7 @@ import (
 	"runtime/debug"
 )
 
+// Mstatus implements the machine status register.
 type Mstatus uint64
 
 // WPRI = Reserved Writes Preserve, Reads Ignore
@@ -46,6 +47,8 @@ const (
 )
 
 const (
+	// SstatusMask defines the Sstatus bits that are stored in the
+	// Mstatus.
 	SstatusMask = Mstatus(0) |
 		Mstatus(1)<<MsSIE |
 		Mstatus(1)<<MsSPIE |
@@ -62,9 +65,12 @@ const (
 		Mstatus(1)<<MsSD
 )
 
+// SIE returns the global supervisor interrupt enable flag.
 func (m Mstatus) SIE() bool {
 	return m&(1<<MsSIE) != 0
 }
+
+// SetSIE sets the global supervisor interrupt enable flag.
 func (m *Mstatus) SetSIE(v bool) {
 	if v {
 		*m |= 1 << MsSIE
@@ -73,9 +79,12 @@ func (m *Mstatus) SetSIE(v bool) {
 	}
 }
 
+// MIE returns the global machine interrupt enable flag.
 func (m Mstatus) MIE() bool {
 	return m&(1<<MsMIE) != 0
 }
+
+// SetMIE sets the global machine interrupt enable flag.
 func (m *Mstatus) SetMIE(v bool) {
 	if v {
 		*m |= 1 << MsMIE
@@ -84,10 +93,12 @@ func (m *Mstatus) SetMIE(v bool) {
 	}
 }
 
+// SPIE returns the saved global supervisor interrupt enable flag.
 func (m Mstatus) SPIE() bool {
 	return m&(1<<MsSPIE) != 0
 }
 
+// SetSPIE sets the saved global supervisor interrupt enable flag.
 func (m *Mstatus) SetSPIE(v bool) {
 	if v {
 		*m |= 1 << MsSPIE
@@ -96,10 +107,12 @@ func (m *Mstatus) SetSPIE(v bool) {
 	}
 }
 
+// MPIE returns the saved global machine interrupt enable flag.
 func (m Mstatus) MPIE() bool {
 	return m&(1<<MsMPIE) != 0
 }
 
+// SetMPIE sets the saved global machine interrupt enable flag.
 func (m *Mstatus) SetMPIE(v bool) {
 	if v {
 		*m |= 1 << MsMPIE
@@ -108,10 +121,12 @@ func (m *Mstatus) SetMPIE(v bool) {
 	}
 }
 
+// SPP returns the saved supervisor privilege mode.
 func (m Mstatus) SPP() PrivilegeMode {
 	return PrivilegeMode(m >> MsSPP & 0b1)
 }
 
+// SetSPP sets the saved supervisor privilege mode.
 func (m *Mstatus) SetSPP(mode PrivilegeMode) {
 	if mode > ModeS {
 		panic("SetSPP: invalid mode")
@@ -120,8 +135,11 @@ func (m *Mstatus) SetSPP(mode PrivilegeMode) {
 	*m |= Mstatus(mode&0b1) << MsSPP
 }
 
+// RegStatus defines the register status. This is used floating point
+// and vector extensions.
 type RegStatus uint8
 
+// Register statuses.
 const (
 	RegOff = iota
 	RegInitial
@@ -129,28 +147,34 @@ const (
 	RegDirty
 )
 
+// VS returns the vector extension state.
 func (m Mstatus) VS() RegStatus {
 	return RegStatus(m >> MsVS & 0b11)
 }
 
+// SetVS sets the vector extension state.
 func (m *Mstatus) SetVS(s RegStatus) {
 	*m &^= 0b11 << MsVS
 	*m |= Mstatus(s&0b11) << MsVS
 }
 
+// MPP returns the saved machine privilege mode.
 func (m Mstatus) MPP() PrivilegeMode {
 	return PrivilegeMode(m >> MsMPP & 0b11)
 }
 
+// SetMPP sets the saved machine privilege mode.
 func (m *Mstatus) SetMPP(mode PrivilegeMode) {
 	*m &^= 0b11 << MsMPP
 	*m |= Mstatus(mode&0b11) << MsMPP
 }
 
+// SUM returns the permit Supervisor User Memory access flag.
 func (m Mstatus) SUM() bool {
 	return m&(1<<MsSUM) != 0
 }
 
+// SetSUM sets the permit Supervisor User Memory access flag.
 func (m *Mstatus) SetSUM(v bool) {
 	if v {
 		*m |= 1 << MsSUM
@@ -159,10 +183,12 @@ func (m *Mstatus) SetSUM(v bool) {
 	}
 }
 
+// MXR returns the Make eXecutable Readable flag.
 func (m Mstatus) MXR() bool {
 	return m&(1<<MsMXR) != 0
 }
 
+// SetMXR sets the Make eXecutable Readable flag.
 func (m *Mstatus) SetMXR(v bool) {
 	if v {
 		*m |= 1 << MsMXR
@@ -263,6 +289,7 @@ var interruptCauses = map[uint64]string{
 	CauseReserved15Intr:          "Reserved 15 interrupt",
 }
 
+// Trap encapsulates runtime exception and interrupt information.
 type Trap struct {
 	PC    uint64
 	Tval  uint64
@@ -270,6 +297,7 @@ type Trap struct {
 	Err   error
 }
 
+// NewTrap creates a new trap.
 func NewTrap(pc, cause, tval uint64, err error) *Trap {
 	if false {
 		fmt.Printf("Trap: pc=%x, cause=%v, tval=%x, err=%v\n",

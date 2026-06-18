@@ -25,6 +25,10 @@ func init() {
 	}
 }
 
+// DecodeCFast implements a fast O(1) decoding of the compressed
+// instruction raw. The fast decoding uses a pre-computed
+// 65536-element array that maps raw instruction values into the
+// decoded instructions.
 func DecodeCFast(raw uint16) Instr {
 	return rvcTable[raw]
 }
@@ -33,6 +37,7 @@ var compressedRegisters = [8]Register{
 	S0, S1, A0, A1, A2, A3, A4, A5,
 }
 
+// DecodeC decodes the compressed instruction raw.
 func DecodeC(raw uint16) (Instr, error) {
 	var instr Instr
 
