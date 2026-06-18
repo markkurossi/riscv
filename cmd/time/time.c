@@ -17,8 +17,22 @@
     __asm__ __volatile__ ("csrr %0, " #csr : "=r" (__v));    \
     __v;                                                     \
 })
+
+#define time_ns() riscv_read_csr(0x7c1)
+
 #else  /* not __riscv */
 #define riscv_read_csr(csr) 0
+
+unsigned long
+time_ns()
+{
+  struct timespec ts;
+
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+
+  return ts.tv_sec * 1000000000 + ts.tv_nsec;
+}
+
 #endif  /* not __riscv */
 
 int
@@ -29,7 +43,7 @@ main(int argc, char *argv[])
   int status;
   struct rusage rusage;
   unsigned long instret, cycle;
-  struct timespec start, end;
+  unsigned long start, end;
   double elapsed;
 
   if (argc == 1)
@@ -38,7 +52,7 @@ main(int argc, char *argv[])
       return 1;
     }
 
-  clock_gettime(CLOCK_MONOTONIC, &start);
+  start = time_ns();
   cycle = riscv_read_csr(cycle);
   instret = riscv_read_csr(instret);
   status = posix_spawnp(&pid, argv[1], NULL, NULL, argv+1, environ);
@@ -53,9 +67,9 @@ main(int argc, char *argv[])
     }
   cycle = riscv_read_csr(cycle) - cycle;
   instret = riscv_read_csr(instret) - instret;
-  clock_gettime(CLOCK_MONOTONIC, &end);
+  end = time_ns();
 
-  elapsed = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) * 1e-9;
+  elapsed = ((double) end - (double) start) * 1e-9;
 
   status = getrusage(RUSAGE_CHILDREN, &rusage);
   if (status == -1)
@@ -83,6 +97,7 @@ main(int argc, char *argv[])
   printf("%20ld involuntary context switches\n", rusage.ru_nivcsw);
   printf("%20ld instructions retired\n",         instret);
   printf("%20ld cycles elapsed\n",               cycle);
+  printf("%20.2f MIPS\n", (double) instret / 1000000.0 / elapsed);
 
   return 0;
 }

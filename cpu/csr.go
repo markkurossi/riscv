@@ -12,6 +12,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/mmu"
@@ -93,6 +94,7 @@ const (
 	CsrScountinhibit = 0xfb0
 
 	CsrGoemuDebug = 0x7c0
+	CsrGoemuTime  = 0x7c1
 )
 
 var csrs = map[int]string{
@@ -573,6 +575,9 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 		v = uint64(0x80000000)
 		v |= uint64(buf[0]) << 8
 		v |= uint64(buf[1])
+
+	case CsrGoemuTime:
+		v = uint64(time.Now().UnixNano())
 
 	default:
 		if csr >= 0xb03 && csr <= 0xb1f {
