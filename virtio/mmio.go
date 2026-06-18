@@ -72,7 +72,7 @@ func statusString(status uint32) string {
 }
 
 var (
-	_ mmu.ROM = &MMIO{}
+	_ mmu.MMIO = &MMIO{}
 )
 
 type MMIO struct {

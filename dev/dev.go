@@ -12,9 +12,9 @@ import (
 )
 
 var (
-	_ mmu.ROM = &CLINT{}
-	_ mmu.ROM = &PLIC{}
-	_ mmu.ROM = &GoldfishRTC{}
-	_ mmu.ROM = &Syscon{}
-	_ mmu.ROM = &UART{}
+	_ mmu.MMIO = &CLINT{}
+	_ mmu.MMIO = &PLIC{}
+	_ mmu.MMIO = &GoldfishRTC{}
+	_ mmu.MMIO = &Syscon{}
+	_ mmu.MMIO = &UART{}
 )

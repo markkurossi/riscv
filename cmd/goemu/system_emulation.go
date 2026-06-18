@@ -67,9 +67,9 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig) error {
 	uart := dev.NewUART(core, UARTBase, UARTSize, plic, UARTIRQ,
 		params.Color, params.Cooked)
 
-	rom := &ROM{
+	mmio := &MMIO{
 		Hart: core,
-		Segments: []mmu.ROM{
+		Segments: []mmu.MMIO{
 			plic,
 			uart,
 			&dev.Syscon{
@@ -98,7 +98,7 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig) error {
 
 	// Entropy Source / RNG.
 	rng := virtio.NewRng(core, virtioROM, plic, virtioIRQ, mem)
-	rom.Segments = append(rom.Segments, rng)
+	mmio.Segments = append(mmio.Segments, rng)
 	virtioROM = rng.End
 	virtioIRQ++
 	virtioDevices = append(virtioDevices, rng.Device())
@@ -123,7 +123,7 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig) error {
 			}
 
 			dev.blk = virtio.NewBlk(core, virtioROM, plic, virtioIRQ, mem, fs)
-			rom.Segments = append(rom.Segments, dev.blk)
+			mmio.Segments = append(mmio.Segments, dev.blk)
 
 			deviceID := dev.ID
 			if len(deviceID) == 0 {
@@ -140,7 +140,7 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig) error {
 		}
 	}
 
-	core.MMU.ROM = rom
+	core.MMU.MMIO = mmio
 
 	core.SetMode(isa.ModeM)
 	if len(cfg.Symbols) > 0 {

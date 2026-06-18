@@ -14,16 +14,16 @@ import (
 )
 
 var (
-	_ mmu.ROM = &ROM{}
+	_ mmu.MMIO = &MMIO{}
 )
 
-type ROM struct {
+type MMIO struct {
 	Hart     isa.Hart
-	Segments []mmu.ROM
+	Segments []mmu.MMIO
 }
 
-func (rom *ROM) Halt() error {
-	for _, seg := range rom.Segments {
+func (mmio *MMIO) Halt() error {
+	for _, seg := range mmio.Segments {
 		err := seg.Halt()
 		if err != nil {
 			fmt.Printf("halt: %v\n", err)
@@ -32,8 +32,8 @@ func (rom *ROM) Halt() error {
 	return nil
 }
 
-func (rom *ROM) Contains(paddr uint64) bool {
-	for _, seg := range rom.Segments {
+func (mmio *MMIO) Contains(paddr uint64) bool {
+	for _, seg := range mmio.Segments {
 		if seg.Contains(paddr) {
 			return true
 		}
@@ -41,74 +41,74 @@ func (rom *ROM) Contains(paddr uint64) bool {
 	return false
 }
 
-func (rom *ROM) Load8(paddr uint64) (uint8, error) {
-	for _, seg := range rom.Segments {
+func (mmio *MMIO) Load8(paddr uint64) (uint8, error) {
+	for _, seg := range mmio.Segments {
 		if seg.Contains(paddr) {
 			return seg.Load8(paddr)
 		}
 	}
-	return 0, rom.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
+	return 0, mmio.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
 }
 
-func (rom *ROM) Load16(paddr uint64) (uint16, error) {
-	for _, seg := range rom.Segments {
+func (mmio *MMIO) Load16(paddr uint64) (uint16, error) {
+	for _, seg := range mmio.Segments {
 		if seg.Contains(paddr) {
 			return seg.Load16(paddr)
 		}
 	}
-	return 0, rom.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
+	return 0, mmio.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
 }
 
-func (rom *ROM) Load32(paddr uint64) (uint32, error) {
-	for _, seg := range rom.Segments {
+func (mmio *MMIO) Load32(paddr uint64) (uint32, error) {
+	for _, seg := range mmio.Segments {
 		if seg.Contains(paddr) {
 			return seg.Load32(paddr)
 		}
 	}
-	return 0, rom.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
+	return 0, mmio.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
 }
 
-func (rom *ROM) Load64(paddr uint64) (uint64, error) {
-	for _, seg := range rom.Segments {
+func (mmio *MMIO) Load64(paddr uint64) (uint64, error) {
+	for _, seg := range mmio.Segments {
 		if seg.Contains(paddr) {
 			return seg.Load64(paddr)
 		}
 	}
-	return 0, rom.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
+	return 0, mmio.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
 }
 
-func (rom *ROM) Store8(paddr uint64, v uint8) error {
-	for _, seg := range rom.Segments {
+func (mmio *MMIO) Store8(paddr uint64, v uint8) error {
+	for _, seg := range mmio.Segments {
 		if seg.Contains(paddr) {
 			return seg.Store8(paddr, v)
 		}
 	}
-	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
+	return mmio.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 }
 
-func (rom *ROM) Store16(paddr uint64, v uint16) error {
-	for _, seg := range rom.Segments {
+func (mmio *MMIO) Store16(paddr uint64, v uint16) error {
+	for _, seg := range mmio.Segments {
 		if seg.Contains(paddr) {
 			return seg.Store16(paddr, v)
 		}
 	}
-	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
+	return mmio.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 }
 
-func (rom *ROM) Store32(paddr uint64, v uint32) error {
-	for _, seg := range rom.Segments {
+func (mmio *MMIO) Store32(paddr uint64, v uint32) error {
+	for _, seg := range mmio.Segments {
 		if seg.Contains(paddr) {
 			return seg.Store32(paddr, v)
 		}
 	}
-	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
+	return mmio.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 }
 
-func (rom *ROM) Store64(paddr uint64, v uint64) error {
-	for _, seg := range rom.Segments {
+func (mmio *MMIO) Store64(paddr uint64, v uint64) error {
+	for _, seg := range mmio.Segments {
 		if seg.Contains(paddr) {
 			return seg.Store64(paddr, v)
 		}
 	}
-	return rom.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
+	return mmio.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 }

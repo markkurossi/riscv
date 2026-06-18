@@ -42,8 +42,8 @@ const (
 	SatpModeSv64 = 11
 )
 
-// ROM implements a memory-mapped device.
-type ROM interface {
+// MMIO implements a memory-mapped device.
+type MMIO interface {
 	Halt() error
 	Contains(paddr uint64) bool
 	Load8(paddr uint64) (uint8, error)
@@ -61,7 +61,7 @@ type MMU struct {
 	satp Satp
 	Hart isa.Hart
 	Mem  *memory.Memory
-	ROM  ROM
+	MMIO MMIO
 
 	TLB [4096]TLBEntry
 }
@@ -631,7 +631,7 @@ func (mmu *MMU) Load8(vaddr uint64) (uint8, error) {
 		return 0, err
 	}
 	if paddr < mmu.Mem.RAMBase {
-		return mmu.ROM.Load8(paddr)
+		return mmu.MMIO.Load8(paddr)
 	}
 	return mmu.Mem.RAM[mmu.Mem.Offset(paddr)], nil
 }
@@ -644,7 +644,7 @@ func (mmu *MMU) Load16(vaddr uint64) (uint16, error) {
 			return 0, err
 		}
 		if paddr < mmu.Mem.RAMBase {
-			return mmu.ROM.Load16(paddr)
+			return mmu.MMIO.Load16(paddr)
 		}
 		if mmu.Mem.Contains(paddr) {
 			return bo.Uint16(mmu.Mem.RAM[mmu.Mem.Offset(paddr):]), nil
@@ -669,7 +669,7 @@ func (mmu *MMU) Load16(vaddr uint64) (uint16, error) {
 				return 0, err
 			}
 			if paddr < mmu.Mem.RAMBase {
-				return mmu.ROM.Load16(paddr)
+				return mmu.MMIO.Load16(paddr)
 			}
 			buf = mmu.Mem.RAM[mmu.Mem.Offset(paddr):]
 			page = memory.Page(vaddr)
@@ -690,7 +690,7 @@ func (mmu *MMU) Load32(vaddr uint64) (uint32, error) {
 			return 0, err
 		}
 		if paddr < mmu.Mem.RAMBase {
-			return mmu.ROM.Load32(paddr)
+			return mmu.MMIO.Load32(paddr)
 		}
 		return bo.Uint32(mmu.Mem.RAM[mmu.Mem.Offset(paddr):]), nil
 	}
@@ -706,7 +706,7 @@ func (mmu *MMU) Load32(vaddr uint64) (uint32, error) {
 				return 0, err
 			}
 			if paddr < mmu.Mem.RAMBase {
-				return mmu.ROM.Load32(paddr)
+				return mmu.MMIO.Load32(paddr)
 			}
 			buf = mmu.Mem.RAM[mmu.Mem.Offset(paddr):]
 			page = memory.Page(vaddr)
@@ -727,7 +727,7 @@ func (mmu *MMU) Load64(vaddr uint64) (uint64, error) {
 			return 0, err
 		}
 		if paddr < mmu.Mem.RAMBase {
-			return mmu.ROM.Load64(paddr)
+			return mmu.MMIO.Load64(paddr)
 		}
 		if paddr-mmu.Mem.RAMBase >= uint64(len(mmu.Mem.RAM)) && true {
 			return 0, mmu.Hart.Trap(isa.CauseLoadPageFault, vaddr,
@@ -748,7 +748,7 @@ func (mmu *MMU) Load64(vaddr uint64) (uint64, error) {
 				return 0, err
 			}
 			if paddr < mmu.Mem.RAMBase {
-				return mmu.ROM.Load64(paddr)
+				return mmu.MMIO.Load64(paddr)
 			}
 			buf = mmu.Mem.RAM[mmu.Mem.Offset(paddr):]
 			page = memory.Page(vaddr)
@@ -768,7 +768,7 @@ func (mmu *MMU) Store8(vaddr uint64, v uint8) error {
 		return err
 	}
 	if paddr < mmu.Mem.RAMBase {
-		return mmu.ROM.Store8(paddr, v)
+		return mmu.MMIO.Store8(paddr, v)
 	}
 	if mmu.Mem.Contains(paddr) {
 		mmu.Mem.RAM[mmu.Mem.Offset(paddr)] = byte(v)
@@ -792,7 +792,7 @@ func (mmu *MMU) Store16(vaddr uint64, v uint16) error {
 			return err
 		}
 		if paddr < mmu.Mem.RAMBase {
-			return mmu.ROM.Store16(paddr, v)
+			return mmu.MMIO.Store16(paddr, v)
 		}
 		bo.PutUint16(mmu.Mem.RAM[mmu.Mem.Offset(paddr):], uint16(v))
 		return nil
@@ -813,7 +813,7 @@ func (mmu *MMU) Store32(vaddr uint64, v uint32) error {
 			return err
 		}
 		if paddr < mmu.Mem.RAMBase {
-			return mmu.ROM.Store32(paddr, v)
+			return mmu.MMIO.Store32(paddr, v)
 		}
 		bo.PutUint32(mmu.Mem.RAM[mmu.Mem.Offset(paddr):], uint32(v))
 		return nil
@@ -833,7 +833,7 @@ func (mmu *MMU) Store64(vaddr uint64, v uint64) error {
 			return err
 		}
 		if paddr < mmu.Mem.RAMBase {
-			return mmu.ROM.Store64(paddr, v)
+			return mmu.MMIO.Store64(paddr, v)
 		}
 		bo.PutUint64(mmu.Mem.RAM[mmu.Mem.Offset(paddr):], v)
 		return nil
