@@ -473,16 +473,14 @@ func makeDTB(initrdSize uint64, mem *memory.Memory,
 	fdt.PropU32("priority", 100)
 	fdt.EndNode()
 
-	if false {
-		// Syscon Reboot Controller.
-		fdt.BeginNode("reboot")
-		fdt.PropStr("compatible", "syscon-reboot")
-		fdt.PropU32("regmap", 3) // References phandle 3 (our syscon node above)
-		fdt.PropU32("offset", 0x4)
-		fdt.PropU32("value", dev.RebootMagic)
-		fdt.PropU32("priority", 200)
-		fdt.EndNode()
-	}
+	// Syscon Reboot Controller.
+	fdt.BeginNode("reboot")
+	fdt.PropStr("compatible", "syscon-reboot")
+	fdt.PropU32("regmap", 3) // References phandle 3 (our syscon node above)
+	fdt.PropU32("offset", 0x4)
+	fdt.PropU32("value", dev.RebootMagic)
+	fdt.PropU32("priority", 200)
+	fdt.EndNode()
 
 	fdt.EndNode() // Syscon
 
