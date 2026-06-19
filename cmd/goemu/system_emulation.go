@@ -72,11 +72,7 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig) error {
 		Segments: []mmu.MMIO{
 			plic,
 			uart,
-			&dev.Syscon{
-				Hart:  core,
-				Start: SysconBase,
-				End:   SysconBase + SysconSize,
-			},
+			dev.NewSyscon(core, SysconBase, SysconSize),
 			&dev.GoldfishRTC{
 				Hart:  core,
 				Start: RTCBase,
@@ -455,10 +451,9 @@ func makeDTB(initrdSize uint64, mem *memory.Memory,
 
 	fdt.EndNode()
 
-	// ---------------------------------------------------------------------
-	// 1. Generic Syscon Register Block
-	// ---------------------------------------------------------------------
+	// Generic Syscon Register Block.
 	fdt.BeginNodeNum("syscon", SysconBase)
+
 	// "syscon" and "simple-mfd" force Linux to initialize it as a
 	// multi-function register array
 	fdt.PropTabStr("compatible", "syscon", "simple-mfd")
@@ -468,24 +463,28 @@ func makeDTB(initrdSize uint64, mem *memory.Memory,
 	}
 	fdt.PropTabU32("reg", &regData[0], 4)
 	fdt.PropU32("phandle", 3) // Assign a unique phandle to reference this block
-	fdt.EndNode()             // syscon
 
-	// ---------------------------------------------------------------------
-	// 2. Syscon Poweroff Controller (S-Mode Kernel Driver)
-	// ---------------------------------------------------------------------
+	// Syscon Poweroff Controller.
 	fdt.BeginNode("poweroff")
 	fdt.PropStr("compatible", "syscon-poweroff")
-
-	// References phandle 3 (our syscon node above)
-	fdt.PropU32("regmap", 3)
-
-	// Write to register offset 0
+	fdt.PropU32("regmap", 3) // References phandle 3 (our syscon node above)
 	fdt.PropU32("offset", 0x0)
-
-	// The magic value Linux will write to signal poweroff
 	fdt.PropU32("value", dev.PoweroffMagic)
-
+	fdt.PropU32("priority", 100)
 	fdt.EndNode()
+
+	if false {
+		// Syscon Reboot Controller.
+		fdt.BeginNode("reboot")
+		fdt.PropStr("compatible", "syscon-reboot")
+		fdt.PropU32("regmap", 3) // References phandle 3 (our syscon node above)
+		fdt.PropU32("offset", 0x4)
+		fdt.PropU32("value", dev.RebootMagic)
+		fdt.PropU32("priority", 200)
+		fdt.EndNode()
+	}
+
+	fdt.EndNode() // Syscon
 
 	// ---------------------------------------------------------------------
 	// Google Goldfish RTC (Real-Time Clock)
@@ -526,7 +525,7 @@ func makeDTB(initrdSize uint64, mem *memory.Memory,
 	for _, dev := range cfg.Devices {
 		switch dev.Type {
 		case "virtio-blk-device": // VirtIO Block Device.
-			fdt.BeginNodeNum("virtio_blk", dev.blk.Start)
+			fdt.BeginNodeNum(dev.blk.Name, dev.blk.Start)
 			fdt.PropStr("compatible", "virtio,mmio")
 
 			// Address and size.
