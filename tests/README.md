@@ -6,6 +6,39 @@ All commands run in the docker environment:
 $ make run
 ```
 
+## OpenSBI
+
+[source](https://github.com/riscv-software-src/opensbi)
+
+``` shell
+$ cd opensbi
+$ export CROSS_COMPILE=riscv64-linux-gnu-
+$ export PLATFORM=generic
+$ make
+$ make install
+```
+
+OpenSBI debug build:
+
+``` shell
+$ make DEBUG=1
+```
+
+Binaries are at:
+
+``` shell
+# ls -l install/usr/share/opensbi/lp64/generic/firmware/
+total 9200
+-rw-r--r-- 1 root root  277880 Jun 19 08:49 fw_dynamic.bin
+-rwxr-xr-x 1 root root 2245904 Jun 19 08:49 fw_dynamic.elf
+-rw-r--r-- 1 root root  277840 Jun 19 08:49 fw_jump.bin
+-rwxr-xr-x 1 root root 2245480 Jun 19 08:49 fw_jump.elf
+-rw-r--r-- 1 root root 2105672 Jun 19 08:49 fw_payload.bin
+-rwxr-xr-x 1 root root 2254888 Jun 19 08:49 fw_payload.elf
+drwxr-xr-x 4 root root     128 Jun 19 08:49 payloads
+```
+
+
 ## Das U-Boot
 
 Download [U-Boot](https://u-boot.org/)
