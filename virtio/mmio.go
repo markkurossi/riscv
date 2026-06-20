@@ -99,6 +99,7 @@ type MMIO struct {
 }
 
 type Handler interface {
+	Reset() error
 	ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error)
 }
 
@@ -107,9 +108,10 @@ func (vio *MMIO) Device() *MMIO {
 }
 
 func (vio *MMIO) InitQueues(count int) {
-	for range count {
+	for idx := range count {
 		vio.queues = append(vio.queues, Queue{
-			MMIO: vio,
+			MMIO:  vio,
+			Index: idx,
 		})
 	}
 }
@@ -145,11 +147,11 @@ func (vio *MMIO) Contains(paddr uint64) bool {
 }
 
 func (vio *MMIO) Load8(paddr uint64) (uint8, error) {
-	return 0, fmt.Errorf("MMIO.Load8 not implemented yet")
+	return 0, fmt.Errorf("MMIO.Load8(%x)", paddr-vio.Start)
 }
 
 func (vio *MMIO) Load16(paddr uint64) (uint16, error) {
-	return 0, fmt.Errorf("MMIO.Load16 not implemented yet")
+	return 0, fmt.Errorf("MMIO.Load16(%x)", paddr-vio.Start)
 }
 
 func (vio *MMIO) Load32(paddr uint64) (uint32, error) {
@@ -201,15 +203,15 @@ func (vio *MMIO) Load32(paddr uint64) (uint32, error) {
 }
 
 func (vio *MMIO) Load64(paddr uint64) (uint64, error) {
-	return 0, fmt.Errorf("MMIO.Load64 not implemented yet")
+	return 0, fmt.Errorf("MMIO.Load64(%x)", paddr-vio.Start)
 }
 
 func (vio *MMIO) Store8(paddr uint64, v uint8) error {
-	return fmt.Errorf("MMIO.Store8 not implemented yet")
+	return fmt.Errorf("MMIO.Store8(%x, 0x%02x)", paddr-vio.Start, v)
 }
 
 func (vio *MMIO) Store16(paddr uint64, v uint16) error {
-	return fmt.Errorf("MMIO.Store16 not implemented yet")
+	return fmt.Errorf("MMIO.Store16(%x, 0x%04x)", paddr-vio.Start, v)
 }
 
 func (vio *MMIO) Store32(paddr uint64, v uint32) error {
@@ -263,6 +265,41 @@ func (vio *MMIO) Store32(paddr uint64, v uint32) error {
 			vio.Plic.SetInterruptRequest(vio.IRQ, true)
 		}
 
+	case 0x070: // Status
+		if v == 0 {
+			// Guest requested a device reset
+			vio.deviceFeaturesSel = 0
+			vio.driverFeaturesSel = 0
+			vio.driverFeatures[0] = 0
+			vio.driverFeatures[1] = 0
+			vio.status = 0
+			vio.queueSel = 0
+
+			for idx := range vio.queues {
+				vio.queues[idx].Num = 0
+				vio.queues[idx].Ready = 0
+				vio.queues[idx].DescPhys = 0
+				vio.queues[idx].AvailPhys = 0
+				vio.queues[idx].UsedPhys = 0
+				vio.queues[idx].lastAvailIdx = 0
+			}
+
+			return vio.Handler.Reset()
+		}
+
+		// Standard status update protocol sequence
+		vio.status |= v
+
+		if v&8 != 0 { // VIRTIO_CONFIG_S_FEATURES_OK (8)
+			// Validate that the driver acknowledged
+			// VIRTIO_F_VERSION_1 (bit 32 -> page 1, bit 0)
+			if (vio.driverFeatures[1] & 1) == 0 {
+				// If driver rejected version 1, clear the FEATURES_OK
+				// bit to signal failure
+				vio.status &= ^uint32(8)
+			}
+		}
+
 		// Buffer Base Address Registers (rv64 writes lower then upper halves)
 
 	case 0x080: // QueueDescLow
@@ -306,46 +343,12 @@ func (vio *MMIO) Store32(paddr uint64, v uint32) error {
 				(vio.queues[vio.queueSel].UsedPhys & 0x00000000ffffffff) |
 					(uint64(v) << 32)
 		}
-
-	case 0x070: // Status
-		if v == 0 {
-			// Guest requested a device reset
-			vio.deviceFeaturesSel = 0
-			vio.driverFeaturesSel = 0
-			vio.driverFeatures[0] = 0
-			vio.driverFeatures[1] = 0
-			vio.status = 0
-			vio.queueSel = 0
-
-			for idx := range vio.queues {
-				vio.queues[idx].Num = 0
-				vio.queues[idx].Ready = 0
-				vio.queues[idx].DescPhys = 0
-				vio.queues[idx].AvailPhys = 0
-				vio.queues[idx].UsedPhys = 0
-				vio.queues[idx].lastAvailIdx = 0
-			}
-			return nil
-		}
-
-		// Standard status update protocol sequence
-		vio.status |= v
-
-		if v&8 != 0 { // VIRTIO_CONFIG_S_FEATURES_OK (8)
-			// Validate that the driver acknowledged
-			// VIRTIO_F_VERSION_1 (bit 32 -> page 1, bit 0)
-			if (vio.driverFeatures[1] & 1) == 0 {
-				// If driver rejected version 1, clear the FEATURES_OK
-				// bit to signal failure
-				vio.status &= ^uint32(8)
-			}
-		}
 	}
 	return nil
 }
 
 func (vio *MMIO) Store64(paddr uint64, v uint64) error {
-	return fmt.Errorf("MMIO.Store64 not implemented yet")
+	return fmt.Errorf("MMIO.Store64(%x, 0x%016x)", paddr-vio.Start, v)
 }
 
 func (vio *MMIO) guestData(addr, l uint64) ([]byte, error) {
@@ -516,10 +519,6 @@ var mmioRegs = map[uint64]string{
 	0x0a0: "QueueDeviceLow",
 	0x0a4: "QueueDeviceHigh",
 	0x0fc: "ConfigGeneration",
-	0x100: "CapacityLow",
-	0x104: "CapacityHigh",
-	0x108: "SizeMax",
-	0x10c: "SeqMax",
 }
 
 func mmioReg(ofs uint64) string {

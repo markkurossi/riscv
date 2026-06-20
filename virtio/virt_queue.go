@@ -14,6 +14,7 @@ import (
 
 type Queue struct {
 	MMIO         *MMIO
+	Index        int
 	Num          uint32 // Set by guest (num of descs allocated, <= NumMax)
 	Ready        uint32 // Guest writes 1 to activate
 	DescPhys     uint64 // 64-bit Guest Physical Address of Descriptor Table

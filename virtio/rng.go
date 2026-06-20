@@ -46,6 +46,12 @@ func NewRng(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	return rng
 }
 
+// Reset implements Handler.Reset.
+func (rng *Rng) Reset() error {
+	return nil
+}
+
+// ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
 func (rng *Rng) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	rng.debugf("chain: idx=%v", idx)
 

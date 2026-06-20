@@ -59,6 +59,12 @@ func (blk *Blk) SetID(id string) {
 	blk.id = append(blk.id, 0)
 }
 
+// Reset implements Handler.Reset.
+func (blk *Blk) Reset() error {
+	return nil
+}
+
+// ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
 func (blk *Blk) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	blk.debugf("chain: idx=%v", idx)
 
@@ -234,10 +240,20 @@ const (
 	VIRTIO_BLK_F_ZONED        = 17
 )
 
+var blkRegs = map[uint64]string{
+	0x100: "CapacityLow",
+	0x104: "CapacityHigh",
+	0x108: "SizeMax",
+	0x10c: "SeqMax",
+}
+
 func (blk *Blk) Load32(paddr uint64) (uint32, error) {
 	offset := paddr - blk.Start
 
-	blk.debugf("Load32(%v)", mmioReg(offset))
+	reg, ok := blkRegs[offset]
+	if ok {
+		blk.debugf("Load32(%v[0x%03x])", reg, offset)
+	}
 
 	switch offset {
 
@@ -256,7 +272,6 @@ func (blk *Blk) Load32(paddr uint64) (uint32, error) {
 		return queueNumMax - 2, nil
 
 	default:
-		// Standard MMIO registres
 		return blk.MMIO.Load32(paddr)
 	}
 }

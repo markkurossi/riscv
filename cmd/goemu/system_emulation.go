@@ -99,6 +99,13 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig) error {
 	virtioIRQ++
 	virtioDevices = append(virtioDevices, rng.Device())
 
+	// Network device.
+	net := virtio.NewNet(core, virtioROM, plic, virtioIRQ, mem)
+	mmio.Segments = append(mmio.Segments, net)
+	virtioROM = net.End
+	virtioIRQ++
+	virtioDevices = append(virtioDevices, net.Device())
+
 	// Devices from the configuration.
 	for idx, dev := range cfg.Devices {
 		switch dev.Type {
