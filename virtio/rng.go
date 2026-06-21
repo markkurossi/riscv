@@ -11,6 +11,7 @@ import (
 
 	"github.com/markkurossi/riscv/dev"
 	"github.com/markkurossi/riscv/isa"
+	"github.com/markkurossi/riscv/logger"
 	"github.com/markkurossi/riscv/memory"
 )
 
@@ -28,8 +29,10 @@ func NewRng(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 
 	rng := &Rng{
 		MMIO: MMIO{
-			Level:    LogError,
-			Name:     "virtio-rng",
+			Logger: logger.Logger{
+				Name:  "virtio-rng",
+				Level: logger.Error,
+			},
 			DeviceID: RngDeviceID,
 			Hart:     hart,
 			Start:    start,
@@ -40,7 +43,7 @@ func NewRng(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		},
 	}
 
-	rng.InitQueues(1)
+	rng.Init(1)
 	rng.MMIO.Handler = rng
 
 	return rng
@@ -53,7 +56,7 @@ func (rng *Rng) Reset() error {
 
 // ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
 func (rng *Rng) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
-	rng.debugf("chain: idx=%v", idx)
+	rng.Debugf("chain: idx=%v", idx)
 
 	var transferred uint32
 
@@ -62,21 +65,22 @@ func (rng *Rng) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 		if err != nil {
 			return 0, err
 		}
-		rng.debugf("req: %v", req)
+		rng.Debugf("req: %v", req)
 
 		if req.Flags&VIRTQ_DESC_F_WRITE != 0 {
 			buf, err := rng.guestData(req.Addr, uint64(req.Len))
 			if err != nil {
-				rng.logf("guestData(%v,%v) failed: %v", req.Addr, req.Len, err)
+				rng.Errorf("guestData(%v,%v) failed: %v",
+					req.Addr, req.Len, err)
 				return 0, err
 			}
 			n, err := rand.Read(buf)
 			if err != nil {
-				rng.logf("rand.Read(%v) failed: %v", req.Len, err)
+				rng.Errorf("rand.Read(%v) failed: %v", req.Len, err)
 				return 0, err
 			}
 
-			rng.infof("idx=%v, len=%v, addr=%x, tx=%v",
+			rng.Infof("idx=%v, len=%v, addr=%x, tx=%v",
 				idx, req.Len, req.Addr, n)
 
 			transferred += uint32(n)
@@ -88,7 +92,7 @@ func (rng *Rng) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 		idx = req.Next
 	}
 
-	rng.debugf("transferred: %v", transferred)
+	rng.Debugf("transferred: %v", transferred)
 
 	return transferred, nil
 }

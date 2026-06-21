@@ -9,11 +9,12 @@ package virtio
 
 import (
 	"fmt"
-	"log"
 	"strings"
+	"sync"
 
 	"github.com/markkurossi/riscv/dev"
 	"github.com/markkurossi/riscv/isa"
+	"github.com/markkurossi/riscv/logger"
 	"github.com/markkurossi/riscv/memory"
 	"github.com/markkurossi/riscv/mmu"
 )
@@ -27,14 +28,6 @@ const (
 	FeatureVersion1  = 1 << 31
 
 	queueNumMax = 512
-)
-
-type LogLevel int
-
-const (
-	LogError LogLevel = iota
-	LogInfo
-	LogDebug
 )
 
 const (
@@ -76,7 +69,9 @@ var (
 )
 
 type MMIO struct {
-	Level    LogLevel
+	logger.Logger
+	M        sync.Mutex
+	C        *sync.Cond
 	Name     string
 	DeviceID uint32
 	Features uint32
@@ -107,34 +102,15 @@ func (vio *MMIO) Device() *MMIO {
 	return vio
 }
 
-func (vio *MMIO) InitQueues(count int) {
-	for idx := range count {
+func (vio *MMIO) Init(numQueues int) {
+	vio.C = sync.NewCond(&vio.M)
+
+	for idx := range numQueues {
 		vio.queues = append(vio.queues, Queue{
 			MMIO:  vio,
 			Index: idx,
 		})
 	}
-}
-
-func (vio *MMIO) logf(format string, args ...interface{}) {
-	msg := fmt.Sprintf(format, args...)
-	log.Print(vio.Name + ": " + msg)
-}
-
-func (vio *MMIO) debugf(format string, args ...interface{}) {
-	if vio.Level < LogDebug {
-		return
-	}
-	msg := fmt.Sprintf(format, args...)
-	log.Print(vio.Name + ": " + msg)
-}
-
-func (vio *MMIO) infof(format string, args ...interface{}) {
-	if vio.Level < LogInfo {
-		return
-	}
-	msg := fmt.Sprintf(format, args...)
-	log.Print(vio.Name + ": " + msg)
 }
 
 // Halt implements mmu.ROM.Halt.
@@ -157,7 +133,7 @@ func (vio *MMIO) Load16(paddr uint64) (uint16, error) {
 func (vio *MMIO) Load32(paddr uint64) (uint32, error) {
 	offset := paddr - vio.Start
 
-	vio.debugf("Load32(%v)", mmioReg(offset))
+	vio.Debugf("Load32(%v)", mmioReg(offset))
 
 	switch offset {
 	case 0x000:
@@ -195,7 +171,7 @@ func (vio *MMIO) Load32(paddr uint64) (uint32, error) {
 		return vio.interruptStatus, nil
 
 	case 0x070:
-		vio.debugf("Load32(%v) => %v[0x%x]\n", mmioReg(offset),
+		vio.Debugf("Load32(%v) => %v[0x%x]\n", mmioReg(offset),
 			statusString(vio.status), vio.status)
 		return vio.status, nil
 	}
@@ -217,7 +193,7 @@ func (vio *MMIO) Store16(paddr uint64, v uint16) error {
 func (vio *MMIO) Store32(paddr uint64, v uint32) error {
 	offset := paddr - vio.Start
 
-	vio.debugf("Store32(%v, 0x%08x)", mmioReg(offset), v)
+	vio.Debugf("Store32(%v, 0x%08x)", mmioReg(offset), v)
 
 	switch offset {
 	case 0x014: // DeviceFeaturesSel
@@ -248,20 +224,20 @@ func (vio *MMIO) Store32(paddr uint64, v uint32) error {
 		vio.ProcessQueue(v)
 
 	case 0x064: // InterruptACK The guest writes a bitmask of the bits
-		vio.debugf("InterruptACK status=%x", vio.interruptStatus)
+		vio.Debugf("InterruptACK status=%x", vio.interruptStatus)
 
 		// it has acknowledged and wants cleared
 		vio.interruptStatus &^= v
-		vio.debugf("interruptStatus: %x\n", vio.interruptStatus)
+		vio.Debugf("interruptStatus: %x\n", vio.interruptStatus)
 
 		// If the guest has cleared all active interrupts, we can
 		// de-assert the PLIC line
 		if vio.interruptStatus == 0 {
 			// Lower the interrupt line
-			vio.debugf("clearing PLIC interrupt %v", vio.IRQ)
+			vio.Debugf("clearing PLIC interrupt %v", vio.IRQ)
 			vio.Plic.SetInterruptRequest(vio.IRQ, false)
 		} else {
-			vio.debugf("setting PLIC interrupt %v", vio.IRQ)
+			vio.Debugf("setting PLIC interrupt %v", vio.IRQ)
 			vio.Plic.SetInterruptRequest(vio.IRQ, true)
 		}
 
@@ -415,10 +391,10 @@ func (vio *MMIO) writeGuestUint32(addr uint64, v uint32) error {
 }
 
 func (vio *MMIO) ProcessQueue(idx uint32) {
-	vio.debugf("QueueNotify(%v)", idx)
+	vio.Debugf("QueueNotify(%v)", idx)
 
 	if idx >= uint32(len(vio.queues)) {
-		vio.logf("invalid queue index  %v", idx)
+		vio.Errorf("invalid queue index  %v", idx)
 		return
 	}
 
@@ -428,7 +404,7 @@ func (vio *MMIO) ProcessQueue(idx uint32) {
 	// Read the boundary target limit from the driver
 	availIdx, err := vio.readGuestUint16(availIdxAddr)
 	if err != nil {
-		vio.logf("guest memory access: %v", err)
+		vio.Errorf("guest memory access: %v", err)
 		return
 	}
 
@@ -437,7 +413,7 @@ func (vio *MMIO) ProcessQueue(idx uint32) {
 	usedIdxAddr := vq.UsedPhys + 2
 	usedIdx, err := vio.readGuestUint16(usedIdxAddr)
 	if err != nil {
-		vio.logf("guest memory access: %v", err)
+		vio.Errorf("guest memory access: %v", err)
 		return
 	}
 
@@ -449,7 +425,7 @@ func (vio *MMIO) ProcessQueue(idx uint32) {
 		ringElementPhys := vq.AvailPhys + 4 + (ringOffset * 2)
 		descHeadIdx, err := vio.readGuestUint16(ringElementPhys)
 		if err != nil {
-			vio.logf("guest memory access: %v", err)
+			vio.Errorf("guest memory access: %v", err)
 			return
 		}
 
@@ -457,7 +433,7 @@ func (vio *MMIO) ProcessQueue(idx uint32) {
 		// call updateUsedRing inside it!)
 		transferred, err := vio.Handler.ExecuteDescriptorChain(vq, descHeadIdx)
 		if err != nil {
-			vio.logf("execute descriptor chain: %v", err)
+			vio.Errorf("execute descriptor chain: %v", err)
 			return
 		}
 
@@ -479,7 +455,7 @@ func (vio *MMIO) ProcessQueue(idx uint32) {
 		// AvailPhys) to see if they have suppressed interrupts
 		availFlags, err := vio.readGuestUint16(vq.AvailPhys)
 		if err != nil {
-			vio.logf("guest memory access: %v", err)
+			vio.Errorf("guest memory access: %v", err)
 			return
 		}
 
@@ -490,7 +466,7 @@ func (vio *MMIO) ProcessQueue(idx uint32) {
 			vio.interruptStatus |= 0x1
 			vio.Plic.SetInterruptRequest(vio.IRQ, true)
 		} else {
-			vio.debugf("interrupt suppressed by guest driver")
+			vio.Debugf("interrupt suppressed by guest driver")
 		}
 	}
 }

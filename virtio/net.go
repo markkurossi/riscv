@@ -13,6 +13,7 @@ import (
 
 	"github.com/markkurossi/riscv/dev"
 	"github.com/markkurossi/riscv/isa"
+	"github.com/markkurossi/riscv/logger"
 	"github.com/markkurossi/riscv/memory"
 )
 
@@ -139,8 +140,15 @@ const (
 
 type Net struct {
 	MMIO
-	HostMAC  [6]byte
-	GuestMAC [6]byte
+	HostMAC  MAC
+	GuestMAC MAC
+}
+
+type MAC [6]byte
+
+func (mac MAC) String() string {
+	return fmt.Sprintf("%02x:%02x:%02x:%02x:%02x:%02x",
+		mac[0], mac[1], mac[2], mac[3], mac[4], mac[5])
 }
 
 func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
@@ -148,8 +156,10 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 
 	net := &Net{
 		MMIO: MMIO{
-			Level:    LogDebug,
-			Name:     "virtio-net",
+			Logger: logger.Logger{
+				Name:  "virtio-net",
+				Level: logger.Debug,
+			},
 			DeviceID: NetDeviceID,
 			Features: 1 << VIRTIO_NET_F_MAC,
 			Hart:     hart,
@@ -160,7 +170,7 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 			Mem:      mem,
 		},
 	}
-	net.InitQueues(2)
+	net.Init(2)
 	net.MMIO.Handler = net
 
 	_, err := rand.Read(net.HostMAC[:])
@@ -175,8 +185,8 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	}
 	net.GuestMAC[0] = (net.GuestMAC[0] & 0xfe) | 0x02
 
-	net.debugf("guest MAC: %x", net.GuestMAC[:])
-	net.debugf("host MAC : %x", net.HostMAC[:])
+	net.Debugf("guest MAC: %v", net.GuestMAC)
+	net.Debugf("host MAC : %v", net.HostMAC)
 
 	return net
 }
@@ -197,13 +207,13 @@ var netRegs = map[uint64]string{
 
 // ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
 func (net *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
-	net.debugf("vq-%v: chain: idx=%v", vq.Index, idx)
+	net.Debugf("vq-%v: chain: idx=%v", vq.Index, idx)
 
 	desc, err := vq.loadDesc(idx)
 	if err != nil {
 		return 0, err
 	}
-	net.debugf("desc: %v", desc)
+	net.Debugf("desc: %v", desc)
 
 	if desc.Flags&VIRTQ_DESC_F_WRITE != 0 {
 		// Receive queue.
@@ -224,7 +234,7 @@ func (net *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 		if err != nil {
 			return 0, err
 		}
-		net.debugf("req: %#v\n%s", hdr, hex.Dump(buf[12:]))
+		net.Debugf("req: %#v\n%s", hdr, hex.Dump(buf[12:]))
 		return desc.Len, nil
 	}
 }
@@ -234,9 +244,9 @@ func (net *Net) Load8(paddr uint64) (uint8, error) {
 
 	reg, ok := netRegs[offset]
 	if ok {
-		net.debugf("Load8(%v[0x%03x])", reg, offset)
+		net.Debugf("Load8(%v[0x%03x])", reg, offset)
 	} else {
-		net.debugf("Load8(%x)", offset)
+		net.Debugf("Load8(%x)", offset)
 	}
 
 	switch offset {

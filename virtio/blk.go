@@ -14,6 +14,7 @@ import (
 
 	"github.com/markkurossi/riscv/dev"
 	"github.com/markkurossi/riscv/isa"
+	"github.com/markkurossi/riscv/logger"
 	"github.com/markkurossi/riscv/memory"
 )
 
@@ -35,8 +36,10 @@ func NewBlk(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 
 	blk := &Blk{
 		MMIO: MMIO{
-			Level:    LogError,
-			Name:     "virtio-blk",
+			Logger: logger.Logger{
+				Name:  "virtio-blk",
+				Level: logger.Error,
+			},
 			DeviceID: BlkDeviceID,
 			Features: 1 << VIRTIO_BLK_F_SEG_MAX,
 			Hart:     hart,
@@ -48,7 +51,7 @@ func NewBlk(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		},
 		File: file,
 	}
-	blk.InitQueues(1)
+	blk.Init(1)
 	blk.MMIO.Handler = blk
 
 	return blk
@@ -66,7 +69,7 @@ func (blk *Blk) Reset() error {
 
 // ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
 func (blk *Blk) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
-	blk.debugf("chain: idx=%v", idx)
+	blk.Debugf("chain: idx=%v", idx)
 
 	req, err := vq.loadDesc(idx)
 	if err != nil {
@@ -83,9 +86,9 @@ func (blk *Blk) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	if err != nil {
 		return 0, err
 	}
-	blk.debugf("req header : %v\n", req)
-	blk.debugf(" - type    : %v\n", blkTypeString(t))
-	blk.debugf(" - sector  : %v\n", sector)
+	blk.Debugf("req header : %v\n", req)
+	blk.Debugf(" - type    : %v\n", blkTypeString(t))
+	blk.Debugf(" - sector  : %v\n", sector)
 
 	fileOffset := int64(sector) * 512
 
@@ -108,17 +111,18 @@ func (blk *Blk) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 			case VIRTIO_BLK_T_IN:
 				buf, err := blk.guestData(addr, uint64(req.Len))
 				if err != nil {
-					blk.logf("guestData(%v,%v) failed: %v", addr, req.Len, err)
+					blk.Errorf("guestData(%v,%v) failed: %v",
+						addr, req.Len, err)
 					opStatus = VIRTIO_BLK_S_IOERR
 					continue
 				}
 				n, err := blk.File.ReadAt(buf, fileOffset)
 				if err != nil {
-					blk.logf("read failed from host file offset %d: %v",
+					blk.Errorf("read failed from host file offset %d: %v",
 						fileOffset, err)
 					opStatus = VIRTIO_BLK_S_IOERR
 				} else {
-					blk.infof("read: idx=%v, len=%v, addr=%x, tx=%v",
+					blk.Infof("read: idx=%v, len=%v, addr=%x, tx=%v",
 						idx, req.Len, addr, n)
 				}
 				fileOffset += int64(n)
@@ -130,18 +134,18 @@ func (blk *Blk) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 				} else {
 					buf, err := blk.guestData(addr, uint64(req.Len))
 					if err != nil {
-						blk.logf("guestData(%v,%v) failed: %v",
+						blk.Errorf("guestData(%v,%v) failed: %v",
 							addr, req.Len, err)
 						opStatus = VIRTIO_BLK_S_IOERR
 						continue
 					}
 					n, err := blk.File.WriteAt(buf, fileOffset)
 					if err != nil {
-						blk.logf("write failed to host file offset %d: %v",
+						blk.Errorf("write failed to host file offset %d: %v",
 							fileOffset, err)
 						opStatus = VIRTIO_BLK_S_IOERR
 					} else {
-						blk.infof("write: idx=%v, len=%v, addr=%x, tx=%v",
+						blk.Infof("write: idx=%v, len=%v, addr=%x, tx=%v",
 							idx, req.Len, addr, n)
 					}
 					fileOffset += int64(n)
@@ -151,17 +155,18 @@ func (blk *Blk) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 			case VIRTIO_BLK_T_GET_ID:
 				buf, err := blk.guestData(addr, uint64(req.Len))
 				if err != nil {
-					blk.logf("guestData(%v,%v) failed: %v", addr, req.Len, err)
+					blk.Errorf("guestData(%v,%v) failed: %v",
+						addr, req.Len, err)
 					opStatus = VIRTIO_BLK_S_IOERR
 					continue
 				}
 				n := copy(buf, blk.id)
-				blk.infof("id: idx=%v, len=%v, addr=%x, tx=%v",
+				blk.Infof("id: idx=%v, len=%v, addr=%x, tx=%v",
 					idx, req.Len, addr, n)
 				transferred += uint32(n)
 
 			default:
-				blk.logf("type %v not supported", blkTypeString(t))
+				blk.Errorf("type %v not supported", blkTypeString(t))
 				opStatus = VIRTIO_BLK_S_UNSUPP
 			}
 
@@ -181,8 +186,8 @@ func (blk *Blk) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 		return 0, fmt.Errorf("invalid chain: no status block")
 	}
 
-	blk.debugf("transferred: %v\n", transferred)
-	blk.debugf("req status : %v\n", opStatus)
+	blk.Debugf("transferred: %v\n", transferred)
+	blk.Debugf("req status : %v\n", opStatus)
 
 	return transferred, nil
 }
@@ -252,7 +257,7 @@ func (blk *Blk) Load32(paddr uint64) (uint32, error) {
 
 	reg, ok := blkRegs[offset]
 	if ok {
-		blk.debugf("Load32(%v[0x%03x])", reg, offset)
+		blk.Debugf("Load32(%v[0x%03x])", reg, offset)
 	}
 
 	switch offset {
@@ -282,7 +287,7 @@ func (blk *Blk) size() uint64 {
 	if blk.fileInfo == nil {
 		blk.fileInfo, err = blk.File.Stat()
 		if err != nil {
-			blk.logf("failed to stat image: %v", err)
+			blk.Errorf("failed to stat image: %v", err)
 			return 0
 		}
 	}
