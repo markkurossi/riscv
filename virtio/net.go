@@ -10,6 +10,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"strings"
 
 	"github.com/markkurossi/riscv/dev"
 	"github.com/markkurossi/riscv/isa"
@@ -142,6 +143,12 @@ type Net struct {
 	MMIO
 	HostMAC  MAC
 	GuestMAC MAC
+
+	localCh chan []byte
+
+	receiveIdx uint16
+	receiveBuf []byte
+	received   uint32
 }
 
 type MAC [6]byte
@@ -169,6 +176,7 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 			IRQ:      irq,
 			Mem:      mem,
 		},
+		localCh: make(chan []byte),
 	}
 	net.Init(2)
 	net.MMIO.Handler = net
@@ -188,7 +196,24 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	net.Debugf("guest MAC: %v", net.GuestMAC)
 	net.Debugf("host MAC : %v", net.HostMAC)
 
+	go net.receiver(net.queues[0])
+
 	return net
+}
+
+func (net *Net) receiver(vq *Queue) {
+	net.Debugf("receiver started for vq-%v", vq.Index)
+	for {
+		local := <-net.localCh
+		net.M.Lock()
+		for net.receiveBuf == nil {
+			net.C.Wait()
+		}
+		net.Debugf("sending local packet of %v bytes", len(local))
+		net.received = uint32(copy(net.receiveBuf, local))
+		net.ProcessQueue(vq.Index)
+		net.M.Unlock()
+	}
 }
 
 // Reset implements Handler.Reset.
@@ -205,6 +230,14 @@ var netRegs = map[uint64]string{
 	0x105: "MAC[5]",
 }
 
+// FreeBSD sends packets in parts:
+//
+// 	virtio-net: DEBUG: ProcessQueue(1)
+// 	virtio-net: DEBUG: vq-1: chain: idx=0
+// 	virtio-net: DEBUG: desc: Buf=12@809ce300,Flags=1,Next=1
+// 	virtio-net: DEBUG: process: NetHdr: flags=, gso_type=none, hdr_len=0, gso_size=0, csum_start=0, csum_offset=0, num_buffers=0
+// 	virtio-net: ERROR: execute descriptor chain: truncated Ethernet frame: len=0
+
 // ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
 func (net *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	net.Debugf("vq-%v: chain: idx=%v", vq.Index, idx)
@@ -217,26 +250,92 @@ func (net *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 
 	if desc.Flags&VIRTQ_DESC_F_WRITE != 0 {
 		// Receive queue.
-		return 0, fmt.Errorf("ExecuteDescriptorChain not implemented yet")
-	} else {
-		// Transmit queue.
-		if desc.Len < 12 {
-			return 0, fmt.Errorf("truncated request: len=%v", desc.Len)
+		if net.received > 0 {
+			// We have received data to new.receiveBuf.
+			if net.receiveIdx != idx {
+				return 0, fmt.Errorf("receive queue out-of-sync: %v vs %v",
+					net.receiveIdx, idx)
+			}
+			received := net.received
+			net.receiveIdx = 0
+			net.receiveBuf = nil
+			net.received = 0
+			return received, nil
 		}
+
+		// Save next buffer.
 		buf, err := net.guestData(desc.Addr, uint64(desc.Len))
 		if err != nil {
 			return 0, err
 		}
+		net.receiveIdx = idx
+		net.receiveBuf = buf
+		net.received = 0
 
-		// XXX decode from buf
+		net.C.Broadcast()
 
-		hdr, err := net.decodeHeader(desc.Addr)
-		if err != nil {
-			return 0, err
-		}
-		net.Debugf("req: %#v\n%s", hdr, hex.Dump(buf[12:]))
-		return desc.Len, nil
+		return 0, nil
 	}
+
+	// Transmit queue.
+	if desc.Len < 12 {
+		return 0, fmt.Errorf("truncated request: len=%v", desc.Len)
+	}
+	buf, err := net.guestData(desc.Addr, uint64(desc.Len))
+	if err != nil {
+		return 0, err
+	}
+	hdr, err := net.decodeHeader(buf)
+	if err != nil {
+		return 0, err
+	}
+	err = net.processSend(hdr, buf[12:])
+	if err != nil {
+		return 0, err
+	}
+	return desc.Len, nil
+}
+
+func (net *Net) processSend(hdr *NetHdr, data []byte) error {
+	net.Debugf("process: %v", hdr)
+
+	if len(data) < 14 {
+		return fmt.Errorf("truncated Ethernet frame: len=%v", len(data))
+	}
+
+	dstMAC := MAC(data[0:6])
+	srcMAC := MAC(data[6:12])
+	_ = dstMAC
+	_ = srcMAC
+
+	frameType := netBO.Uint16(data[12:])
+
+	switch frameType {
+	case 0x0800:
+		net.Debugf("IPv4:\n%s", hex.Dump(data[14:]))
+
+	case 0x0806:
+		arp, err := parseARP(data[14:])
+		if err != nil {
+			return err
+		}
+		net.Debugf("ARP: %v", arp)
+		if arp.OPER == 1 {
+			// Respond to all ARP requests.
+			resp := make([]byte, 12+14+28)
+			makeEthernet(resp[12:], arp.SHA, net.HostMAC, frameType)
+			makeARP(resp[12+14:], 2, net.HostMAC, arp.TPA, arp.SHA, arp.SPA)
+
+			net.localCh <- resp
+		}
+
+	case 0x86dd:
+		net.Debugf("IPv6:\n%s", hex.Dump(data[14:]))
+
+	default:
+		net.Debugf("unknown %04x:\n%s", frameType, hex.Dump(data[14:]))
+	}
+	return nil
 }
 
 func (net *Net) Load8(paddr uint64) (uint8, error) {
@@ -282,38 +381,117 @@ type NetHdr struct {
 	NumBuffers uint16
 }
 
-func (net *Net) decodeHeader(addr uint64) (*NetHdr, error) {
-	hdr := new(NetHdr)
-	var err error
+func (hdr *NetHdr) String() string {
+	result := "NetHdr: flags="
 
-	hdr.Flags, err = net.readGuestUint8(addr)
-	if err != nil {
-		return nil, err
+	var v []string
+	if hdr.Flags&VIRTIO_NET_HDR_F_NEEDS_CSUM != 0 {
+		v = append(v, "NEEDS_CSUM")
 	}
-	hdr.GSOType, err = net.readGuestUint8(addr + 1)
-	if err != nil {
-		return nil, err
+	if hdr.Flags&VIRTIO_NET_HDR_F_DATA_VALID != 0 {
+		v = append(v, "DATA_VALID")
 	}
-	hdr.HdrLen, err = net.readGuestUint16(addr + 2)
-	if err != nil {
-		return nil, err
+	if hdr.Flags&VIRTIO_NET_HDR_F_RSC_INFO != 0 {
+		v = append(v, "RSC_INFO")
 	}
-	hdr.GSOSize, err = net.readGuestUint16(addr + 4)
-	if err != nil {
-		return nil, err
+	result += strings.Join(v, ",")
+
+	result += ", gso_type="
+	switch hdr.GSOType {
+	case VIRTIO_NET_HDR_GSO_NONE:
+		result += "none"
+	case VIRTIO_NET_HDR_GSO_TCPV4:
+		result += "TCPV4"
+	case VIRTIO_NET_HDR_GSO_UDP:
+		result += "UDP"
+	case VIRTIO_NET_HDR_GSO_TCPV6:
+		result += "TCP6"
+	case VIRTIO_NET_HDR_GSO_UDP_L4:
+		result += "UDP_L4"
+	case VIRTIO_NET_HDR_GSO_ECN:
+		result += "GSO_ECN"
 	}
-	hdr.CSUMStart, err = net.readGuestUint16(addr + 6)
-	if err != nil {
-		return nil, err
-	}
-	hdr.CSUMOffset, err = net.readGuestUint16(addr + 8)
-	if err != nil {
-		return nil, err
-	}
-	hdr.NumBuffers, err = net.readGuestUint16(addr + 10)
-	if err != nil {
-		return nil, err
+	result += fmt.Sprintf(", hdr_len=%v, gso_size=%v, csum_start=%v, csum_offset=%v, num_buffers=%v",
+		hdr.HdrLen, hdr.GSOSize, hdr.CSUMStart, hdr.CSUMOffset,
+		hdr.NumBuffers)
+
+	return result
+}
+
+func (net *Net) decodeHeader(data []byte) (*NetHdr, error) {
+	if len(data) < 12 {
+		return nil, fmt.Errorf("invalid transmit packet: len=%v", len(data))
 	}
 
-	return hdr, nil
+	return &NetHdr{
+		Flags:      data[0],
+		GSOType:    data[1],
+		HdrLen:     vioBO.Uint16(data[2:]),
+		GSOSize:    vioBO.Uint16(data[4:]),
+		CSUMStart:  vioBO.Uint16(data[6:]),
+		CSUMOffset: vioBO.Uint16(data[8:]),
+		NumBuffers: vioBO.Uint16(data[10:]),
+	}, nil
+}
+
+type IPv4Addr uint32
+
+func (ipv4 IPv4Addr) String() string {
+	return fmt.Sprintf("%v.%v.%v.%v",
+		byte(ipv4>>24), byte(ipv4>>16), byte(ipv4>>8), byte(ipv4))
+}
+
+type ARP struct {
+	HTYPE uint16
+	PTYPE uint16
+	HLEN  uint8
+	PLEN  uint8
+	OPER  uint16
+	SHA   MAC
+	SPA   IPv4Addr
+	THA   MAC
+	TPA   IPv4Addr
+}
+
+func (arp *ARP) String() string {
+	return fmt.Sprintf("HTYPE=%04x, PTYPE=%04x, HLEN=%v, PLEN=%v, OPER=%v, SHA=%v, SPA=%v, THA=%v, TPA=%v",
+		arp.HTYPE, arp.PTYPE, arp.HLEN, arp.PLEN, arp.OPER,
+		arp.SHA, arp.SPA, arp.THA, arp.TPA)
+}
+
+func parseARP(data []byte) (*ARP, error) {
+	if len(data) != 28 {
+		return nil, fmt.Errorf("invalid ARP packet: len=%v", len(data))
+	}
+
+	return &ARP{
+		HTYPE: netBO.Uint16(data[0:]),
+		PTYPE: netBO.Uint16(data[2:]),
+		HLEN:  data[4],
+		PLEN:  data[5],
+		OPER:  netBO.Uint16(data[6:]),
+		SHA:   MAC(data[8:14]),
+		SPA:   IPv4Addr(netBO.Uint32(data[14:])),
+		THA:   MAC(data[18:24]),
+		TPA:   IPv4Addr(netBO.Uint32(data[24:])),
+	}, nil
+}
+
+func makeARP(buf []byte, oper uint16, sha MAC, spa IPv4Addr,
+	tha MAC, tpa IPv4Addr) {
+	netBO.PutUint16(buf[0:], 1)
+	netBO.PutUint16(buf[2:], 0x800)
+	buf[4] = 6
+	buf[5] = 4
+	netBO.PutUint16(buf[6:], oper)
+	copy(buf[8:14], sha[:])
+	netBO.PutUint32(buf[14:], uint32(spa))
+	copy(buf[18:24], tha[:])
+	netBO.PutUint32(buf[24:], uint32(tpa))
+}
+
+func makeEthernet(buf []byte, dst, src MAC, frameType uint16) {
+	copy(buf[0:16], dst[:])
+	copy(buf[6:12], src[:])
+	netBO.PutUint16(buf[12:], frameType)
 }

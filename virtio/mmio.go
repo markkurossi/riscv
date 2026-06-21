@@ -8,6 +8,7 @@
 package virtio
 
 import (
+	"encoding/binary"
 	"fmt"
 	"strings"
 	"sync"
@@ -17,6 +18,11 @@ import (
 	"github.com/markkurossi/riscv/logger"
 	"github.com/markkurossi/riscv/memory"
 	"github.com/markkurossi/riscv/mmu"
+)
+
+var (
+	vioBO = binary.LittleEndian
+	netBO = binary.BigEndian
 )
 
 const (
@@ -90,7 +96,7 @@ type MMIO struct {
 	interruptStatus   uint32
 
 	queueSel uint32
-	queues   []Queue
+	queues   []*Queue
 }
 
 type Handler interface {
@@ -106,9 +112,9 @@ func (vio *MMIO) Init(numQueues int) {
 	vio.C = sync.NewCond(&vio.M)
 
 	for idx := range numQueues {
-		vio.queues = append(vio.queues, Queue{
+		vio.queues = append(vio.queues, &Queue{
 			MMIO:  vio,
-			Index: idx,
+			Index: uint32(idx),
 		})
 	}
 }
@@ -132,8 +138,10 @@ func (vio *MMIO) Load16(paddr uint64) (uint16, error) {
 
 func (vio *MMIO) Load32(paddr uint64) (uint32, error) {
 	offset := paddr - vio.Start
-
 	vio.Debugf("Load32(%v)", mmioReg(offset))
+
+	vio.M.Lock()
+	defer vio.M.Unlock()
 
 	switch offset {
 	case 0x000:
@@ -192,8 +200,10 @@ func (vio *MMIO) Store16(paddr uint64, v uint16) error {
 
 func (vio *MMIO) Store32(paddr uint64, v uint32) error {
 	offset := paddr - vio.Start
-
 	vio.Debugf("Store32(%v, 0x%08x)", mmioReg(offset), v)
+
+	vio.M.Lock()
+	defer vio.M.Unlock()
 
 	switch offset {
 	case 0x014: // DeviceFeaturesSel
@@ -391,25 +401,25 @@ func (vio *MMIO) writeGuestUint32(addr uint64, v uint32) error {
 }
 
 func (vio *MMIO) ProcessQueue(idx uint32) {
-	vio.Debugf("QueueNotify(%v)", idx)
+	vio.Debugf("ProcessQueue(%v)", idx)
 
 	if idx >= uint32(len(vio.queues)) {
 		vio.Errorf("invalid queue index  %v", idx)
 		return
 	}
 
-	vq := &vio.queues[idx]
+	vq := vio.queues[idx]
 	availIdxAddr := vq.AvailPhys + 2
 
-	// Read the boundary target limit from the driver
+	// Read the boundary target limit from the driver.
 	availIdx, err := vio.readGuestUint16(availIdxAddr)
 	if err != nil {
 		vio.Errorf("guest memory access: %v", err)
 		return
 	}
 
-	// Read the baseline state of the used index ring counter ONCE
-	// before looping
+	// Read the baseline state of the used index ring counter before
+	// looping.
 	usedIdxAddr := vq.UsedPhys + 2
 	usedIdx, err := vio.readGuestUint16(usedIdxAddr)
 	if err != nil {
@@ -419,7 +429,7 @@ func (vio *MMIO) ProcessQueue(idx uint32) {
 
 	var processedAny bool
 
-	// Process all pending descriptors currently batched in this pass
+	// Process all pending descriptors currently batched in this pass.
 	for vq.lastAvailIdx != availIdx {
 		ringOffset := uint64(uint32(vq.lastAvailIdx) % vq.Num)
 		ringElementPhys := vq.AvailPhys + 4 + (ringOffset * 2)
@@ -429,12 +439,14 @@ func (vio *MMIO) ProcessQueue(idx uint32) {
 			return
 		}
 
-		// Execute the chain (Modify executeDescriptorChain to NOT
-		// call updateUsedRing inside it!)
 		transferred, err := vio.Handler.ExecuteDescriptorChain(vq, descHeadIdx)
 		if err != nil {
 			vio.Errorf("execute descriptor chain: %v", err)
 			return
+		}
+		if transferred == 0 {
+			vio.Debugf("chain idx=%v processing deferred", descHeadIdx)
+			break
 		}
 
 		// Write back this completed entry into the Used Ring array
@@ -448,11 +460,11 @@ func (vio *MMIO) ProcessQueue(idx uint32) {
 	}
 
 	if processedAny {
-		// Flush the collective index batch change back to guest RAM ONCE
+		// Flush the index batch change back to guest RAM.
 		vio.writeGuestUint16(usedIdxAddr, usedIdx)
 
 		// Read the guest's Available Ring flags (offset 0 of
-		// AvailPhys) to see if they have suppressed interrupts
+		// AvailPhys) to see if they have suppressed interrupts.
 		availFlags, err := vio.readGuestUint16(vq.AvailPhys)
 		if err != nil {
 			vio.Errorf("guest memory access: %v", err)
