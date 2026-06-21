@@ -50,7 +50,8 @@ const (
 	PLICSize = 0x400000
 )
 
-func systemEmulation(params kernel.Params, cfg *SystemConfig) error {
+func systemEmulation(params kernel.Params, cfg *SystemConfig,
+	args []string) error {
 
 	var ramSize uint64 = 0x20000000
 	mem := memory.New(memory.RAMBase, ramSize)
@@ -99,15 +100,10 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig) error {
 	virtioIRQ++
 	virtioDevices = append(virtioDevices, rng.Device())
 
-	// Network device.
-	net := virtio.NewNet(core, virtioROM, plic, virtioIRQ, mem)
-	mmio.Segments = append(mmio.Segments, net)
-	virtioROM = net.End
-	virtioIRQ++
-	virtioDevices = append(virtioDevices, net.Device())
-
 	// Devices from the configuration.
 	for idx, dev := range cfg.Devices {
+		var vio *virtio.MMIO
+
 		switch dev.Type {
 		case "virtio-blk-device":
 			drive := cfg.Drive(dev.Drive)
@@ -125,22 +121,50 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig) error {
 				return err
 			}
 
-			dev.blk = virtio.NewBlk(core, virtioROM, plic, virtioIRQ, mem, fs)
-			mmio.Segments = append(mmio.Segments, dev.blk)
+			blk := virtio.NewBlk(core, virtioROM, plic, virtioIRQ, mem, fs)
+			mmio.Segments = append(mmio.Segments, blk)
 
 			deviceID := dev.ID
 			if len(deviceID) == 0 {
 				deviceID = fmt.Sprintf("goemu-disk-%d", idx)
 			}
-			dev.blk.SetID(deviceID)
-			dev.blk.Readonly = drive.Readonly
+			blk.SetID(deviceID)
+			blk.Readonly = drive.Readonly
 
-			virtioROM = dev.blk.End
-			virtioIRQ++
+			vio = blk.Device()
+
+		case "virtio-net-device":
+			netdev := cfg.Netdev(dev.Netdev)
+			if netdev == nil {
+				return fmt.Errorf("unknown netdev: %v", dev.Netdev)
+			}
+			net := virtio.NewNet(core, virtioROM, plic, virtioIRQ, mem)
+			mmio.Segments = append(mmio.Segments, net)
+			vio = net.Device()
 
 		default:
 			return fmt.Errorf("invalid device type: %v", dev.Type)
 		}
+
+		virtioROM = vio.End
+		virtioIRQ++
+		virtioDevices = append(virtioDevices, vio)
+	}
+
+	// Rest argument files as drives.
+	for idx, arg := range args {
+		fs, err := os.OpenFile(arg, os.O_RDWR, 06444)
+		if err != nil {
+			return fmt.Errorf("failed to open disk file %v: %v", arg, err)
+		}
+		blk := virtio.NewBlk(core, virtioROM, plic, virtioIRQ, mem, fs)
+		mmio.Segments = append(mmio.Segments, blk)
+		blk.SetID(fmt.Sprintf("arg-disk-%d", idx))
+
+		vio := blk.Device()
+		virtioROM = vio.End
+		virtioIRQ++
+		virtioDevices = append(virtioDevices, vio)
 	}
 
 	core.MMU.MMIO = mmio
@@ -526,29 +550,6 @@ func makeDTB(initrdSize uint64, mem *memory.Memory,
 		interrupts := [2]uint32{2, dev.IRQ}
 		fdt.PropTabU32("interrupts-extended", &interrupts[0], 2)
 		fdt.EndNode()
-	}
-	for _, dev := range cfg.Devices {
-		switch dev.Type {
-		case "virtio-blk-device": // VirtIO Block Device.
-			fdt.BeginNodeNum(dev.blk.Name, dev.blk.Start)
-			fdt.PropStr("compatible", "virtio,mmio")
-
-			// Address and size.
-			size := dev.blk.End - dev.blk.Start
-			regData = [4]uint32{
-				uint32(dev.blk.Start >> 32), uint32(dev.blk.Start),
-				uint32(size >> 32), uint32(size),
-			}
-			fdt.PropTabU32("reg", &regData[0], 4)
-
-			// Connect to PLIC (phandle=2).
-			interrupts := [2]uint32{2, dev.blk.IRQ}
-			fdt.PropTabU32("interrupts-extended", &interrupts[0], 2)
-			fdt.EndNode()
-
-		default:
-			panic("invalid device type")
-		}
 	}
 
 	fdt.EndNode() // Close the "soc" node wrapper

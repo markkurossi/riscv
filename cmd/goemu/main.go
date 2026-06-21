@@ -127,9 +127,11 @@ func main() {
 	// Process args for .goemu configs.
 
 	var systemConfig *SystemConfig
+	var rest []string
 
 	for _, arg := range flag.Args() {
 		if !strings.HasSuffix(arg, ".goemu") {
+			rest = append(rest, arg)
 			continue
 		}
 		cfg, err := ReadConfig(arg)
@@ -147,7 +149,7 @@ func main() {
 	// If any critical system emulation parameters are set, start
 	// system emulation.
 	if systemConfig.Defined() {
-		err := systemEmulation(params, systemConfig)
+		err := systemEmulation(params, systemConfig, rest)
 		if err != nil {
 			log.Fatal(err)
 		}

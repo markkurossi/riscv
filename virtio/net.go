@@ -7,6 +7,8 @@
 package virtio
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/markkurossi/riscv/dev"
@@ -137,7 +139,8 @@ const (
 
 type Net struct {
 	MMIO
-	MAC [8]byte
+	HostMAC  [6]byte
+	GuestMAC [6]byte
 }
 
 func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
@@ -148,7 +151,7 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 			Level:    LogDebug,
 			Name:     "virtio-net",
 			DeviceID: NetDeviceID,
-			Features: 0, //1 << VIRTIO_NET_F_MAC,
+			Features: 1 << VIRTIO_NET_F_MAC,
 			Hart:     hart,
 			Start:    start,
 			End:      start + NetSize,
@@ -159,6 +162,21 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	}
 	net.InitQueues(2)
 	net.MMIO.Handler = net
+
+	_, err := rand.Read(net.HostMAC[:])
+	if err != nil {
+		panic(err)
+	}
+	net.HostMAC[0] = (net.HostMAC[0] & 0xfe) | 0x02
+
+	_, err = rand.Read(net.GuestMAC[:])
+	if err != nil {
+		panic(err)
+	}
+	net.GuestMAC[0] = (net.GuestMAC[0] & 0xfe) | 0x02
+
+	net.debugf("guest MAC: %x", net.GuestMAC[:])
+	net.debugf("host MAC : %x", net.HostMAC[:])
 
 	return net
 }
@@ -185,18 +203,30 @@ func (net *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	if err != nil {
 		return 0, err
 	}
-	if desc.Len < 20 {
-		return 0, fmt.Errorf("truncated request: len=%v", desc.Len)
-	}
-	hdr, err := net.decodeHeader(desc.Addr)
-	if err != nil {
-		return 0, err
-	}
-	net.debugf("hdr: %#v", hdr)
-
 	net.debugf("desc: %v", desc)
 
-	return 0, fmt.Errorf("ExecuteDescriptorChain not implemented yet")
+	if desc.Flags&VIRTQ_DESC_F_WRITE != 0 {
+		// Receive queue.
+		return 0, fmt.Errorf("ExecuteDescriptorChain not implemented yet")
+	} else {
+		// Transmit queue.
+		if desc.Len < 12 {
+			return 0, fmt.Errorf("truncated request: len=%v", desc.Len)
+		}
+		buf, err := net.guestData(desc.Addr, uint64(desc.Len))
+		if err != nil {
+			return 0, err
+		}
+
+		// XXX decode from buf
+
+		hdr, err := net.decodeHeader(desc.Addr)
+		if err != nil {
+			return 0, err
+		}
+		net.debugf("req: %#v\n%s", hdr, hex.Dump(buf[12:]))
+		return desc.Len, nil
+	}
 }
 
 func (net *Net) Load8(paddr uint64) (uint8, error) {
@@ -212,7 +242,7 @@ func (net *Net) Load8(paddr uint64) (uint8, error) {
 	switch offset {
 	// 5.1.4 Device configuration layout at offset 0x100.
 	case 0x100, 0x101, 0x102, 0x103, 0x104, 0x105: // MAC.
-		return net.MAC[offset-0x100], nil
+		return net.GuestMAC[offset-0x100], nil
 
 	default:
 		return net.MMIO.Load8(paddr)
@@ -233,16 +263,13 @@ const (
 )
 
 type NetHdr struct {
-	Flags           uint8
-	GSOType         uint8
-	HdrLen          uint16
-	GSOSize         uint16
-	CSUMStart       uint16
-	CSUMOffset      uint16
-	NumBuffers      uint16
-	HashValue       uint32
-	HashReport      uint16
-	PaddingReserved uint16
+	Flags      uint8
+	GSOType    uint8
+	HdrLen     uint16
+	GSOSize    uint16
+	CSUMStart  uint16
+	CSUMOffset uint16
+	NumBuffers uint16
 }
 
 func (net *Net) decodeHeader(addr uint64) (*NetHdr, error) {
@@ -274,18 +301,6 @@ func (net *Net) decodeHeader(addr uint64) (*NetHdr, error) {
 		return nil, err
 	}
 	hdr.NumBuffers, err = net.readGuestUint16(addr + 10)
-	if err != nil {
-		return nil, err
-	}
-	hdr.HashValue, err = net.readGuestUint32(addr + 12)
-	if err != nil {
-		return nil, err
-	}
-	hdr.HashReport, err = net.readGuestUint16(addr + 16)
-	if err != nil {
-		return nil, err
-	}
-	hdr.PaddingReserved, err = net.readGuestUint16(addr + 18)
 	if err != nil {
 		return nil, err
 	}

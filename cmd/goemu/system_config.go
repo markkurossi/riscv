@@ -12,8 +12,6 @@ import (
 	"io"
 	"os"
 	"strings"
-
-	"github.com/markkurossi/riscv/virtio"
 )
 
 type SystemConfig struct {
@@ -23,6 +21,7 @@ type SystemConfig struct {
 	Append  string    `json:"append"`
 	Initrd  string    `json:"initrd,omitempty"`
 	Drives  []*Drive  `json:"drives,omitempty"`
+	Netdevs []*Netdev `json:"netdevs,omitempty"`
 	Devices []*Device `json:"devices,omitempty"`
 }
 
@@ -33,14 +32,17 @@ type Drive struct {
 	Readonly bool   `json:"readonly,omitempty"`
 }
 
+type Netdev struct {
+	ID string `json:"id"`
+}
+
 type Device struct {
 	Type   string `json:"type"`
 	Drive  string `json:"drive"`
+	Netdev string `json:"netdev"`
+	MAC    string `json:"mac,omitempty"`
 	ID     string `json:"id,omitempty"`
 	Serial string `json:"serial,omitempty"`
-
-	drive *Drive
-	blk   *virtio.Blk
 }
 
 func parseBool(v string) (bool, error) {
@@ -172,6 +174,15 @@ func (cfg *SystemConfig) Drive(id string) *Drive {
 	for _, drive := range cfg.Drives {
 		if drive.ID == id {
 			return drive
+		}
+	}
+	return nil
+}
+
+func (cfg *SystemConfig) Netdev(id string) *Netdev {
+	for _, netdev := range cfg.Netdevs {
+		if netdev.ID == id {
+			return netdev
 		}
 	}
 	return nil
