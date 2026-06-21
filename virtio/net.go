@@ -16,6 +16,7 @@ import (
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/logger"
 	"github.com/markkurossi/riscv/memory"
+	"github.com/markkurossi/riscv/tun"
 )
 
 const (
@@ -144,7 +145,14 @@ type Net struct {
 	HostMAC  MAC
 	GuestMAC MAC
 
+	IP  string
+	GW  string
+	tun *tun.Tunnel
+
 	localCh chan []byte
+
+	tunReadCh  chan int
+	tunReadBuf []byte
 
 	receiveIdx uint16
 	receiveBuf []byte
@@ -159,7 +167,20 @@ func (mac MAC) String() string {
 }
 
 func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
-	mem *memory.Memory) *Net {
+	mem *memory.Memory, ip, gw string) (*Net, error) {
+
+	tunnel, err := tun.Create()
+	if err != nil {
+		return nil, err
+	}
+	err = tunnel.Configure(tun.Config{
+		LocalIP:  gw,
+		RemoteIP: ip,
+	})
+	if err != nil {
+		fmt.Printf("tunnel.Configure failed: %v\r\n", err)
+		return nil, err
+	}
 
 	net := &Net{
 		MMIO: MMIO{
@@ -176,43 +197,66 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 			IRQ:      irq,
 			Mem:      mem,
 		},
+		IP:      ip,
+		GW:      gw,
+		tun:     tunnel,
 		localCh: make(chan []byte),
 	}
 	net.Init(2)
 	net.MMIO.Handler = net
 
-	_, err := rand.Read(net.HostMAC[:])
+	_, err = rand.Read(net.HostMAC[:])
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	net.HostMAC[0] = (net.HostMAC[0] & 0xfe) | 0x02
 
 	_, err = rand.Read(net.GuestMAC[:])
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	net.GuestMAC[0] = (net.GuestMAC[0] & 0xfe) | 0x02
 
-	net.Debugf("guest MAC: %v", net.GuestMAC)
-	net.Debugf("host MAC : %v", net.HostMAC)
+	net.Infof("tunnel   : %v", tunnel.Name)
+	net.Infof("guest IP : %v", ip)
+	net.Infof("host IP  : %v", gw)
+	net.Infof("guest MAC: %v", net.GuestMAC)
+	net.Infof("host MAC : %v", net.HostMAC)
 
 	go net.receiver(net.queues[0])
+	go net.tunReader()
 
-	return net
+	return net, nil
 }
 
 func (net *Net) receiver(vq *Queue) {
 	net.Debugf("receiver started for vq-%v", vq.Index)
 	for {
 		local := <-net.localCh
+		net.Debugf("sending local packet of %v bytes", len(local))
+
 		net.M.Lock()
 		for net.receiveBuf == nil {
 			net.C.Wait()
 		}
-		net.Debugf("sending local packet of %v bytes", len(local))
 		net.received = uint32(copy(net.receiveBuf, local))
 		net.ProcessQueue(vq.Index)
 		net.M.Unlock()
+	}
+}
+
+func (net *Net) tunReader() {
+	for {
+		ip, err := net.tun.Read()
+		if err != nil {
+			net.Errorf("tun.Read: %v", err)
+			continue
+		}
+		net.Debugf("tunReader:\n%s", hex.Dump(ip))
+		buf := make([]byte, 12+14+len(ip))
+		makeEthernet(buf[12:], net.GuestMAC, net.HostMAC, 0x0800)
+		copy(buf[12+14:], ip)
+		net.localCh <- buf
 	}
 }
 
@@ -313,6 +357,10 @@ func (net *Net) processSend(hdr *NetHdr, data []byte) error {
 	switch frameType {
 	case 0x0800:
 		net.Debugf("IPv4:\n%s", hex.Dump(data[14:]))
+		_, err := net.tun.Write(data[14:])
+		if err != nil {
+			net.Errorf("tun.Write: %v", err)
+		}
 
 	case 0x0806:
 		arp, err := parseARP(data[14:])

@@ -138,7 +138,11 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig,
 			if netdev == nil {
 				return fmt.Errorf("unknown netdev: %v", dev.Netdev)
 			}
-			net := virtio.NewNet(core, virtioROM, plic, virtioIRQ, mem)
+			net, err := virtio.NewNet(core, virtioROM, plic, virtioIRQ, mem,
+				netdev.IP, netdev.GW)
+			if err != nil {
+				return err
+			}
 			mmio.Segments = append(mmio.Segments, net)
 			vio = net.Device()
 

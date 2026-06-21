@@ -33,14 +33,16 @@ type Drive struct {
 }
 
 type Netdev struct {
-	ID string `json:"id"`
+	ID  string `json:"id"`
+	MAC string `json:"mac,omitempty"`
+	IP  string `json:"ip"`
+	GW  string `json:"gw"`
 }
 
 type Device struct {
 	Type   string `json:"type"`
 	Drive  string `json:"drive"`
 	Netdev string `json:"netdev"`
-	MAC    string `json:"mac,omitempty"`
 	ID     string `json:"id,omitempty"`
 	Serial string `json:"serial,omitempty"`
 }
