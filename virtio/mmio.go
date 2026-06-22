@@ -477,8 +477,6 @@ func (vio *MMIO) ProcessQueue(idx uint32) {
 			// explicitly suppressed it!
 			vio.interruptStatus |= 0x1
 			vio.Plic.SetInterruptRequest(vio.IRQ, true)
-		} else {
-			vio.Debugf("interrupt suppressed by guest driver")
 		}
 	}
 }
