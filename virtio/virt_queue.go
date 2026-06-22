@@ -10,6 +10,7 @@ package virtio
 
 import (
 	"fmt"
+	"strings"
 )
 
 type Queue struct {
@@ -65,6 +66,16 @@ type Desc struct {
 }
 
 func (desc *Desc) String() string {
-	return fmt.Sprintf("Buf=%v@%x,Flags=%x,Next=%x",
-		desc.Len, desc.Addr, desc.Flags, desc.Next)
+	var flags []string
+	if desc.Flags&VIRTQ_DESC_F_INDIRECT != 0 {
+		flags = append(flags, "INDIRECT")
+	}
+	if desc.Flags&VIRTQ_DESC_F_WRITE != 0 {
+		flags = append(flags, "WRITE")
+	}
+	if desc.Flags&VIRTQ_DESC_F_NEXT != 0 {
+		flags = append(flags, "NEXT")
+	}
+	return fmt.Sprintf("Buf=%v@%x,Flags=%v[%x],Next=%x",
+		desc.Len, desc.Addr, strings.Join(flags, ","), desc.Flags, desc.Next)
 }
