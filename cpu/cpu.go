@@ -1359,6 +1359,20 @@ dispatch:
 
 			cpu.F[instr.Rd] = float64(math.Float32frombits(v))
 
+		case isa.FminD:
+			if cpu.F[instr.Rs1] < cpu.F[instr.Rs2] {
+				cpu.F[instr.Rd] = cpu.F[instr.Rs1]
+			} else {
+				cpu.F[instr.Rd] = cpu.F[instr.Rs2]
+			}
+
+		case isa.FmaxD:
+			if cpu.F[instr.Rs1] > cpu.F[instr.Rs2] {
+				cpu.F[instr.Rd] = cpu.F[instr.Rs1]
+			} else {
+				cpu.F[instr.Rd] = cpu.F[instr.Rs2]
+			}
+
 			// Extension 'B' Bit Manipulation.
 
 		case isa.Maxu:

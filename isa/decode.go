@@ -994,6 +994,17 @@ func Decode(raw uint32) (Instr, error) {
 					group, funct7, funct3)
 			}
 
+		case 0b0010101:
+			switch funct3 {
+			case 0b000:
+				instr.Op = FminD
+			case 0b001:
+				instr.Op = FmaxD
+			default:
+				return instr, fmt.Errorf("%v: funct7=%07b, funct3=%03b",
+					group, funct7, funct3)
+			}
+
 		case 0b0101101:
 			instr.Op = FsqrtD
 		case 0b1010000:
