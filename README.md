@@ -55,6 +55,8 @@ operating systems, and the RISC-V privileged architecture.
   - [x] virtio-blk
   - [x] virtio-rng
   - [ ] virtio-net
+    - [x] Network with tun devices.
+    - [ ] DHCP server
   - [ ] virtio-gpu
   - [ ] virtio-console
 - [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
