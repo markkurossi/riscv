@@ -19,7 +19,9 @@ type Level int
 const (
 	Error Level = iota
 	Info
+	Verbose
 	Debug
+	Trace
 )
 
 // Logger implements debug logger.
@@ -33,12 +35,28 @@ func (logger *Logger) logf(level, format string, args ...interface{}) {
 	log.Printf("%s: %s: %s", logger.Name, level, msg)
 }
 
+// Tracef logs a trace message.
+func (logger *Logger) Tracef(format string, args ...interface{}) {
+	if logger.Level < Trace {
+		return
+	}
+	logger.logf("TRACE", format, args...)
+}
+
 // Debugf logs a debugging message.
 func (logger *Logger) Debugf(format string, args ...interface{}) {
 	if logger.Level < Debug {
 		return
 	}
 	logger.logf("DEBUG", format, args...)
+}
+
+// Verbosef logs a verbose info message.
+func (logger *Logger) Verbosef(format string, args ...interface{}) {
+	if logger.Level < Verbose {
+		return
+	}
+	logger.logf("VERBOSE", format, args...)
 }
 
 // Infof logs an info message.

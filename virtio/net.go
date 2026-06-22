@@ -239,39 +239,42 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	return net, nil
 }
 
-func (net *Net) receiver(vq *Queue) {
-	net.Debugf("receiver started for vq-%v", vq.Index)
+func (vio *Net) receiver(vq *Queue) {
+	vio.Debugf("receiver started for vq-%v", vq.Index)
 	for {
-		local := <-net.localCh
-		net.Debugf("sending local packet of %v bytes", len(local))
+		local := <-vio.localCh
+		vio.Debugf("sending local packet of %v bytes", len(local))
 
-		net.M.Lock()
-		for net.receiveBuf == nil {
-			net.C.Wait()
+		vio.M.Lock()
+		for vio.receiveBuf == nil {
+			vio.C.Wait()
 		}
-		net.received = uint32(copy(net.receiveBuf, local))
-		net.ProcessQueue(vq.Index)
-		net.M.Unlock()
+		vio.received = uint32(copy(vio.receiveBuf, local))
+		vio.ProcessQueue(vq.Index)
+		vio.M.Unlock()
 	}
 }
 
-func (net *Net) tunReader() {
+func (vio *Net) tunReader() {
 	for {
-		ip, err := net.tun.Read()
+		ip, err := vio.tun.Read()
 		if err != nil {
-			net.Errorf("tun.Read: %v", err)
+			vio.Errorf("tun.Read: %v", err)
 			continue
 		}
-		net.Debugf("tunReader:\n%s", hex.Dump(ip))
+		// XXX Check what packet this is.
+
+		vio.debugIP(ip)
+
 		buf := make([]byte, 12+14+len(ip))
-		makeEthernet(buf[12:], net.GuestMAC, net.HostMAC, 0x0800)
+		makeEthernet(buf[12:], vio.GuestMAC, vio.HostMAC, 0x0800)
 		copy(buf[12+14:], ip)
-		net.localCh <- buf
+		vio.localCh <- buf
 	}
 }
 
 // Reset implements Handler.Reset.
-func (net *Net) Reset() error {
+func (vio *Net) Reset() error {
 	return nil
 }
 
@@ -293,11 +296,11 @@ var netRegs = map[uint64]string{
 // 	virtio-net: ERROR: execute descriptor chain: truncated Ethernet frame: len=0
 
 // ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
-func (net *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
-	net.Debugf("vq%v: chain: idx=%v", vq.Index, idx)
+func (vio *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
+	vio.Debugf("vq%v: chain: idx=%v", vq.Index, idx)
 
 	if vq.Index%2 == 0 {
-		return net.processReceiveQueue(vq, idx)
+		return vio.processReceiveQueue(vq, idx)
 	}
 
 	// Transmit queue.
@@ -306,10 +309,11 @@ func (net *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	if err != nil {
 		return 0, err
 	}
-	net.Debugf("desc: %v", desc)
+	vio.Debugf("desc: %v", desc)
 
 	if desc.Flags&VIRTQ_DESC_F_WRITE != 0 {
-		return 0, fmt.Errorf("invalid transmitq%v flags: %x", desc.Flags)
+		return 0, fmt.Errorf("invalid transmitq%v flags: %x",
+			vq.Index, desc.Flags)
 	}
 
 	var transferred uint32
@@ -320,22 +324,22 @@ func (net *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 		return 0, fmt.Errorf("truncated request: len=%v", desc.Len)
 	} else if desc.Len == 12 {
 		// First descriptor is the header.
-		chunk, err := net.guestData(desc.Addr, uint64(desc.Len))
+		chunk, err := vio.guestData(desc.Addr, uint64(desc.Len))
 		if err != nil {
 			return 0, err
 		}
-		hdr, err = net.decodeHeader(chunk)
+		hdr, err = vio.decodeHeader(chunk)
 		if err != nil {
 			return 0, err
 		}
 		transferred = 12
 	} else {
 		// Header and payload start in the first descriptor.
-		chunk, err := net.guestData(desc.Addr, uint64(desc.Len))
+		chunk, err := vio.guestData(desc.Addr, uint64(desc.Len))
 		if err != nil {
 			return 0, err
 		}
-		hdr, err = net.decodeHeader(chunk)
+		hdr, err = vio.decodeHeader(chunk)
 		if err != nil {
 			return 0, err
 		}
@@ -348,12 +352,12 @@ func (net *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 		if err != nil {
 			return 0, err
 		}
-		net.Debugf("desc: %v", desc)
+		vio.Debugf("desc: %v", desc)
 		if desc.Flags&VIRTQ_DESC_F_WRITE != 0 {
 			return 0, fmt.Errorf("invalid transmitq%v payload flags: %x",
-				desc.Flags)
+				vq.Index, desc.Flags)
 		}
-		chunk, err := net.guestData(desc.Addr, uint64(desc.Len))
+		chunk, err := vio.guestData(desc.Addr, uint64(desc.Len))
 		if err != nil {
 			return 0, err
 		}
@@ -361,7 +365,7 @@ func (net *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 		transferred += desc.Len
 	}
 
-	err = net.processSend(hdr, payload)
+	err = vio.processSend(hdr, payload)
 	if err != nil {
 		return 0, err
 	}
@@ -369,46 +373,47 @@ func (net *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	return transferred, nil
 }
 
-func (net *Net) processReceiveQueue(vq *Queue, idx uint16) (uint32, error) {
+func (vio *Net) processReceiveQueue(vq *Queue, idx uint16) (uint32, error) {
 	desc, err := vq.loadDesc(idx)
 	if err != nil {
 		return 0, err
 	}
-	net.Debugf("desc: %v", desc)
+	vio.Debugf("desc: %v", desc)
 
 	if desc.Flags&VIRTQ_DESC_F_WRITE == 0 {
-		return 0, fmt.Errorf("invalid receiveq%v flags: %x", desc.Flags)
+		return 0, fmt.Errorf("invalid receiveq%v flags: %x",
+			vq.Index, desc.Flags)
 	}
 	// XXX VIRTQ_DESC_F_NEXT
-	if net.received > 0 {
+	if vio.received > 0 {
 		// We have received data to new.receiveBuf.
-		if net.receiveIdx != idx {
+		if vio.receiveIdx != idx {
 			return 0, fmt.Errorf("receive queue out-of-sync: %v vs %v",
-				net.receiveIdx, idx)
+				vio.receiveIdx, idx)
 		}
-		received := net.received
-		net.receiveIdx = 0
-		net.receiveBuf = nil
-		net.received = 0
+		received := vio.received
+		vio.receiveIdx = 0
+		vio.receiveBuf = nil
+		vio.received = 0
 		return received, nil
 	}
 
 	// Save next buffer.
-	buf, err := net.guestData(desc.Addr, uint64(desc.Len))
+	buf, err := vio.guestData(desc.Addr, uint64(desc.Len))
 	if err != nil {
 		return 0, err
 	}
-	net.receiveIdx = idx
-	net.receiveBuf = buf
-	net.received = 0
+	vio.receiveIdx = idx
+	vio.receiveBuf = buf
+	vio.received = 0
 
-	net.C.Broadcast()
+	vio.C.Broadcast()
 
 	return 0, nil
 }
 
-func (net *Net) processSend(hdr *NetHdr, data []byte) error {
-	net.Debugf("process: %v", hdr)
+func (vio *Net) processSend(hdr *NetHdr, data []byte) error {
+	vio.Debugf("process: %v", hdr)
 
 	if len(data) < 14 {
 		return fmt.Errorf("truncated Ethernet frame: len=%v", len(data))
@@ -423,10 +428,11 @@ func (net *Net) processSend(hdr *NetHdr, data []byte) error {
 
 	switch frameType {
 	case 0x0800:
-		net.Debugf("IPv4:\n%s", hex.Dump(data[14:]))
-		_, err := net.tun.Write(data[14:])
+		vio.debugIP(data[14:])
+		vio.Tracef("%s", hex.Dump(data[14:]))
+		_, err := vio.tun.Write(data[14:])
 		if err != nil {
-			net.Errorf("tun.Write: %v", err)
+			vio.Errorf("tun.Write: %v", err)
 		}
 
 	case 0x0806:
@@ -434,42 +440,56 @@ func (net *Net) processSend(hdr *NetHdr, data []byte) error {
 		if err != nil {
 			return err
 		}
-		net.Debugf("ARP: %v", arp)
-		if arp.OPER == 1 && arp.TPA.Equal(net.HostIP) {
-			// Respond to ARP requests.
-			resp := make([]byte, 12+14+28)
-			makeEthernet(resp[12:], arp.SHA, net.HostMAC, frameType)
-			makeARP(resp[12+14:], 2, net.HostMAC, arp.TPA, arp.SHA, arp.SPA)
+		if arp.OPER == 1 {
+			vio.Debugf("ARP  who-has %v tell %v", arp.TPA, arp.SPA)
+			if arp.TPA.Equal(vio.HostIP) {
+				// Respond to ARP requests.
+				resp := make([]byte, 12+14+28)
+				makeEthernet(resp[12:], arp.SHA, vio.HostMAC, frameType)
+				makeARP(resp[12+14:], 2, vio.HostMAC, arp.TPA, arp.SHA, arp.SPA)
 
-			net.localCh <- resp
+				vio.localCh <- resp
+			}
+		} else {
+			vio.Debugf("ARP  %v is-at %v", arp.SPA, arp.SHA)
 		}
 
 	case 0x86dd:
-		net.Debugf("IPv6:\n%s", hex.Dump(data[14:]))
+		vio.debugIP(data[14:])
+		vio.Tracef("%s", hex.Dump(data[14:]))
+		_, err := vio.tun.Write(data[14:])
+		if err != nil {
+			vio.Errorf("tun.Write: %v", err)
+		}
 
 	default:
-		net.Debugf("unknown %04x:\n%s", frameType, hex.Dump(data))
+		vio.Debugf("Ethernet frame %04x", frameType)
+		vio.Tracef("%s", hex.Dump(data[14:]))
+		_, err := vio.tun.Write(data[14:])
+		if err != nil {
+			vio.Errorf("tun.Write: %v", err)
+		}
 	}
 	return nil
 }
 
-func (net *Net) Load8(paddr uint64) (uint8, error) {
-	offset := paddr - net.Start
+func (vio *Net) Load8(paddr uint64) (uint8, error) {
+	offset := paddr - vio.Start
 
 	reg, ok := netRegs[offset]
 	if ok {
-		net.Debugf("Load8(%v[0x%03x])", reg, offset)
+		vio.Debugf("Load8(%v[0x%03x])", reg, offset)
 	} else {
-		net.Debugf("Load8(%x)", offset)
+		vio.Debugf("Load8(%x)", offset)
 	}
 
 	switch offset {
 	// 5.1.4 Device configuration layout at offset 0x100.
 	case 0x100, 0x101, 0x102, 0x103, 0x104, 0x105: // MAC.
-		return net.GuestMAC[offset-0x100], nil
+		return vio.GuestMAC[offset-0x100], nil
 
 	default:
-		return net.MMIO.Load8(paddr)
+		return vio.MMIO.Load8(paddr)
 	}
 }
 
@@ -533,7 +553,7 @@ func (hdr *NetHdr) String() string {
 	return result
 }
 
-func (net *Net) decodeHeader(data []byte) (*NetHdr, error) {
+func (vio *Net) decodeHeader(data []byte) (*NetHdr, error) {
 	if len(data) < 12 {
 		return nil, fmt.Errorf("invalid transmit packet: len=%v", len(data))
 	}
@@ -602,4 +622,242 @@ func makeEthernet(buf []byte, dst, src MAC, frameType uint16) {
 	copy(buf[0:16], dst[:])
 	copy(buf[6:12], src[:])
 	netBO.PutUint16(buf[12:], frameType)
+}
+
+var ipProtoNames = map[byte]string{
+	0:   "HOPOPT",
+	1:   "ICMP",
+	2:   "IGMP",
+	3:   "GGP",
+	4:   "IP-in-IP",
+	5:   "ST",
+	6:   "TCP",
+	7:   "CBT",
+	8:   "EGP",
+	9:   "IGP",
+	10:  "BBN-RCC-MON",
+	11:  "NVP-II",
+	12:  "PUP",
+	13:  "ARGUS",
+	14:  "EMCON",
+	15:  "XNET",
+	16:  "CHAOS",
+	17:  "UDP",
+	18:  "MUX",
+	19:  "DCN-MEAS",
+	20:  "HMP",
+	21:  "PRM",
+	22:  "XNS-IDP",
+	23:  "TRUNK-1",
+	24:  "TRUNK-2",
+	25:  "LEAF-1",
+	26:  "LEAF-2",
+	27:  "RDP",
+	28:  "IRTP",
+	29:  "ISO-TP4",
+	30:  "NETBLT",
+	31:  "MFE-NSP",
+	32:  "MERIT-INP",
+	33:  "DCCP",
+	34:  "3PC",
+	35:  "IDPR",
+	36:  "XTP",
+	37:  "DDP",
+	38:  "IDPR-CMTP",
+	39:  "TP++",
+	40:  "IL",
+	41:  "IPv6",
+	42:  "SDRP",
+	43:  "IPv6-Route",
+	44:  "IPv6-Frag",
+	45:  "IDRP",
+	46:  "RSVP",
+	47:  "GRE",
+	48:  "DSR",
+	49:  "BNA",
+	50:  "ESP",
+	51:  "AH",
+	52:  "I-NLSP",
+	53:  "SwIPe",
+	54:  "NARP",
+	55:  "MOBILE",
+	56:  "TLSP",
+	57:  "SKIP",
+	58:  "IPv6-ICMP",
+	59:  "IPv6-NoNxt",
+	60:  "IPv6-Opts",
+	62:  "CFTP",
+	64:  "SAT-EXPAK",
+	65:  "KRYPTOLAN",
+	66:  "RVD",
+	67:  "IPPC",
+	69:  "SAT-MON",
+	70:  "VISA",
+	71:  "IPCU",
+	72:  "CPNX",
+	73:  "CPHB",
+	74:  "WSN",
+	75:  "PVP",
+	76:  "BR-SAT-MON",
+	77:  "SUN-ND",
+	78:  "WB-MON",
+	79:  "WB-EXPAK",
+	80:  "ISO-IP",
+	81:  "VMTP",
+	82:  "SECURE-VMTP",
+	83:  "VINES",
+	84:  "IPTM",
+	85:  "NSFNET-IGP",
+	86:  "DGP",
+	87:  "TCF",
+	88:  "EIGRP",
+	89:  "OSPF",
+	90:  "Sprite-RPC",
+	91:  "LARP",
+	92:  "MTP",
+	93:  "AX.25",
+	94:  "OS",
+	95:  "MICP",
+	96:  "SCC-SP",
+	97:  "ETHERIP",
+	98:  "ENCAP",
+	100: "GMTP",
+	101: "IFMP",
+	102: "PNNI",
+	103: "PIM",
+	104: "ARIS",
+	105: "SCPS",
+	106: "QNX",
+	107: "A/N",
+	108: "IPComp",
+	109: "SNP",
+	110: "Compaq-Peer",
+	111: "IPX-in-IP",
+	112: "VRRP",
+	113: "PGM",
+	115: "L2TP",
+	116: "DDX",
+	117: "IATP",
+	118: "STP",
+	119: "SRP",
+	120: "UTI",
+	121: "SMP",
+	122: "SM",
+	123: "PTP",
+	124: "IS-IS over IPv4",
+	125: "FIRE",
+	126: "CRTP",
+	127: "CRUDP",
+	128: "SSCOPMCE",
+	129: "IPLT",
+	130: "SPS",
+	131: "PIPE",
+	132: "SCTP",
+	133: "FC",
+	134: "RSVP-E2E-IGNORE",
+	135: "Mobility Header",
+	136: "UDPLite",
+	137: "MPLS-in-IP",
+	138: "manet",
+	139: "HIP",
+	140: "Shim6",
+	141: "WESP",
+	142: "ROHC",
+	143: "Ethernet",
+	144: "AGGFRAG",
+	145: "NSH",
+	146: "Homa",
+	147: "BIT-EMU",
+}
+
+func ipProtoName(proto uint8) string {
+	name, ok := ipProtoNames[proto]
+	if ok {
+		return name
+	}
+	return fmt.Sprintf("%02x", proto)
+}
+
+var icmpTypeNames = map[byte]string{
+	0:  "echo reply",
+	3:  "destination unreachable",
+	4:  "source quench",
+	5:  "redirect message",
+	8:  "echo",
+	9:  "router advertisement",
+	10: "router solicitation",
+	11: "time exceeded",
+	12: "parameter problem",
+	13: "timestamp",
+	14: "timestamp reply",
+	15: "information request",
+	16: "information reply",
+	17: "address mask request",
+	18: "address mask reply",
+	30: "traceroute",
+	42: "extended echo",
+	43: "extended echo reply",
+}
+
+func icmpTypeName(t byte) string {
+	name, ok := icmpTypeNames[t]
+	if ok {
+		return name
+	}
+	return fmt.Sprintf("%02x", t)
+}
+
+func (vio *Net) debugIP(packet []byte) int {
+	if len(packet) < 20 {
+		vio.Errorf("truncated IP packet:\n%s", hex.Dump(packet))
+		return 0
+	}
+
+	v := int(packet[0] >> 4)
+
+	var hdrLen int
+	var proto uint8
+	var src, dst net.IP
+
+	switch v {
+	case 4:
+		ihl := packet[0] & 0b111
+		hdrLen = int(ihl) * 4
+		proto = packet[9]
+		src = net.IP(packet[12:16])
+		dst = net.IP(packet[16:20])
+
+	case 6:
+		hdrLen = 40
+		if len(packet) < hdrLen {
+			vio.Errorf("truncated IPv6 packet:\n%s", hex.Dump(packet))
+		}
+		proto = packet[6]
+		src = net.IP(packet[8:24])
+		dst = net.IP(packet[24:40])
+
+	default:
+		vio.Errorf("invalid IP packet: version=%v:\n%s", v, hex.Dump(packet))
+		return 0
+	}
+
+	var srcPort, dstPort uint16
+	if len(packet) >= hdrLen+4 {
+		srcPort = netBO.Uint16(packet[hdrLen:])
+		dstPort = netBO.Uint16(packet[hdrLen+2:])
+	}
+
+	switch proto {
+	case 1: // ICMP
+		vio.Debugf("ICMP %v -> %v %v", src, dst, icmpTypeName(packet[hdrLen]))
+
+	case 6, 17: // TCP, UDP
+		vio.Debugf("%s %v:%v -> %v:%v",
+			ipProtoName(proto), src, srcPort, dst, dstPort)
+
+	default:
+		vio.Debugf("%s %v -> %v", ipProtoName(proto), src, dst)
+	}
+
+	return v
 }
