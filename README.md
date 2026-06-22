@@ -57,6 +57,7 @@ operating systems, and the RISC-V privileged architecture.
   - [ ] virtio-net
     - [x] Network with tun devices.
     - [ ] DHCP server
+    - [ ] HTTP proxy
   - [ ] virtio-gpu
   - [ ] virtio-console
 - [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
@@ -380,4 +381,12 @@ Press space to enter FreeBSD boot console:
 <SPACE>
 OK set boot_verbose=1
 OK boot
+```
+
+## pkg
+
+``` shell
+pkg_env: {
+    http_proxy: "http://myproxy:3128",
+}
 ```
