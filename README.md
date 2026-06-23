@@ -383,10 +383,46 @@ OK set boot_verbose=1
 OK boot
 ```
 
+## Network routing
+
+On macOS host:
+
+``` shell
+$ sudo sysctl -w net.inet.ip.forwarding=1
+```
+
+Create `pf.conf`
+
+``` txt
+nat on en0 from 192.168.42.0/24 to any -> (en0)
+```
+
+Load conf:
+
+``` shell
+$ sudo pfctl -f pf.conf
+$ sudo pfctl -e
+```
+
 ## pkg
 
 ``` shell
 pkg_env: {
     http_proxy: "http://myproxy:3128",
 }
+```
+
+## ports
+
+``` shell
+$ tar -xf ports-main.tar.gz -C /usr
+$ mv /usr/ports-main /usr/ports
+$ cd /usr/ports/x11/xorg
+$ make install clean
+```
+
+## Compiling git
+
+``` shell
+$ gmake NO_RUST=1 CFLAGS="-I/usr/local/include" LDFLAGS="-L/usr/local/lib -liconv"
 ```
