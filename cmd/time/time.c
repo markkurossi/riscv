@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <spawn.h>
 #include <sys/wait.h>
@@ -49,7 +50,17 @@ main(int argc, char *argv[])
   if (argc == 1)
     {
       fprintf(stderr, "Usage: time program [args...]\n");
+      fprintf(stderr, "       time info\n");
       return 1;
+    }
+  if (argc == 2 && strcmp(argv[1], "info") == 0)
+    {
+      cycle = riscv_read_csr(cycle);
+      instret = riscv_read_csr(instret);
+      printf("CPU info:\n");
+      printf(" - cycles : %ld\n", cycle);
+      printf(" - instret: %ld\n", instret);
+      return 0;
     }
 
   start = time_ns();
