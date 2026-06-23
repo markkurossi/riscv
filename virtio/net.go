@@ -196,7 +196,7 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		MMIO: MMIO{
 			Logger: logger.Logger{
 				Name:  "virtio-net",
-				Level: logger.Debug,
+				Level: logger.Verbose,
 			},
 			DeviceID: NetDeviceID,
 			Features: 1 << VIRTIO_NET_F_MAC,
@@ -227,11 +227,9 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	}
 	net.GuestMAC[0] = (net.GuestMAC[0] & 0xfe) | 0x02
 
-	net.Infof("tunnel   : %v", tunnel.Name)
-	net.Infof("guest IP : %v", ip)
-	net.Infof("host IP  : %v", gw)
-	net.Infof("guest MAC: %v", net.GuestMAC)
-	net.Infof("host MAC : %v", net.HostMAC)
+	net.Infof("tunnel: %v", tunnel.Name)
+	net.Infof("guest : %v %v", net.GuestMAC, ip)
+	net.Infof("host  : %v %v", net.HostMAC, gw)
 
 	go net.receiver(net.queues[0])
 	go net.tunReader()
