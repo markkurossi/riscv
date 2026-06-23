@@ -151,7 +151,7 @@ type Net struct {
 
 	tun *tun.Tunnel
 
-	localCh chan []byte
+	recvCh chan []byte
 
 	tunReadCh  chan int
 	tunReadBuf []byte
@@ -159,6 +159,10 @@ type Net struct {
 	receiveIdx uint16
 	receiveBuf []byte
 	received   uint32
+
+	// Statistics.
+	stSent uint64
+	stRcvd uint64
 }
 
 type MAC [6]byte
@@ -210,7 +214,7 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		HostIP:  hostIP,
 		GuestIP: guestIP,
 		tun:     tunnel,
-		localCh: make(chan []byte),
+		recvCh:  make(chan []byte),
 	}
 	net.Init(2)
 	net.MMIO.Handler = net
@@ -240,14 +244,21 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 func (vio *Net) receiver(vq *Queue) {
 	vio.Debugf("receiver started for vq-%v", vq.Index)
 	for {
-		local := <-vio.localCh
-		vio.Debugf("sending local packet of %v bytes", len(local))
+		packet := <-vio.recvCh
+		vio.Debugf("received packet of %v bytes", len(packet))
 
 		vio.M.Lock()
 		for vio.receiveBuf == nil {
 			vio.C.Wait()
 		}
-		vio.received = uint32(copy(vio.receiveBuf, local))
+		n := copy(vio.receiveBuf, packet)
+
+		if n > 12+14 {
+			// Count only IP bytes.
+			vio.stRcvd += uint64(n - 12 - 14)
+		}
+		vio.received = uint32(n)
+
 		vio.ProcessQueue(vq.Index)
 		vio.M.Unlock()
 	}
@@ -267,13 +278,19 @@ func (vio *Net) tunReader() {
 		buf := make([]byte, 12+14+len(ip))
 		makeEthernet(buf[12:], vio.GuestMAC, vio.HostMAC, 0x0800)
 		copy(buf[12+14:], ip)
-		vio.localCh <- buf
+		vio.recvCh <- buf
 	}
 }
 
 // Reset implements Handler.Reset.
 func (vio *Net) Reset() error {
 	return nil
+}
+
+// DeviceStats implements Handler.DeviceStats
+func (vio *Net) DeviceStats() {
+	fmt.Printf("%v: sent  : %v\n", vio.MMIO.Logger.Name, FileSize(vio.stSent))
+	fmt.Printf("%v: rcvd  : %v\n", vio.MMIO.Logger.Name, FileSize(vio.stRcvd))
 }
 
 var netRegs = map[uint64]string{
@@ -284,14 +301,6 @@ var netRegs = map[uint64]string{
 	0x104: "MAC[4]",
 	0x105: "MAC[5]",
 }
-
-// FreeBSD sends packets in parts:
-//
-// 	virtio-net: DEBUG: ProcessQueue(1)
-// 	virtio-net: DEBUG: vq-1: chain: idx=0
-// 	virtio-net: DEBUG: desc: Buf=12@809ce300,Flags=1,Next=1
-// 	virtio-net: DEBUG: process: NetHdr: flags=, gso_type=none, hdr_len=0, gso_size=0, csum_start=0, csum_offset=0, num_buffers=0
-// 	virtio-net: ERROR: execute descriptor chain: truncated Ethernet frame: len=0
 
 // ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
 func (vio *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
@@ -423,18 +432,20 @@ func (vio *Net) processSend(hdr *NetHdr, data []byte) error {
 	_ = srcMAC
 
 	frameType := netBO.Uint16(data[12:])
+	packet := data[14:]
 
 	switch frameType {
-	case 0x0800:
-		vio.debugIP(data[14:])
-		vio.Tracef("%s", hex.Dump(data[14:]))
-		_, err := vio.tun.Write(data[14:])
+	case 0x0800: // IPv4
+		vio.debugIP(packet)
+		vio.Tracef("%s", hex.Dump(packet))
+		_, err := vio.tun.Write(packet)
 		if err != nil {
 			vio.Errorf("tun.Write: %v", err)
 		}
+		vio.stSent += uint64(len(packet))
 
-	case 0x0806:
-		arp, err := parseARP(data[14:])
+	case 0x0806: // ARP
+		arp, err := parseARP(packet)
 		if err != nil {
 			return err
 		}
@@ -446,27 +457,29 @@ func (vio *Net) processSend(hdr *NetHdr, data []byte) error {
 				makeEthernet(resp[12:], arp.SHA, vio.HostMAC, frameType)
 				makeARP(resp[12+14:], 2, vio.HostMAC, arp.TPA, arp.SHA, arp.SPA)
 
-				vio.localCh <- resp
+				vio.recvCh <- resp
 			}
 		} else {
 			vio.Debugf("ARP  %v is-at %v", arp.SPA, arp.SHA)
 		}
 
-	case 0x86dd:
-		vio.debugIP(data[14:])
-		vio.Tracef("%s", hex.Dump(data[14:]))
-		_, err := vio.tun.Write(data[14:])
+	case 0x86dd: // IPv6
+		vio.debugIP(packet)
+		vio.Tracef("%s", hex.Dump(packet))
+		_, err := vio.tun.Write(packet)
 		if err != nil {
 			vio.Errorf("tun.Write: %v", err)
 		}
+		vio.stSent += uint64(len(packet))
 
 	default:
 		vio.Debugf("Ethernet frame %04x", frameType)
-		vio.Tracef("%s", hex.Dump(data[14:]))
-		_, err := vio.tun.Write(data[14:])
+		vio.Tracef("%s", hex.Dump(packet))
+		_, err := vio.tun.Write(packet)
 		if err != nil {
 			vio.Errorf("tun.Write: %v", err)
 		}
+		vio.stSent += uint64(len(packet))
 	}
 	return nil
 }

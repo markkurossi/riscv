@@ -219,6 +219,9 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig,
 	fmt.Printf("CPU: instret: %v, runtime: %v, MIPS: %.2f\n",
 		core.Instret, core.Runtime,
 		float64(core.Instret/1000000.0)/float64(core.Runtime/time.Second))
+	for _, vio := range virtioDevices {
+		vio.Stats()
+	}
 	return nil
 }
 

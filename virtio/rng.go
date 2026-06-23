@@ -54,6 +54,10 @@ func (rng *Rng) Reset() error {
 	return nil
 }
 
+// DeviceStats implements Handler.DeviceStats
+func (rng *Rng) DeviceStats() {
+}
+
 // ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
 func (rng *Rng) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	rng.Debugf("chain: idx=%v", idx)

@@ -29,6 +29,10 @@ type Blk struct {
 	Readonly bool
 	fileInfo os.FileInfo
 	id       []byte
+
+	// Statistics.
+	stRead  uint64
+	stWrote uint64
 }
 
 func NewBlk(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
@@ -65,6 +69,12 @@ func (blk *Blk) SetID(id string) {
 // Reset implements Handler.Reset.
 func (blk *Blk) Reset() error {
 	return nil
+}
+
+// DeviceStats implements Handler.DeviceStats
+func (blk *Blk) DeviceStats() {
+	fmt.Printf("%v: read  : %v\n", blk.MMIO.Logger.Name, FileSize(blk.stRead))
+	fmt.Printf("%v: wrote : %v\n", blk.MMIO.Logger.Name, FileSize(blk.stWrote))
 }
 
 // ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
@@ -124,12 +134,17 @@ func (blk *Blk) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 				} else {
 					blk.Infof("read: idx=%v, len=%v, addr=%x, tx=%v",
 						idx, req.Len, addr, n)
+					blk.stRead += uint64(n)
 				}
 				fileOffset += int64(n)
 				transferred += uint32(n)
 
 			case VIRTIO_BLK_T_OUT:
 				if blk.Readonly {
+					// Even if we don't write the data, transfer the
+					// bytes to /dev/null so that this descriptor
+					// chain completes.
+					transferred += req.Len
 					opStatus = VIRTIO_BLK_S_UNSUPP
 				} else {
 					buf, err := blk.guestData(addr, uint64(req.Len))
@@ -147,6 +162,7 @@ func (blk *Blk) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 					} else {
 						blk.Infof("write: idx=%v, len=%v, addr=%x, tx=%v",
 							idx, req.Len, addr, n)
+						blk.stWrote += uint64(n)
 					}
 					fileOffset += int64(n)
 					transferred += uint32(n)

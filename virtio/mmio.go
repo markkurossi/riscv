@@ -70,6 +70,23 @@ func statusString(status uint32) string {
 	return strings.Join(result, ",")
 }
 
+// FileSize specifies a file (or data transfer) size in bytes.
+type FileSize uint64
+
+func (s FileSize) String() string {
+	if s > 1000*1000*1000*1000 {
+		return fmt.Sprintf("%dTB", s/(1000*1000*1000*1000))
+	} else if s > 1000*1000*1000 {
+		return fmt.Sprintf("%dGB", s/(1000*1000*1000))
+	} else if s > 1000*1000 {
+		return fmt.Sprintf("%dMB", s/(1000*1000))
+	} else if s > 1000 {
+		return fmt.Sprintf("%dkB", s/1000)
+	} else {
+		return fmt.Sprintf("%dB", s)
+	}
+}
+
 var (
 	_ mmu.MMIO = &MMIO{}
 )
@@ -101,6 +118,7 @@ type MMIO struct {
 
 type Handler interface {
 	Reset() error
+	DeviceStats()
 	ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error)
 }
 
@@ -117,6 +135,11 @@ func (vio *MMIO) Init(numQueues int) {
 			Index: uint32(idx),
 		})
 	}
+}
+
+// Stats print device statistics.
+func (vio *MMIO) Stats() {
+	vio.Handler.DeviceStats()
 }
 
 // Halt implements mmu.ROM.Halt.
