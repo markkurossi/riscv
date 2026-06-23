@@ -8,6 +8,7 @@ package virtio
 
 import (
 	"crypto/rand"
+	"fmt"
 
 	"github.com/markkurossi/riscv/dev"
 	"github.com/markkurossi/riscv/isa"
@@ -22,6 +23,9 @@ const (
 
 type Rng struct {
 	MMIO
+
+	// Statistics.
+	stRead uint64
 }
 
 func NewRng(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
@@ -56,6 +60,7 @@ func (rng *Rng) Reset() error {
 
 // DeviceStats implements Handler.DeviceStats
 func (rng *Rng) DeviceStats() {
+	fmt.Printf("%v: read  : %v\n", rng.Name, FileSize(rng.stRead))
 }
 
 // ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
@@ -82,6 +87,8 @@ func (rng *Rng) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 			if err != nil {
 				rng.Errorf("rand.Read(%v) failed: %v", req.Len, err)
 				return 0, err
+			} else {
+				rng.stRead += uint64(n)
 			}
 
 			rng.Infof("idx=%v, len=%v, addr=%x, tx=%v",

@@ -95,7 +95,6 @@ type MMIO struct {
 	logger.Logger
 	M        sync.Mutex
 	C        *sync.Cond
-	Name     string
 	DeviceID uint32
 	Features uint32
 	Hart     isa.Hart
