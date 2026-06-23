@@ -58,6 +58,7 @@ operating systems, and the RISC-V privileged architecture.
     - [x] Network with tun devices.
     - [ ] DHCP server
     - [ ] HTTP proxy
+    - [ ] NTP server
   - [ ] virtio-gpu
   - [ ] virtio-console
 - [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
@@ -421,8 +422,56 @@ $ cd /usr/ports/x11/xorg
 $ make install clean
 ```
 
-## Compiling git
+### graphics/feh
+
+If you need an actual interactive viewer (to zoom, scale, or close out
+of the image with a hotkey), you can use graphics/feh. While feh
+typically expects an X server, it can run directly over the vt(4)
+console framebuffer if paired with SDL or a minimalist backend.
 
 ``` shell
-$ gmake NO_RUST=1 CFLAGS="-I/usr/local/include" LDFLAGS="-L/usr/local/lib -liconv"
+$ feh --geometry 1920x1080 image.png
+```
+
+(Replace `1920x1080` with your actual console's pixel resolution).
+
+## Compiling git
+
+### Compile curl
+
+``` shell
+$ ./configure --with-openssl --without-libpsl
+```
+
+### Compile git
+
+The `-O0` is needed to prevent clang compiler error:
+
+``` shell
+CC sha1dc/sha1.o
+
+error: ran out of registers during register allocation
+
+1 error generated.
+```
+
+``` shell
+$ ./configure --with-curl=/usr/local
+$ gmake NO_RUST=1 CFLAGS="-O0 -I/usr/local/include" LDFLAGS="-L/usr/local/lib -liconv"
+```
+
+## Expanding image
+
+Host:
+
+``` shell
+$ truncate -s +1G FreeBSD-15.1-RELEASE-riscv-riscv64-GENERICSD.img
+```
+
+Guest:
+
+``` shell
+# gpart recover vtbd0
+# gpart resize -i 4 vtbd0
+# growfs /
 ```
