@@ -22,7 +22,6 @@ import (
 
 var (
 	vioBO = binary.LittleEndian
-	netBO = binary.BigEndian
 )
 
 const (
@@ -92,7 +91,7 @@ var (
 )
 
 type MMIO struct {
-	logger.Logger
+	logger.Log
 	M        sync.Mutex
 	C        *sync.Cond
 	DeviceID uint32

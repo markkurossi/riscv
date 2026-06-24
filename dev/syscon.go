@@ -26,7 +26,7 @@ const (
 //	0		PoweroffMagic	shutdown CPU
 //	4		RebootMagic		reboot CPU
 type Syscon struct {
-	logger.Logger
+	logger.Log
 	Hart  isa.Hart
 	Start uint64
 	End   uint64
@@ -35,7 +35,7 @@ type Syscon struct {
 // NewSyscon creates a new syscon device.
 func NewSyscon(hart isa.Hart, start, size uint64) *Syscon {
 	return &Syscon{
-		Logger: logger.Logger{
+		Log: logger.Log{
 			Name:  "Syscon",
 			Level: logger.Error,
 		},

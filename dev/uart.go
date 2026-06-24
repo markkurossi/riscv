@@ -134,7 +134,7 @@ var MCRBits = []string{
 // UART implements the UART 16550A universal asynchronous
 // receiver-transmitter.
 type UART struct {
-	logger.Logger
+	logger.Log
 	Hart   isa.Hart
 	Start  uint64
 	End    uint64
@@ -169,7 +169,7 @@ func NewUART(hart isa.Hart, start, size uint64, plic *PLIC, irq uint32,
 	color, cooked bool) *UART {
 
 	uart := &UART{
-		Logger: logger.Logger{
+		Log: logger.Log{
 			Name:  "UART",
 			Level: logger.Error,
 		},

@@ -33,7 +33,7 @@ func NewRng(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 
 	rng := &Rng{
 		MMIO: MMIO{
-			Logger: logger.Logger{
+			Log: logger.Log{
 				Name:  "virtio-rng",
 				Level: logger.Error,
 			},

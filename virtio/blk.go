@@ -40,7 +40,7 @@ func NewBlk(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 
 	blk := &Blk{
 		MMIO: MMIO{
-			Logger: logger.Logger{
+			Log: logger.Log{
 				Name:  "virtio-blk",
 				Level: logger.Error,
 			},
