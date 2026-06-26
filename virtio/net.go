@@ -196,7 +196,7 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		MMIO: MMIO{
 			Log: logger.Log{
 				Name:  "virtio-net",
-				Level: logger.Verbose,
+				Level: logger.Trace,
 			},
 			DeviceID: NetDeviceID,
 			Features: 1 << VIRTIO_NET_F_MAC,
@@ -433,7 +433,7 @@ func (vio *Net) processSend(hdr *NetHdr, data []byte) error {
 	switch frameType {
 	case 0x0800: // IPv4
 		network.DebugIP(vio, packet)
-		vio.Tracef("%s", hex.Dump(packet))
+		vio.Tracef("IPv4:\n%s", hex.Dump(packet))
 		_, err := vio.tun.Write(packet)
 		if err != nil {
 			vio.Errorf("tun.Write: %v", err)
@@ -462,7 +462,7 @@ func (vio *Net) processSend(hdr *NetHdr, data []byte) error {
 
 	case 0x86dd: // IPv6
 		network.DebugIP(vio, packet)
-		vio.Tracef("%s", hex.Dump(packet))
+		vio.Tracef("IPv6:\n%s", hex.Dump(packet))
 		_, err := vio.tun.Write(packet)
 		if err != nil {
 			vio.Errorf("tun.Write: %v", err)
@@ -471,7 +471,7 @@ func (vio *Net) processSend(hdr *NetHdr, data []byte) error {
 
 	default:
 		vio.Debugf("Ethernet frame %04x", frameType)
-		vio.Tracef("%s", hex.Dump(packet))
+		vio.Tracef("Ethernet:\n%s", hex.Dump(packet))
 		_, err := vio.tun.Write(packet)
 		if err != nil {
 			vio.Errorf("tun.Write: %v", err)
