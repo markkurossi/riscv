@@ -10,14 +10,11 @@ package network
 import (
 	"encoding/binary"
 	"fmt"
-	"net"
 )
 
 var (
 	// BO defines the network byte-order.
 	BO = binary.BigEndian
-
-	ZeroIP = net.IP([]byte{0, 0, 0, 0})
 )
 
 // MAC defines Ethernet address.

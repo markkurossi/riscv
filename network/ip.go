@@ -14,6 +14,15 @@ import (
 	"github.com/markkurossi/riscv/logger"
 )
 
+var (
+	ZeroIP     = net.IP([]byte{0, 0, 0, 0})
+	ClassCMask = net.IP([]byte{255, 255, 255, 0})
+)
+
+func IsZeroIP(ip net.IP) bool {
+	return ip == nil || ip.IsUnspecified()
+}
+
 var ipProtoNames = map[byte]string{
 	0:   "HOPOPT",
 	1:   "ICMP",

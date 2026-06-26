@@ -1,5 +1,7 @@
 github.com/markkurossi/gofdt v0.0.0-20260510205141-e016428818d8 h1:jyhX9QKINPwAoEV7Vger7mkoY4GmMn0n98B6jv8A2Kw=
 github.com/markkurossi/gofdt v0.0.0-20260510205141-e016428818d8/go.mod h1:E8PSn4N3UfIDrBsF7/gSyFm2I/QLFTpSEUytl9K7OXk=
+github.com/markkurossi/text v0.0.0-20250315092940-9a5813bf8efa h1:L8JtXBvWPvcdF5ioXx18elRhkmAmSIJjlSI0b5oyNm8=
+github.com/markkurossi/text v0.0.0-20250315092940-9a5813bf8efa/go.mod h1:4KvRwMHp/56tnL29ZUCqpJWwEMDd0I6CQU0cAN9tros=
 github.com/markkurossi/trace v0.0.0-20260527035255-7e9398ae133c h1:o5LHWkuD0oz/68sOEXobRayLz1aaOTpmBXDxCyAKFVc=
 github.com/markkurossi/trace v0.0.0-20260527035255-7e9398ae133c/go.mod h1:AKW58SZWk/RH0yuTivCeiKSNkuTaModwg/PWKS3/8zc=
 golang.org/x/sys v0.45.0 h1:dO4czNzziLiiXplLQgBCEpCvXQ3dnkn0SdaZSYdQ+FY=

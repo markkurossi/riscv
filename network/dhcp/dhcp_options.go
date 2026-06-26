@@ -4,10 +4,11 @@
 // All rights reserved.
 //
 
-package network
+package dhcp
 
 import (
 	"fmt"
+	"net"
 	"strings"
 )
 
@@ -22,9 +23,53 @@ const (
 	DHCPINFORM   uint8 = 8
 )
 
+type OptionTag uint8
+
+const (
+	TagPad                        OptionTag = 0
+	TagSubnetMask                 OptionTag = 1
+	TagTimeOffset                 OptionTag = 2
+	TagRouter                     OptionTag = 3
+	TagDomainServer               OptionTag = 6
+	TagHostname                   OptionTag = 12
+	TagDomainName                 OptionTag = 15
+	TagMTUInterface               OptionTag = 26
+	TagBroadcastAddress           OptionTag = 28
+	TagAddressTime                OptionTag = 51
+	TagDHCPMsgType                OptionTag = 53
+	TagDHCPServerID               OptionTag = 54
+	TagParameterList              OptionTag = 55
+	TagMessage                    OptionTag = 56
+	TagClientID                   OptionTag = 61
+	TagDomainSearch               OptionTag = 119
+	TagClasslessStaticRouteOption OptionTag = 121
+	TagEnd                        OptionTag = 255
+)
+
+func (tag OptionTag) String() string {
+	ot, ok := options[tag]
+	if ok {
+		return ot.Name
+	}
+	return fmt.Sprintf("%v", int(tag))
+}
+
 type Option struct {
-	Tag  uint8
+	Tag  OptionTag
 	Data []byte
+}
+
+func (opt Option) Len() int {
+	switch opt.Tag {
+	case TagPad, TagEnd:
+		return 1
+	default:
+		return 1 + 1 + len(opt.Data)
+	}
+}
+
+func (opt *Option) Append(data []byte) {
+	opt.Data = append(opt.Data, data...)
 }
 
 func (opt Option) Uint8() (uint8, error) {
@@ -35,7 +80,7 @@ func (opt Option) Uint8() (uint8, error) {
 }
 
 func (opt Option) String() string {
-	ot, ok := dhcpOptions[opt.Tag]
+	ot, ok := options[opt.Tag]
 	if !ok {
 		ot = OptType{
 			Type: 'x',
@@ -46,12 +91,41 @@ func (opt Option) String() string {
 		return ot.Name
 	}
 	switch ot.Type {
-	case 's':
-		return fmt.Sprintf("%v=%s", ot.Name, string(opt.Data))
+	case 'd':
+		var v uint64
+		for _, b := range opt.Data {
+			v <<= 8
+			v |= uint64(b)
+		}
+		return fmt.Sprintf("%v=%v", ot.Name, v)
+
+	case 'i':
+		return fmt.Sprintf("%v=%v", ot.Name, net.IP(opt.Data))
+
+	case 'I':
+		var addrs []net.IP
+		data := opt.Data
+		for len(data) > 0 {
+			l := len(opt.Data)
+			if l > 4 {
+				l = 4
+			}
+			addrs = append(addrs, net.IP(data[0:l]))
+			data = data[l:]
+		}
+		result := fmt.Sprintf("%v=", ot.Name)
+		for idx, ip := range addrs {
+			if idx > 0 {
+				result += ","
+			}
+			result += ip.String()
+		}
+		return result
+
 	case 'P':
 		var params []string
 		for _, p := range opt.Data {
-			pt, ok := dhcpOptions[p]
+			pt, ok := options[OptionTag(p)]
 			if ok {
 				params = append(params, pt.Name)
 			} else {
@@ -59,6 +133,10 @@ func (opt Option) String() string {
 			}
 		}
 		return fmt.Sprintf("%v=%v", ot.Name, strings.Join(params, ","))
+
+	case 's':
+		return fmt.Sprintf("%v=%s", ot.Name, string(opt.Data))
+
 	default:
 		return fmt.Sprintf("%v=%x", ot.Name, opt.Data)
 	}
@@ -69,28 +147,28 @@ type OptType struct {
 	Name string
 }
 
-var dhcpOptions = map[uint8]OptType{
+var options = map[OptionTag]OptType{
 	// RFC 2132 - DHCP Options and BOOTP Vendor Extensions
-	0:   {'0', "Pad"},
-	1:   {'i', "Subnet Mask"},
-	2:   {'d', "Time Offset"},
-	3:   {'I', "Router"},
-	6:   {'I', "Domain Server"},
-	12:  {'s', "Hostname"},
-	15:  {'s', "Domain Name"},
-	26:  {'d', "MTU Interface"},
-	28:  {'i', "Broadcast Address"},
-	51:  {'d', "Address Time"},
-	53:  {'x', "DHCP Msg Type"},
-	54:  {'i', "DHCP Server Id"},
-	55:  {'P', "Parameter List"},
-	56:  {'s', "Message"},
-	61:  {'x', "Client Id"},
-	255: {'0', "End"},
+	TagPad:              {'0', "Pad"},
+	TagSubnetMask:       {'i', "Subnet Mask"},
+	TagTimeOffset:       {'d', "Time Offset"},
+	TagRouter:           {'I', "Router"},
+	TagDomainServer:     {'I', "Domain Server"},
+	TagHostname:         {'s', "Hostname"},
+	TagDomainName:       {'s', "Domain Name"},
+	TagMTUInterface:     {'d', "MTU Interface"},
+	TagBroadcastAddress: {'i', "Broadcast Address"},
+	TagAddressTime:      {'d', "Address Time"},
+	TagDHCPMsgType:      {'x', "DHCP Msg Type"},
+	TagDHCPServerID:     {'i', "DHCP Server Id"},
+	TagParameterList:    {'P', "Parameter List"},
+	TagMessage:          {'s', "Message"},
+	TagClientID:         {'x', "Client Id"},
+	TagEnd:              {'0', "End"},
 
 	// RFC 3397 - DHCP Domain Search Option
-	119: {'x', "Domain Search"},
+	TagDomainSearch: {'x', "Domain Search"},
 
 	// RFC 3442 - Classless Static Route Option for DHCPv4
-	121: {'x', "Classless Static Route Option"},
+	TagClasslessStaticRouteOption: {'x', "Classless Static Route Option"},
 }

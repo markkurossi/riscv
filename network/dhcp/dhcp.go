@@ -4,19 +4,24 @@
 // All rights reserved.
 //
 
-package network
+// Package dhcp implements the Dynamic Host Configuration Protocol
+// (DHCP) defined by RFC 2131.
+package dhcp
 
 import (
 	"fmt"
 	"io"
 	"net"
 	"strings"
+
+	"github.com/markkurossi/riscv/network"
 )
 
 const (
-	BOOTREQUEST       uint8  = 1
-	BOOTREPLY         uint8  = 2
-	DHCPOptionsCookie uint32 = 0x63825363
+	BOOTREQUEST   uint8  = 1
+	BOOTREPLY     uint8  = 2
+	HdrLen               = 7*4 + 16 + 64 + 128 + 4
+	OptionsCookie uint32 = 0x63825363
 )
 
 type DHCP struct {
@@ -71,7 +76,51 @@ func (haddr HAddr) String() string {
 	return strings.Join(parts, ":")
 }
 
-func DecodeDHCP(data []byte) (*DHCP, error) {
+func (dhcp *DHCP) Encode() []byte {
+	l := HdrLen
+
+	// Count options length.
+	for _, opt := range dhcp.Options {
+		l += opt.Len()
+	}
+	l = (l + 3) / 4 * 4
+	fmt.Printf("len=%v\n", l)
+
+	buf := make([]byte, l)
+	buf[0] = dhcp.Op
+	buf[1] = dhcp.HType
+	buf[2] = dhcp.HLen
+	buf[3] = dhcp.Hops
+	network.BO.PutUint32(buf[4:], dhcp.XID)
+	network.BO.PutUint16(buf[8:], dhcp.Secs)
+	network.BO.PutUint16(buf[10:], dhcp.Flags)
+	copy(buf[12:], dhcp.CIAddr)
+	copy(buf[16:], dhcp.YIAddr)
+	copy(buf[20:], dhcp.SIAddr)
+	copy(buf[24:], dhcp.GIAddr)
+	copy(buf[28:], dhcp.CHAddr)
+	copy(buf[44:], []byte(dhcp.SName))
+	copy(buf[108:], []byte(dhcp.File))
+	network.BO.PutUint32(buf[236:], OptionsCookie)
+
+	// Encode options.
+	ofs := 240
+	for _, opt := range dhcp.Options {
+		buf[ofs] = byte(opt.Tag)
+		ofs++
+		switch opt.Tag {
+		case TagPad, TagEnd:
+		default:
+			buf[ofs] = byte(len(opt.Data))
+			ofs++
+			ofs += copy(buf[ofs:], opt.Data)
+		}
+	}
+
+	return buf
+}
+
+func Decode(data []byte) (*DHCP, error) {
 	d := &decoder{
 		data: data,
 	}
@@ -100,10 +149,10 @@ func DecodeDHCP(data []byte) (*DHCP, error) {
 	// Parse options.
 	for len(d.data) > 0 && d.err == nil {
 		option := Option{
-			Tag: d.Uint8(),
+			Tag: OptionTag(d.Uint8()),
 		}
 		switch option.Tag {
-		case 0, 0xff:
+		case TagPad, TagEnd:
 
 		default:
 			l := d.Uint8()
@@ -142,7 +191,7 @@ func (d *decoder) Uint16() uint16 {
 		d.err = io.EOF
 		return 0
 	}
-	v := BO.Uint16(d.data)
+	v := network.BO.Uint16(d.data)
 	d.data = d.data[2:]
 
 	return v
@@ -156,7 +205,7 @@ func (d *decoder) Uint32() uint32 {
 		d.err = io.EOF
 		return 0
 	}
-	v := BO.Uint32(d.data)
+	v := network.BO.Uint32(d.data)
 	d.data = d.data[4:]
 
 	return v
@@ -164,11 +213,11 @@ func (d *decoder) Uint32() uint32 {
 
 func (d *decoder) IP() net.IP {
 	if d.err != nil {
-		return ZeroIP
+		return network.ZeroIP
 	}
 	if len(d.data) < 4 {
 		d.err = io.EOF
-		return ZeroIP
+		return network.ZeroIP
 	}
 	v := net.IP(d.data[:4])
 	d.data = d.data[4:]

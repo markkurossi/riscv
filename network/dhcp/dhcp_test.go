@@ -4,13 +4,16 @@
 // All rights reserved.
 //
 
-package network
+package dhcp
 
 import (
 	"encoding/hex"
 	"fmt"
 	"net"
 	"testing"
+
+	"github.com/markkurossi/riscv/network"
+	"github.com/markkurossi/text/hexdump"
 )
 
 var dhcpPackets = []string{
@@ -39,33 +42,49 @@ var dhcpPackets = []string{
 }
 
 func TestDHCPDecode(t *testing.T) {
-	server := NewDHCPServer("markkurossi.com", net.IP([]byte{
+	server := NewServer("host.markkurossi.com", net.IP([]byte{
 		192, 168, 42, 254,
 	}))
-	server.AddClient(MAC([]byte{
+	server.DNS = append(server.DNS, net.IP([]byte{
+		8, 8, 8, 8,
+	}))
+	server.DNS = append(server.DNS, net.IP([]byte{
+		1, 1, 1, 1,
+	}))
+	server.AddClient(network.MAC([]byte{
 		0xfe, 0x53, 0xc5, 0x87, 0x31, 0x93}),
 		&ClientInfo{
-			IP: net.IP([]byte{192, 168, 42, 1}),
+			IP:       net.IP([]byte{192, 168, 42, 1}),
+			Hostname: "freebsd",
 		})
 
 	for idx, packet := range dhcpPackets {
-		data, err := Parse([]byte(packet))
+		data, err := hexdump.Parse([]byte(packet))
 		if err != nil {
 			t.Errorf("DHCP-%v: failed to parse packet: %v", idx, err)
 			continue
 		}
 		fmt.Printf("IP:\n%s", hex.Dump(data[:20]))
+		if !network.VerifyChecksum(data) {
+			t.Errorf("IP packet checksum verification failed")
+		}
+		fmt.Printf("computed checksum: %x\n", network.ComputeChecksum(data))
 		fmt.Printf("UDP:\n%s", hex.Dump(data[20:28]))
+		if !network.VerifyUDPChecksum(data) {
+			t.Errorf("UDP checksum verification failed")
+		}
+		fmt.Printf("computed UDP checksum: %x\n",
+			network.ComputeUDPChecksum(data))
 
-		req, err := DecodeDHCP(data[28:])
+		req, err := Decode(data[28:])
 		if err != nil {
 			t.Errorf("DecodeDHCP-%v: %v", idx, err)
 			continue
 		}
 		fmt.Printf("DHCP:%v:0: %v\n", idx, req)
-		if req.Cookie != DHCPOptionsCookie {
+		if req.Cookie != OptionsCookie {
 			t.Errorf("DHCP-%v: invalid cookie %x, expected %x",
-				idx, req.Cookie, DHCPOptionsCookie)
+				idx, req.Cookie, OptionsCookie)
 		}
 
 		resp, err := server.Offer(req)
@@ -73,6 +92,14 @@ func TestDHCPDecode(t *testing.T) {
 			t.Fatalf("DHCP-%v: failed to create DHCPOFFER: %v", idx, err)
 		}
 		fmt.Printf("DHCP:%v:1: %v\n", idx, resp)
+
+		enc := resp.Encode()
+		fmt.Printf("Response:\n%s", hex.Dump(enc))
+		dr, err := Decode(enc)
+		if err != nil {
+			t.Fatalf("DHCP-%v: failed to decode encoded response: %v", idx, err)
+		}
+		fmt.Printf("dhcp:%v:2: %v\n", idx, dr)
 	}
 
 }
