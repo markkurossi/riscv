@@ -198,7 +198,7 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		MMIO: MMIO{
 			Log: logger.Log{
 				Name:  "virtio-net",
-				Level: logger.Trace,
+				Level: logger.Info,
 			},
 			DeviceID: NetDeviceID,
 			Features: 1 << VIRTIO_NET_F_MAC,
@@ -243,12 +243,8 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	})
 
 	vio.Infof("tunnel: %v", tunnel.Name)
-	vio.Infof("guest : %v %v [%x]", vio.GuestMAC, guestIP, []byte(guestIP))
-	vio.Infof("host  : %v %v [%x]", vio.HostMAC, hostIP, []byte(hostIP))
-
-	buf := make([]byte, 256)
-	n := copy(buf, guestIP)
-	vio.Infof("copied %v bytes: %x", n, buf[:n])
+	vio.Infof("guest : %v %v", vio.GuestMAC, guestIP)
+	vio.Infof("host  : %v %v", vio.HostMAC, hostIP)
 
 	go vio.receiver(vio.queues[0])
 	go vio.tunReader()
@@ -575,11 +571,11 @@ func (vio *Net) respondIPv4(packet []byte) bool {
 			return true
 
 		default:
-			vio.Infof("skipping UDP port %v", dstPort)
+			vio.Debugf("skipping UDP port %v", dstPort)
 		}
 
 	default:
-		vio.Infof("skipping protocol %v", proto)
+		vio.Debugf("skipping protocol %v", proto)
 	}
 
 	return false
