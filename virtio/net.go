@@ -507,7 +507,6 @@ func (vio *Net) respondIPv4(packet []byte) bool {
 	hdrLen := int(ihl) * 4
 
 	proto := packet[9]
-	vio.Infof("respondIPv4: proto=%v, hdrLen=%v\n", proto, hdrLen)
 	switch proto {
 	case 17: // UDP
 		if len(packet) < hdrLen+8 {
