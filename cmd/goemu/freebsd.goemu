@@ -1,7 +1,6 @@
 {
   "bios":    "opensbi/fw_jump.bin",
   "kernel":  "u-boot-2026.04/u-boot.bin",
-  "_append":  "console=ttyS0,115200",
   "append":  "-v",
   "drives": [
     {
@@ -12,15 +11,11 @@
   ],
   "netdevs": [
     {
-      "id": "eth0",
-      "ip": "192.168.42.1",
-      "gw": "192.168.42.254"
-    }
-  ],
-  "_devices": [
-    {
-      "type":  "virtio-blk-device",
-      "drive": "hd0"
+      "id":         "eth0",
+      "ip":         "192.168.42.1",
+      "gw":         "192.168.42.254",
+      "hostname":   "freebsd",
+      "domainname": "goemu.markkurossi.com"
     }
   ],
   "devices": [

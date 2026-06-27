@@ -139,7 +139,7 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig,
 				return fmt.Errorf("unknown netdev: %v", dev.Netdev)
 			}
 			net, err := virtio.NewNet(core, virtioROM, plic, virtioIRQ, mem,
-				netdev.IP, netdev.GW)
+				netdev.IP, netdev.GW, netdev.Hostname, netdev.Domainname)
 			if err != nil {
 				return err
 			}

@@ -9,6 +9,7 @@ package dhcp
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"net"
 	"strings"
 
@@ -52,10 +53,13 @@ func (server *Server) AddClient(mac network.MAC, client *ClientInfo) {
 	server.Clients[mac] = client
 }
 
-// Offer creates a DHCPOFFER message for the DHCPDISCOVER message req.
-func (server *Server) Offer(req *DHCP) (*DHCP, error) {
+// Discover creates a DHCPOFFER message for the DHCPDISCOVER message req.
+func (server *Server) Discover(req *DHCP) (*DHCP, error) {
 	if req.Op != BOOTREQUEST {
 		return nil, fmt.Errorf("invalid DHCPDISCOVER op %v", req.Op)
+	}
+	if req.MsgType != DHCPDISCOVER {
+		return nil, fmt.Errorf("invalid DHCPDISCOVER msg type %v", req.MsgType)
 	}
 	clientMAC := network.MAC(req.CHAddr[0:6])
 	client, ok := server.Clients[clientMAC]
@@ -85,11 +89,10 @@ func (server *Server) Offer(req *DHCP) (*DHCP, error) {
 		Tag:  TagDHCPMsgType,
 		Data: []byte{DHCPOFFER},
 	})
-
 	// IP Address Lease Time.
 	resp.AddOption(Option{
 		Tag:  TagAddressTime,
-		Data: Uint32Data(0xffffffff),
+		Data: Uint32Data(86400),
 	})
 	// Server Identifier.
 	resp.AddOption(Option{
@@ -98,19 +101,9 @@ func (server *Server) Offer(req *DHCP) (*DHCP, error) {
 	})
 
 	// Process request options.
-
-	var reqMsgType uint8
-	var err error
-
 	for idx, opt := range req.Options {
 		switch opt.Tag {
 		case TagPad, TagEnd:
-
-		case TagDHCPMsgType:
-			reqMsgType, err = opt.Uint8()
-			if err != nil {
-				return nil, fmt.Errorf("invalid option %v: %w", opt, err)
-			}
 
 		case TagParameterList:
 			for pi, p := range opt.Data {
@@ -165,17 +158,17 @@ func (server *Server) Offer(req *DHCP) (*DHCP, error) {
 					}
 
 				default:
-					fmt.Printf("ignoring parameter %v: ", pi)
+					log.Printf("ignoring parameter %v: ", pi)
 					pt, ok := options[OptionTag(p)]
 					if ok {
-						fmt.Printf("%v\n", pt.Name)
+						log.Printf("%v\n", pt.Name)
 					} else {
-						fmt.Printf("%v\n", pt)
+						log.Printf("%v\n", pt)
 					}
 				}
 			}
 		default:
-			fmt.Printf("option %v: %v\n", idx, opt)
+			log.Printf("option %v: %v\n", idx, opt)
 		}
 	}
 
@@ -184,9 +177,132 @@ func (server *Server) Offer(req *DHCP) (*DHCP, error) {
 		Tag: TagEnd,
 	})
 
-	if reqMsgType != DHCPDISCOVER {
-		return nil, fmt.Errorf("invalid DHCPDISCOVER msg type %v", reqMsgType)
+	return resp, nil
+}
+
+// Request creates a DHCPACK message for the DHCPREQUEST message req.
+func (server *Server) Request(req *DHCP) (*DHCP, error) {
+	if req.Op != BOOTREQUEST {
+		return nil, fmt.Errorf("invalid DHCPREQUEST op %v", req.Op)
 	}
+	if req.MsgType != DHCPREQUEST {
+		return nil, fmt.Errorf("invalid DHCPREQUEST msg type %v", req.MsgType)
+	}
+	clientMAC := network.MAC(req.CHAddr[0:6])
+	client, ok := server.Clients[clientMAC]
+	if !ok {
+		return nil, fmt.Errorf("unknown client %v", clientMAC)
+	}
+
+	resp := &DHCP{
+		Op:     BOOTREPLY,
+		HType:  req.HType,
+		HLen:   6,
+		XID:    req.XID,
+		Flags:  req.Flags,
+		CIAddr: req.CIAddr,
+		YIAddr: client.IP,
+		SIAddr: server.GW,
+		GIAddr: req.GIAddr,
+		CHAddr: req.CHAddr,
+		SName:  server.Hostname,
+		Cookie: OptionsCookie,
+	}
+
+	// Add mandatory server options.
+
+	// DHCP Msg Type.
+	resp.AddOption(Option{
+		Tag:  TagDHCPMsgType,
+		Data: []byte{DHCPACK},
+	})
+	// IP Address Lease Time.
+	resp.AddOption(Option{
+		Tag:  TagAddressTime,
+		Data: Uint32Data(86400),
+	})
+	// Server Identifier.
+	resp.AddOption(Option{
+		Tag:  TagDHCPServerID,
+		Data: []byte(server.GW),
+	})
+
+	// Process request options.
+	for idx, opt := range req.Options {
+		switch opt.Tag {
+		case TagPad, TagEnd:
+
+		case TagParameterList:
+			for pi, p := range opt.Data {
+				switch OptionTag(p) {
+				case TagSubnetMask:
+					resp.AddOption(Option{
+						Tag:  TagSubnetMask,
+						Data: []byte(server.netmask()),
+					})
+
+				case TagBroadcastAddress:
+					resp.AddOption(Option{
+						Tag:  TagBroadcastAddress,
+						Data: []byte(server.broadcast()),
+					})
+
+				case TagRouter:
+					resp.AddOption(Option{
+						Tag:  TagRouter,
+						Data: []byte(server.GW),
+					})
+
+				case TagDomainServer:
+					if len(server.DNS) > 0 {
+						opt := Option{
+							Tag: TagDomainServer,
+						}
+						for _, dns := range server.DNS {
+							opt.Append(dns)
+						}
+						resp.AddOption(opt)
+					}
+
+				case TagHostname:
+					if len(client.Hostname) > 0 {
+						resp.AddOption(Option{
+							Tag:  TagHostname,
+							Data: []byte(client.Hostname),
+						})
+					}
+
+				case TagDomainName:
+					name := client.DomainName()
+					if len(name) == 0 {
+						name = server.domainName()
+					}
+					if len(name) > 0 {
+						resp.AddOption(Option{
+							Tag:  TagDomainName,
+							Data: []byte(name),
+						})
+					}
+
+				default:
+					log.Printf("ignoring parameter %v: ", pi)
+					pt, ok := options[OptionTag(p)]
+					if ok {
+						log.Printf("%v\n", pt.Name)
+					} else {
+						log.Printf("%v\n", pt)
+					}
+				}
+			}
+		default:
+			log.Printf("option %v: %v\n", idx, opt)
+		}
+	}
+
+	// End.
+	resp.AddOption(Option{
+		Tag: TagEnd,
+	})
 
 	return resp, nil
 }

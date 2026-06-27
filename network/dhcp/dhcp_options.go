@@ -35,6 +35,7 @@ const (
 	TagDomainName                 OptionTag = 15
 	TagMTUInterface               OptionTag = 26
 	TagBroadcastAddress           OptionTag = 28
+	TagAddressRequest             OptionTag = 50
 	TagAddressTime                OptionTag = 51
 	TagDHCPMsgType                OptionTag = 53
 	TagDHCPServerID               OptionTag = 54
@@ -158,6 +159,7 @@ var options = map[OptionTag]OptType{
 	TagDomainName:       {'s', "Domain Name"},
 	TagMTUInterface:     {'d', "MTU Interface"},
 	TagBroadcastAddress: {'i', "Broadcast Address"},
+	TagAddressRequest:   {'i', "Address Request"},
 	TagAddressTime:      {'d', "Address Time"},
 	TagDHCPMsgType:      {'x', "DHCP Msg Type"},
 	TagDHCPServerID:     {'i', "DHCP Server Id"},

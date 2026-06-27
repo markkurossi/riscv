@@ -9,8 +9,10 @@
 package dhcp
 
 import (
+	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"strings"
 
@@ -41,6 +43,10 @@ type DHCP struct {
 	File    NullString
 	Cookie  uint32
 	Options []Option
+
+	// MsgType is the TagDHCPMsgType value, extracted from the
+	// options.
+	MsgType uint8
 }
 
 func (dhcp *DHCP) AddOption(opt Option) {
@@ -84,7 +90,6 @@ func (dhcp *DHCP) Encode() []byte {
 		l += opt.Len()
 	}
 	l = (l + 3) / 4 * 4
-	fmt.Printf("len=%v\n", l)
 
 	buf := make([]byte, l)
 	buf[0] = dhcp.Op
@@ -103,9 +108,13 @@ func (dhcp *DHCP) Encode() []byte {
 	copy(buf[108:], []byte(dhcp.File))
 	network.BO.PutUint32(buf[236:], OptionsCookie)
 
+	log.Printf("dhcp.YIAddr: %v\n", dhcp.YIAddr)
+	log.Printf(" - buf[16:20]=%x\n", buf[16:20])
+
 	// Encode options.
 	ofs := 240
 	for _, opt := range dhcp.Options {
+		start := ofs
 		buf[ofs] = byte(opt.Tag)
 		ofs++
 		switch opt.Tag {
@@ -114,6 +123,10 @@ func (dhcp *DHCP) Encode() []byte {
 			buf[ofs] = byte(len(opt.Data))
 			ofs++
 			ofs += copy(buf[ofs:], opt.Data)
+			if opt.Tag == TagBroadcastAddress {
+				log.Printf("%v: len=%v:\n%s", opt.Tag, len(opt.Data),
+					hex.Dump(buf[start:ofs]))
+			}
 		}
 	}
 
@@ -157,6 +170,10 @@ func Decode(data []byte) (*DHCP, error) {
 		default:
 			l := d.Uint8()
 			option.Data = d.Data(int(l))
+
+			if option.Tag == TagDHCPMsgType && l == 1 {
+				dhcp.MsgType = option.Data[0]
+			}
 		}
 		dhcp.Options = append(dhcp.Options, option)
 	}

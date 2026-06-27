@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	ZeroIP     = net.IP([]byte{0, 0, 0, 0})
-	ClassCMask = net.IP([]byte{255, 255, 255, 0})
+	ZeroIP      = net.IP([]byte{0, 0, 0, 0})
+	BroadcastIP = net.IP([]byte{255, 255, 255, 255})
+	ClassCMask  = net.IP([]byte{255, 255, 255, 0})
 )
 
 func IsZeroIP(ip net.IP) bool {

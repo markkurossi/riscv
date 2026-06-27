@@ -20,6 +20,7 @@ import (
 	"github.com/markkurossi/riscv/logger"
 	"github.com/markkurossi/riscv/memory"
 	"github.com/markkurossi/riscv/network"
+	"github.com/markkurossi/riscv/network/dhcp"
 	"github.com/markkurossi/riscv/network/tun"
 )
 
@@ -152,7 +153,8 @@ type Net struct {
 	HostIP  net.IP
 	GuestIP net.IP
 
-	tun *tun.Tunnel
+	tun  *tun.Tunnel
+	dhcp *dhcp.Server
 
 	recvCh chan []byte
 
@@ -169,7 +171,7 @@ type Net struct {
 }
 
 func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
-	mem *memory.Memory, ip, gw string) (*Net, error) {
+	mem *memory.Memory, ip, gw, hostname, domainname string) (*Net, error) {
 
 	tunnel, err := tun.Create()
 	if err != nil {
@@ -183,16 +185,16 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		fmt.Printf("tunnel.Configure failed: %v\r\n", err)
 		return nil, err
 	}
-	hostIP := net.ParseIP(gw)
+	hostIP := net.ParseIP(gw).To4()
 	if hostIP == nil {
 		return nil, fmt.Errorf("invalid host IP address %v", gw)
 	}
-	guestIP := net.ParseIP(ip)
+	guestIP := net.ParseIP(ip).To4()
 	if guestIP == nil {
 		return nil, fmt.Errorf("invalid guest IP address %v", ip)
 	}
 
-	net := &Net{
+	vio := &Net{
 		MMIO: MMIO{
 			Log: logger.Log{
 				Name:  "virtio-net",
@@ -212,29 +214,46 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		tun:     tunnel,
 		recvCh:  make(chan []byte),
 	}
-	net.Init(2)
-	net.MMIO.Handler = net
+	vio.Init(2)
+	vio.MMIO.Handler = vio
 
-	_, err = rand.Read(net.HostMAC[:])
+	_, err = rand.Read(vio.HostMAC[:])
 	if err != nil {
 		return nil, err
 	}
-	net.HostMAC[0] = (net.HostMAC[0] & 0xfe) | 0x02
+	vio.HostMAC[0] = (vio.HostMAC[0] & 0xfe) | 0x02
 
-	_, err = rand.Read(net.GuestMAC[:])
+	_, err = rand.Read(vio.GuestMAC[:])
 	if err != nil {
 		return nil, err
 	}
-	net.GuestMAC[0] = (net.GuestMAC[0] & 0xfe) | 0x02
+	vio.GuestMAC[0] = (vio.GuestMAC[0] & 0xfe) | 0x02
 
-	net.Infof("tunnel: %v", tunnel.Name)
-	net.Infof("guest : %v %v", net.GuestMAC, ip)
-	net.Infof("host  : %v %v", net.HostMAC, gw)
+	vio.dhcp = dhcp.NewServer("", hostIP)
+	vio.dhcp.DomainName = domainname
+	vio.dhcp.DNS = append(vio.dhcp.DNS, net.IP([]byte{
+		8, 8, 8, 8,
+	}))
+	vio.dhcp.DNS = append(vio.dhcp.DNS, net.IP([]byte{
+		1, 1, 1, 1,
+	}))
+	vio.dhcp.AddClient(vio.GuestMAC, &dhcp.ClientInfo{
+		IP:       guestIP,
+		Hostname: hostname,
+	})
 
-	go net.receiver(net.queues[0])
-	go net.tunReader()
+	vio.Infof("tunnel: %v", tunnel.Name)
+	vio.Infof("guest : %v %v [%x]", vio.GuestMAC, guestIP, []byte(guestIP))
+	vio.Infof("host  : %v %v [%x]", vio.HostMAC, hostIP, []byte(hostIP))
 
-	return net, nil
+	buf := make([]byte, 256)
+	n := copy(buf, guestIP)
+	vio.Infof("copied %v bytes: %x", n, buf[:n])
+
+	go vio.receiver(vio.queues[0])
+	go vio.tunReader()
+
+	return vio, nil
 }
 
 func (vio *Net) receiver(vq *Queue) {
@@ -431,16 +450,19 @@ func (vio *Net) processSend(hdr *NetHdr, data []byte) error {
 	packet := data[14:]
 
 	switch frameType {
-	case 0x0800: // IPv4
+	case network.EthernetIPv4:
 		network.DebugIP(vio, packet)
 		vio.Tracef("IPv4:\n%s", hex.Dump(packet))
-		_, err := vio.tun.Write(packet)
-		if err != nil {
-			vio.Errorf("tun.Write: %v", err)
-		}
-		vio.stSent += uint64(len(packet))
 
-	case 0x0806: // ARP
+		if !vio.respondIPv4(packet) {
+			_, err := vio.tun.Write(packet)
+			if err != nil {
+				vio.Errorf("tun.Write: %v", err)
+			}
+			vio.stSent += uint64(len(packet))
+		}
+
+	case network.EthernetARP:
 		arp, err := network.ParseARP(packet)
 		if err != nil {
 			return err
@@ -460,7 +482,7 @@ func (vio *Net) processSend(hdr *NetHdr, data []byte) error {
 			vio.Debugf("ARP  %v is-at %v", arp.SPA, arp.SHA)
 		}
 
-	case 0x86dd: // IPv6
+	case network.EthernetIPv6:
 		network.DebugIP(vio, packet)
 		vio.Tracef("IPv6:\n%s", hex.Dump(packet))
 		_, err := vio.tun.Write(packet)
@@ -479,6 +501,88 @@ func (vio *Net) processSend(hdr *NetHdr, data []byte) error {
 		vio.stSent += uint64(len(packet))
 	}
 	return nil
+}
+
+func (vio *Net) respondIPv4(packet []byte) bool {
+	if len(packet) < 20 {
+		return false
+	}
+	ihl := packet[0] & 0b111
+	hdrLen := int(ihl) * 4
+
+	proto := packet[9]
+	vio.Infof("respondIPv4: proto=%v, hdrLen=%v\n", proto, hdrLen)
+	switch proto {
+	case 17: // UDP
+		if len(packet) < hdrLen+8 {
+			vio.Errorf("len(packet)=%v\n", len(packet))
+			return false
+		}
+		dstPort := network.BO.Uint16(packet[hdrLen+2:])
+		switch dstPort {
+		case 67:
+			// DHCP server.
+			req, err := dhcp.Decode(packet[hdrLen+8:])
+			if err != nil {
+				vio.Errorf("failed to decode DHCP message: %v", err)
+				return false
+			}
+			vio.Infof("DHCP request data:\n%s", hex.Dump(packet))
+			vio.Infof("DHCP request: %v", req)
+			var resp *dhcp.DHCP
+			switch req.MsgType {
+			case dhcp.DHCPDISCOVER:
+				resp, err = vio.dhcp.Discover(req)
+			case dhcp.DHCPREQUEST:
+				resp, err = vio.dhcp.Request(req)
+			default:
+				vio.Infof("skipping DHCP msg type %v", req.MsgType)
+				return false
+			}
+			if err != nil {
+				vio.Errorf("DHCP response: %v", err)
+				return false
+			}
+			vio.Infof("DHCP response: %v", resp)
+			rdata := resp.Encode()
+
+			data := make([]byte, 12+14+20+8+len(rdata))
+
+			network.MakeEthernet(data[12:],
+				vio.GuestMAC, vio.HostMAC, network.EthernetIPv4)
+
+			// IP.
+			ip := 12 + 14
+			data[ip+0] = 0x45
+			data[ip+1] = 0x10
+			network.BO.PutUint16(data[ip+2:], uint16(20+8+len(rdata)))
+			data[ip+8] = 0x80 // TTL
+			data[ip+9] = 0x11 // UDP
+			copy(data[ip+12:], vio.HostIP)
+			copy(data[ip+16:], network.BroadcastIP)
+			network.ComputeChecksum(data[ip:])
+
+			// UDP.
+			network.BO.PutUint16(data[ip+20:], 67)
+			network.BO.PutUint16(data[ip+22:], 68)
+			network.BO.PutUint16(data[ip+24:], uint16(8+len(rdata)))
+			copy(data[ip+28:], rdata)
+			network.ComputeUDPChecksum(data[ip:])
+
+			vio.Infof("DHCP response data:\n%s", hex.Dump(data[ip:]))
+
+			vio.recvCh <- data
+			return true
+
+		default:
+			vio.Infof("skipping UDP port %v", dstPort)
+		}
+
+	default:
+		vio.Infof("skipping protocol %v", proto)
+	}
+
+	return false
 }
 
 func (vio *Net) Load8(paddr uint64) (uint8, error) {

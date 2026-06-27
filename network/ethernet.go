@@ -6,6 +6,12 @@
 
 package network
 
+const (
+	EthernetIPv4 uint16 = 0x0800
+	EthernetARP  uint16 = 0x0806
+	EthernetIPv6 uint16 = 0x86dd
+)
+
 // MakeEthernet creates Ethernet packet with the argument data.
 func MakeEthernet(buf []byte, dst, src MAC, frameType uint16) {
 	copy(buf[0:16], dst[:])
