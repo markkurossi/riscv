@@ -9,10 +9,8 @@
 package dhcp
 
 import (
-	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"strings"
 
@@ -44,9 +42,16 @@ type DHCP struct {
 	Cookie  uint32
 	Options []Option
 
-	// MsgType is the TagDHCPMsgType value, extracted from the
-	// options.
-	MsgType uint8
+	// Values extracted from the options.
+
+	// MsgType is the TagDHCPMsgType value.
+	MsgType MsgType
+
+	// AddressRequest is the TagAddressRequest value.
+	AddressRequest net.IP
+
+	// Hostname is the TagHostname value.
+	Hostname string
 }
 
 func (dhcp *DHCP) AddOption(opt Option) {
@@ -108,13 +113,9 @@ func (dhcp *DHCP) Encode() []byte {
 	copy(buf[108:], []byte(dhcp.File))
 	network.BO.PutUint32(buf[236:], OptionsCookie)
 
-	log.Printf("dhcp.YIAddr: %v\n", dhcp.YIAddr)
-	log.Printf(" - buf[16:20]=%x\n", buf[16:20])
-
 	// Encode options.
 	ofs := 240
 	for _, opt := range dhcp.Options {
-		start := ofs
 		buf[ofs] = byte(opt.Tag)
 		ofs++
 		switch opt.Tag {
@@ -123,10 +124,6 @@ func (dhcp *DHCP) Encode() []byte {
 			buf[ofs] = byte(len(opt.Data))
 			ofs++
 			ofs += copy(buf[ofs:], opt.Data)
-			if opt.Tag == TagBroadcastAddress {
-				log.Printf("%v: len=%v:\n%s", opt.Tag, len(opt.Data),
-					hex.Dump(buf[start:ofs]))
-			}
 		}
 	}
 
@@ -164,15 +161,21 @@ func Decode(data []byte) (*DHCP, error) {
 		option := Option{
 			Tag: OptionTag(d.Uint8()),
 		}
-		switch option.Tag {
-		case TagPad, TagEnd:
-
-		default:
+		if option.Tag != TagPad && option.Tag != TagEnd {
 			l := d.Uint8()
 			option.Data = d.Data(int(l))
 
-			if option.Tag == TagDHCPMsgType && l == 1 {
-				dhcp.MsgType = option.Data[0]
+			switch option.Tag {
+			case TagDHCPMsgType:
+				if l == 1 {
+					dhcp.MsgType = MsgType(option.Data[0])
+				}
+
+			case TagAddressRequest:
+				dhcp.AddressRequest = net.IP(option.Data)
+
+			case TagHostname:
+				dhcp.Hostname = string(option.Data)
 			}
 		}
 		dhcp.Options = append(dhcp.Options, option)

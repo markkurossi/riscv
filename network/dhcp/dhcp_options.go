@@ -12,16 +12,37 @@ import (
 	"strings"
 )
 
+type MsgType uint8
+
 const (
-	DHCPDISCOVER uint8 = 1
-	DHCPOFFER    uint8 = 2
-	DHCPREQUEST  uint8 = 3
-	DHCPDECLINE  uint8 = 4
-	DHCPACK      uint8 = 5
-	DHCPNAK      uint8 = 6
-	DHCPRELEASE  uint8 = 7
-	DHCPINFORM   uint8 = 8
+	DHCPDISCOVER MsgType = iota + 1
+	DHCPOFFER
+	DHCPREQUEST
+	DHCPDECLINE
+	DHCPACK
+	DHCPNAK
+	DHCPRELEASE
+	DHCPINFORM
 )
+
+var msgTypes = map[MsgType]string{
+	DHCPDISCOVER: "DHCPDISCOVER",
+	DHCPOFFER:    "DHCPOFFER",
+	DHCPREQUEST:  "DHCPREQUEST",
+	DHCPDECLINE:  "DHCPDECLINE",
+	DHCPACK:      "DHCPACK",
+	DHCPNAK:      "DHCPNAK",
+	DHCPRELEASE:  "DHCPRELEASE",
+	DHCPINFORM:   "DHCPINFORM",
+}
+
+func (t MsgType) String() string {
+	name, ok := msgTypes[t]
+	if ok {
+		return name
+	}
+	return fmt.Sprintf("{MsgType %d}", int(t))
+}
 
 type OptionTag uint8
 
@@ -35,15 +56,19 @@ const (
 	TagDomainName                 OptionTag = 15
 	TagMTUInterface               OptionTag = 26
 	TagBroadcastAddress           OptionTag = 28
+	TagStaticRoute                OptionTag = 33
 	TagAddressRequest             OptionTag = 50
 	TagAddressTime                OptionTag = 51
 	TagDHCPMsgType                OptionTag = 53
 	TagDHCPServerID               OptionTag = 54
 	TagParameterList              OptionTag = 55
 	TagMessage                    OptionTag = 56
+	TagDHCPMaxMsgSize             OptionTag = 57
 	TagClientID                   OptionTag = 61
+	TagAutoConfig                 OptionTag = 116
 	TagDomainSearch               OptionTag = 119
 	TagClasslessStaticRouteOption OptionTag = 121
+	TagForcerenewNonceCapable     OptionTag = 145
 	TagEnd                        OptionTag = 255
 )
 
@@ -159,18 +184,26 @@ var options = map[OptionTag]OptType{
 	TagDomainName:       {'s', "Domain Name"},
 	TagMTUInterface:     {'d', "MTU Interface"},
 	TagBroadcastAddress: {'i', "Broadcast Address"},
+	TagStaticRoute:      {'I', "Static Route"},
 	TagAddressRequest:   {'i', "Address Request"},
 	TagAddressTime:      {'d', "Address Time"},
 	TagDHCPMsgType:      {'x', "DHCP Msg Type"},
 	TagDHCPServerID:     {'i', "DHCP Server Id"},
 	TagParameterList:    {'P', "Parameter List"},
 	TagMessage:          {'s', "Message"},
+	TagDHCPMaxMsgSize:   {'d', "DHCP Max Msg Size"},
 	TagClientID:         {'x', "Client Id"},
 	TagEnd:              {'0', "End"},
+
+	// RFC 2563 - DHCP Auto-Configuration Option
+	TagAutoConfig: {'d', "Auto-Config"},
 
 	// RFC 3397 - DHCP Domain Search Option
 	TagDomainSearch: {'x', "Domain Search"},
 
 	// RFC 3442 - Classless Static Route Option for DHCPv4
 	TagClasslessStaticRouteOption: {'x', "Classless Static Route Option"},
+
+	// RFC 6704 - Forcerenew Nonce
+	TagForcerenewNonceCapable: {'d', "FORCERENEW_NONCE_CAPABLE"},
 }
