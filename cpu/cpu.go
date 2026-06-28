@@ -77,6 +77,10 @@ type CPU struct {
 	TrapHandler TrapHandler
 	Symtab      Symtab
 
+	CSR7c2Filename string
+	csr7c2File     *os.File
+	csr7c2Refcount int
+
 	lastDescOp  isa.Op
 	DebugTrace  bool
 	DebugTrace2 bool

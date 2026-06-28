@@ -7,22 +7,38 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include <time.h>
 #include <spawn.h>
 #include <sys/wait.h>
 #include <sys/resource.h>
 
 #ifdef __riscv
-#define riscv_read_csr(csr) ({                               \
-    unsigned long __v;                                       \
-    __asm__ __volatile__ ("csrr %0, " #csr : "=r" (__v));    \
-    __v;                                                     \
+/*
+ * Read a RISC-V CSR into an unsigned long variable.
+ * Usage: unsigned long val = riscv_read_csr(0x7c2);
+ */
+#define riscv_read_csr(csr) ({                                  \
+    unsigned long __v;                                          \
+    __asm__ __volatile__ ("csrr %0, " #csr : "=r" (__v));       \
+    __v;                                                        \
 })
+
+/*
+ * Write an unsigned long value to a RISC-V CSR.
+ * Usage: riscv_write_csr(0x7c2, v);
+ */
+#define riscv_write_csr(csr, val)                               \
+do {                                                            \
+  unsigned long __v = (unsigned long)(val);                     \
+  __asm__ __volatile__ ("csrw " #csr ", %0" : : "r" (__v));     \
+ } while (0)
 
 #define time_ns() riscv_read_csr(0x7c1)
 
 #else  /* not __riscv */
 #define riscv_read_csr(csr) 0
+#define riscv_write_csr(csr, val)
 
 unsigned long
 time_ns()
@@ -46,14 +62,17 @@ main(int argc, char *argv[])
   unsigned long instret, cycle;
   unsigned long start, end;
   double elapsed;
+  int i;
+  bool cpu_profile = false;
 
-  if (argc == 1)
+  for (i = 1; i < argc; i++)
     {
-      fprintf(stderr, "Usage: time program [args...]\n");
-      fprintf(stderr, "       time info\n");
-      return 1;
+      if (strcmp(argv[i], "-cpu") == 0)
+        cpu_profile = true;
+      else
+        break;
     }
-  if (argc == 2 && strcmp(argv[1], "info") == 0)
+  if (i < argc && strcmp(argv[i], "info") == 0)
     {
       cycle = riscv_read_csr(cycle);
       instret = riscv_read_csr(instret);
@@ -62,11 +81,20 @@ main(int argc, char *argv[])
       printf(" - instret: %ld\n", instret);
       return 0;
     }
+  if (i >= argc)
+    {
+      fprintf(stderr, "Usage: time program [args...]\n");
+      fprintf(stderr, "       time info\n");
+      return 1;
+    }
+
+  if (cpu_profile)
+    riscv_write_csr(0x7c2, 1);
 
   start = time_ns();
   cycle = riscv_read_csr(cycle);
   instret = riscv_read_csr(instret);
-  status = posix_spawnp(&pid, argv[1], NULL, NULL, argv+1, environ);
+  status = posix_spawnp(&pid, argv[i], NULL, NULL, argv+i, environ);
   if (status == 0)
     {
       waitpid(pid, &status, 0);
@@ -79,6 +107,9 @@ main(int argc, char *argv[])
   cycle = riscv_read_csr(cycle) - cycle;
   instret = riscv_read_csr(instret) - instret;
   end = time_ns();
+
+  if (cpu_profile)
+    riscv_write_csr(0x7c2, 0);
 
   elapsed = ((double) end - (double) start) * 1e-9;
 

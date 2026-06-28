@@ -58,6 +58,7 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig,
 
 	core := cpu.New(mem)
 	core.Trace = params.CPUtrace
+	core.CSR7c2Filename = params.CSR7c2
 
 	plic := &dev.PLIC{
 		Hart:  core,

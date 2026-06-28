@@ -74,6 +74,7 @@ func main() {
 	symbols := flag.String("symbols", "", "kernel System.map")
 	logger := flag.String("log", "", "logger unix domain socket")
 	cooked := flag.Bool("cooked", false, "don't enable raw terminal mode")
+	csr7c2 := flag.String("csr7c2", ",csr7c2", "CSR7c2 CPU profiling filename")
 
 	flag.Var(&argDrives, "drive", "configure drive")
 	flag.Var(&argDevices, "device", "configure device")
@@ -95,6 +96,7 @@ func main() {
 		Verbose:  *verbose,
 		Ktrace:   *ktrace,
 		CPUtrace: *cputrace,
+		CSR7c2:   *csr7c2,
 		Profile:  len(*cpuprofile) > 0,
 		Color:    *color,
 		Cooked:   *cooked,

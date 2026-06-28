@@ -12,6 +12,8 @@ import (
 	"crypto/rand"
 	"fmt"
 	"log"
+	"os"
+	"runtime/pprof"
 	"time"
 
 	"github.com/markkurossi/riscv/isa"
@@ -93,8 +95,9 @@ const (
 	CsrMhartid       = 0xf14
 	CsrScountinhibit = 0xfb0
 
-	CsrGoemuDebug = 0x7c0
-	CsrGoemuTime  = 0x7c1
+	CsrGoemuDebug      = 0x7c0
+	CsrGoemuTime       = 0x7c1
+	CsrGoemuCPUProfile = 0x7c2
 )
 
 var csrs = map[int]string{
@@ -665,6 +668,31 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 	case CsrGoemuDebug:
 		cpu.DebugTrace = v&0b1 != 0
 		cpu.CSR[csr] = v
+
+	case CsrGoemuCPUProfile:
+		if v == 0 {
+			cpu.csr7c2Refcount--
+			if cpu.csr7c2Refcount <= 0 {
+				log.Printf("stopping CSR7c2 profiling")
+				pprof.StopCPUProfile()
+				cpu.csr7c2File.Sync()
+			}
+		} else {
+			if cpu.csr7c2Refcount == 0 {
+				var err error
+				if cpu.csr7c2File == nil {
+					cpu.csr7c2File, err = os.Create(cpu.CSR7c2Filename)
+					if err != nil {
+						return err
+					}
+				}
+				err = pprof.StartCPUProfile(cpu.csr7c2File)
+				if err != nil {
+					return err
+				}
+			}
+			cpu.csr7c2Refcount++
+		}
 
 	default:
 		cpu.CSR[csr] = v

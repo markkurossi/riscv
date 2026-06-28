@@ -14,6 +14,7 @@ type Params struct {
 	Verbose  bool
 	Ktrace   bool
 	CPUtrace bool
+	CSR7c2   string
 	Profile  bool
 	Color    bool
 	Cooked   bool
