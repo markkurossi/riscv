@@ -522,29 +522,49 @@ func (vio *Net) respondIPv4(packet []byte) bool {
 				vio.Errorf("failed to decode DHCP message: %v", err)
 				return false
 			}
-			vio.Infof("DHCP request data:\n%s", hex.Dump(packet))
-			vio.Infof("DHCP request: %v", req)
-			var resp *dhcp.DHCP
-			switch req.MsgType {
-			case dhcp.DHCPDISCOVER:
-				resp, err = vio.dhcp.Discover(req)
-			case dhcp.DHCPREQUEST:
-				resp, err = vio.dhcp.Request(req)
-			default:
-				vio.Infof("skipping DHCP msg type %v", req.MsgType)
-				return false
-			}
+			vio.Tracef("DHCP request data:\n%s", hex.Dump(packet))
+			vio.Debugf("DHCP request: %v", req)
+
+			resp, err := vio.dhcp.Request(req)
 			if err != nil {
 				vio.Errorf("DHCP response: %v", err)
 				return false
 			}
-			vio.Infof("DHCP response: %v", resp)
+			if resp == nil {
+				vio.Infof("ignoring DHCP request %v", req.MsgType)
+				return true
+			}
+			var dstMAC network.MAC
+			switch req.MsgType {
+			case dhcp.DHCPDISCOVER:
+				vio.Infof("%v from %v (%v) via %v",
+					req.MsgType, req.CHAddr[:req.HLen], req.Hostname,
+					vio.tun.Name)
+				vio.Infof("%v on %v to %v (%v) via %v",
+					resp.MsgType, resp.YIAddr, resp.CHAddr[:resp.HLen],
+					req.Hostname, vio.tun.Name)
+				dstMAC = network.MAC([]byte{
+					0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+				})
+
+			case dhcp.DHCPREQUEST:
+				vio.Infof("%v for %v (%v) from %v (%v) via %v",
+					req.MsgType, req.AddressRequest, vio.HostIP,
+					req.CHAddr[:req.HLen], req.Hostname,
+					vio.tun.Name)
+				vio.Infof("%v on %v to %v (%v) via %v",
+					resp.MsgType, resp.YIAddr, resp.CHAddr[:resp.HLen],
+					req.Hostname, vio.tun.Name)
+				dstMAC = vio.GuestMAC
+			}
+
+			vio.Debugf("DHCP response: %v", resp)
 			rdata := resp.Encode()
 
 			data := make([]byte, 12+14+20+8+len(rdata))
 
 			network.MakeEthernet(data[12:],
-				vio.GuestMAC, vio.HostMAC, network.EthernetIPv4)
+				dstMAC, vio.HostMAC, network.EthernetIPv4)
 
 			// IP.
 			ip := 12 + 14
@@ -564,7 +584,7 @@ func (vio *Net) respondIPv4(packet []byte) bool {
 			copy(data[ip+28:], rdata)
 			network.ComputeUDPChecksum(data[ip:])
 
-			vio.Infof("DHCP response data:\n%s", hex.Dump(data[ip:]))
+			vio.Tracef("DHCP response data:\n%s", hex.Dump(data[ip:]))
 
 			vio.recvCh <- data
 			return true
