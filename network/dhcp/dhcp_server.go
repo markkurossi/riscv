@@ -112,7 +112,7 @@ func (server *Server) Request(req *DHCP) (*DHCP, error) {
 	})
 
 	// Process request options.
-	for idx, opt := range req.Options {
+	for _, opt := range req.Options {
 		switch opt.Tag {
 		case TagPad, TagEnd:
 
@@ -169,16 +169,12 @@ func (server *Server) Request(req *DHCP) (*DHCP, error) {
 					}
 
 				default:
-					pt, ok := options[OptionTag(p)]
-					if ok {
-						log.Printf("ignoring parameter %v: %v", pi, pt.Name)
-					} else {
-						log.Printf("ignoring parameter %v: %v", pi, p)
+					_, ok := options[OptionTag(p)]
+					if !ok {
+						log.Printf("ignoring unknown parameter %v: %v", pi, p)
 					}
 				}
 			}
-		default:
-			log.Printf("option %v: %v\n", idx, opt)
 		}
 	}
 

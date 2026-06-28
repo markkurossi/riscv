@@ -65,6 +65,7 @@ const (
 	TagMessage                    OptionTag = 56
 	TagDHCPMaxMsgSize             OptionTag = 57
 	TagClientID                   OptionTag = 61
+	TagRapidCommit                OptionTag = 80
 	TagAutoConfig                 OptionTag = 116
 	TagDomainSearch               OptionTag = 119
 	TagClasslessStaticRouteOption OptionTag = 121
@@ -203,6 +204,9 @@ var options = map[OptionTag]OptType{
 
 	// RFC 3442 - Classless Static Route Option for DHCPv4
 	TagClasslessStaticRouteOption: {'x', "Classless Static Route Option"},
+
+	// RFC 4039 - Rapid Commit Option for DHCPv4
+	TagRapidCommit: {'x', "Rapid Commit"},
 
 	// RFC 6704 - Forcerenew Nonce
 	TagForcerenewNonceCapable: {'d', "FORCERENEW_NONCE_CAPABLE"},
