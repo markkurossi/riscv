@@ -6,11 +6,6 @@
 
 package network
 
-import (
-	"encoding/hex"
-	"log"
-)
-
 func Checksum(packet []byte) uint16 {
 	if len(packet) < 20 {
 		return 0
@@ -21,7 +16,6 @@ func Checksum(packet []byte) uint16 {
 	}
 	sum += sum >> 16
 	checksum := uint16(^sum)
-	log.Printf("checksum: %x\n", checksum)
 
 	return checksum
 }
@@ -63,7 +57,6 @@ func UDPChecksum(packet []byte) uint16 {
 	}
 	var hdr [12]byte
 	hdrLen, payloadLen := makePseudoHeader(&hdr, packet)
-	log.Printf("UDP pseudo-header:\n%s", hex.Dump(hdr[:]))
 
 	var sum uint32
 
@@ -87,7 +80,6 @@ func UDPChecksum(packet []byte) uint16 {
 	}
 	sum += sum >> 16
 	checksum := uint16(^sum)
-	log.Printf("UDP checksum: %x\n", checksum)
 
 	return checksum
 }
