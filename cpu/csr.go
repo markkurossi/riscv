@@ -673,7 +673,6 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 		if v == 0 {
 			cpu.csr7c2Refcount--
 			if cpu.csr7c2Refcount <= 0 {
-				log.Printf("stopping CSR7c2 profiling")
 				pprof.StopCPUProfile()
 				cpu.csr7c2File.Sync()
 			}

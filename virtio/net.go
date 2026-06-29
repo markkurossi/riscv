@@ -161,9 +161,7 @@ type Net struct {
 	tunReadCh  chan int
 	tunReadBuf []byte
 
-	receiveIdx uint16
-	receiveBuf []byte
-	received   uint32
+	receivedPacket []byte
 
 	// Statistics.
 	stSent uint64
@@ -259,16 +257,10 @@ func (vio *Net) receiver(vq *Queue) {
 		vio.Debugf("received packet of %v bytes", len(packet))
 
 		vio.M.Lock()
-		for vio.receiveBuf == nil {
+		for vio.receivedPacket != nil {
 			vio.C.Wait()
 		}
-		n := copy(vio.receiveBuf, packet)
-
-		if n > 12+14 {
-			// Count only IP bytes.
-			vio.stRcvd += uint64(n - 12 - 14)
-		}
-		vio.received = uint32(n)
+		vio.receivedPacket = packet
 
 		vio.ProcessQueue(vq.Index)
 		vio.M.Unlock()
@@ -392,42 +384,52 @@ func (vio *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 }
 
 func (vio *Net) processReceiveQueue(vq *Queue, idx uint16) (uint32, error) {
-	desc, err := vq.loadDesc(idx)
-	if err != nil {
-		return 0, err
+	if vio.receivedPacket == nil {
+		// No input packet yet.
+		return 0, nil
 	}
-	vio.Debugf("desc: %v", desc)
 
-	if desc.Flags&VIRTQ_DESC_F_WRITE == 0 {
-		return 0, fmt.Errorf("invalid receiveq%v flags: %x",
-			vq.Index, desc.Flags)
-	}
-	// XXX VIRTQ_DESC_F_NEXT
-	if vio.received > 0 {
-		// We have received data to new.receiveBuf.
-		if vio.receiveIdx != idx {
-			return 0, fmt.Errorf("receive queue out-of-sync: %v vs %v",
-				vio.receiveIdx, idx)
+	// Store data into descriptor chain.
+	var received uint32
+	for len(vio.receivedPacket) > 0 {
+		desc, err := vq.loadDesc(idx)
+		if err != nil {
+			return 0, err
 		}
-		received := vio.received
-		vio.receiveIdx = 0
-		vio.receiveBuf = nil
-		vio.received = 0
-		return received, nil
-	}
+		vio.Debugf("desc: %v", desc)
 
-	// Save next buffer.
-	buf, err := vio.guestData(desc.Addr, uint64(desc.Len))
-	if err != nil {
-		return 0, err
+		if desc.Flags&VIRTQ_DESC_F_WRITE == 0 {
+			return 0, fmt.Errorf("invalid receiveq%v flags: %x",
+				vq.Index, desc.Flags)
+		}
+
+		// Get next buffer.
+		buf, err := vio.guestData(desc.Addr, uint64(desc.Len))
+		if err != nil {
+			return 0, err
+		}
+		n := copy(buf, vio.receivedPacket)
+		received += uint32(n)
+		vio.receivedPacket = vio.receivedPacket[n:]
+
+		// Check next chunk
+		for desc.Flags&VIRTQ_DESC_F_NEXT == 0 {
+			break
+		}
+		idx = desc.Next
 	}
-	vio.receiveIdx = idx
-	vio.receiveBuf = buf
-	vio.received = 0
+	vio.Debugf("vq%v: transferred %v bytes, %v tail bytes ignored",
+		vq.Index, received, len(vio.receivedPacket))
+	vio.receivedPacket = nil
+
+	if received > 12+14 {
+		// Count only IP bytes.
+		vio.stRcvd += uint64(received - 12 - 14)
+	}
 
 	vio.C.Broadcast()
 
-	return 0, nil
+	return received, nil
 }
 
 func (vio *Net) processSend(hdr *NetHdr, data []byte) error {

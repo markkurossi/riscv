@@ -11,10 +11,23 @@
       "file":   "netbsd/riscv64.img"
     }
   ],
+  "netdevs": [
+    {
+      "id":         "eth0",
+      "ip":         "192.168.42.3",
+      "gw":         "192.168.42.254",
+      "hostname":   "netbsd",
+      "domainname": "goemu.markkurossi.com"
+    }
+  ],
   "devices": [
     {
       "type":  "virtio-blk-device",
       "drive": "hd0"
+    },
+    {
+      "type":   "virtio-net-device",
+      "netdev": "eth0"
     }
   ]
 }
