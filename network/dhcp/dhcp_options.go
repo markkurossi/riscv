@@ -67,8 +67,10 @@ const (
 	TagDHCPMaxMsgSize             OptionTag = 57
 	TagClientID                   OptionTag = 61
 	TagRapidCommit                OptionTag = 80
+	TagDHCPCaptivePortal          OptionTag = 114
 	TagAutoConfig                 OptionTag = 116
 	TagDomainSearch               OptionTag = 119
+	TagSIPServersDHCPOption       OptionTag = 120
 	TagClasslessStaticRouteOption OptionTag = 121
 	TagForcerenewNonceCapable     OptionTag = 145
 	TagEnd                        OptionTag = 255
@@ -201,6 +203,9 @@ var options = map[OptionTag]OptType{
 	// RFC 2563 - DHCP Auto-Configuration Option
 	TagAutoConfig: {'d', "Auto-Config"},
 
+	// RFC 3361 - DHCPv4 Option for SIP Servers
+	TagSIPServersDHCPOption: {'x', "SIP Servers DHCP Option"},
+
 	// RFC 3397 - DHCP Domain Search Option
 	TagDomainSearch: {'x', "Domain Search"},
 
@@ -212,4 +217,8 @@ var options = map[OptionTag]OptType{
 
 	// RFC 6704 - Forcerenew Nonce
 	TagForcerenewNonceCapable: {'d', "FORCERENEW_NONCE_CAPABLE"},
+
+	// RFC RFC8910 - Captive-Portal Identification in DHCP and Router
+	// Advertisements (RAs)
+	TagDHCPCaptivePortal: {'x', "DHCP Captive-Portal"},
 }
