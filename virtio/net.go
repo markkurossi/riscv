@@ -268,19 +268,20 @@ func (vio *Net) receiver(vq *Queue) {
 }
 
 func (vio *Net) tunReader() {
+	ip := make([]byte, 1600)
 	for {
-		ip, err := vio.tun.Read()
+		n, err := vio.tun.Read(ip)
 		if err != nil {
 			vio.Errorf("tun.Read: %v", err)
 			continue
 		}
 		// XXX Check what packet this is.
 
-		network.DebugIP(vio, ip)
+		network.DebugIP(vio, ip[:n])
 
-		buf := make([]byte, 12+14+len(ip))
+		buf := make([]byte, 12+14+n)
 		network.MakeEthernet(buf[12:], vio.GuestMAC, vio.HostMAC, 0x0800)
-		copy(buf[12+14:], ip)
+		copy(buf[12+14:], ip[:n])
 		vio.recvCh <- buf
 	}
 }

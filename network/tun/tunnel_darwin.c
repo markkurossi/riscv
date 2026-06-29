@@ -1,7 +1,7 @@
 /*
  * tunnel_darwin.c
  *
- * Copyright (c) 2019-2024 Markku Rossi
+ * Copyright (c) 2019-2026 Markku Rossi
  *
  * All rights reserved.
  */
@@ -108,83 +108,4 @@ tun_create(char **name_return, int *errno_return)
   *errno_return = errno;
 
   return -1;
-}
-
-ssize_t
-tun_read(int fd, void *data, size_t size, int *errno_return)
-{
-  ssize_t  ret;
-  uint32_t family;
-
-  *errno_return = 0;
-
-  struct iovec iov[2] =
-    {
-     {
-      .iov_base = &family,
-      .iov_len  = sizeof(family),
-     },
-     {
-      .iov_base = data,
-      .iov_len  = size,
-     },
-    };
-
-    ret = readv(fd, iov, 2);
-    if (ret <= (ssize_t) 0)
-      {
-        *errno_return = errno;
-        return -1;
-      }
-    if (ret <= (ssize_t) sizeof(family))
-      return 0;
-
-    return ret - sizeof(family);
-}
-
-ssize_t
-tun_write(int fd, const void *data, size_t size, int *errno_return)
-{
-    uint32_t family;
-    ssize_t  ret;
-
-    *errno_return = 0;
-
-    if (size < 20)
-      return 0;
-
-    switch (*(const uint8_t *) data >> 4)
-      {
-      case 4:
-        family = htonl(AF_INET);
-        break;
-      case 6:
-        family = htonl(AF_INET6);
-        break;
-      default:
-        *errno_return = EINVAL;
-        return -1;
-      }
-    struct iovec iov[2] =
-      {
-       {
-        .iov_base = &family,
-        .iov_len  = sizeof(family),
-       },
-       {
-        .iov_base = (void *) data,
-        .iov_len  = size,
-       },
-      };
-
-    ret = writev(fd, iov, 2);
-    if (ret <= (ssize_t) 0)
-      {
-        *errno_return = errno;
-        return ret;
-      }
-    if (ret <= (ssize_t) sizeof(family))
-      return 0;
-
-    return ret - sizeof(family);
 }

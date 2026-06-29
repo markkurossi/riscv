@@ -1,7 +1,7 @@
 /*
  * tunnel_linux.c
  *
- * Copyright (c) 2019-2024 Markku Rossi
+ * Copyright (c) 2019-2026 Markku Rossi
  *
  * All rights reserved.
  */
@@ -79,51 +79,4 @@ int tun_create(char **name_return, int *errno_return)
     *name_return = if_name;
 
     return fd;
-}
-
-ssize_t
-tun_read(int fd, void *data, size_t size, int *errno_return)
-{
-    ssize_t readnb;
-
-    while ((readnb = read(fd, data, size)) < (ssize_t) 0 && errno == EINTR)
-      ;
-    *errno_return = errno;
-    return readnb;
-}
-
-ssize_t
-tun_write(int fd, const void *data, size_t size, int *errno_return)
-{
-    struct pollfd pfd;
-    ssize_t written;
-    ssize_t result = 0;
-
-    *errno_return = 0;
-
-    while (size > (size_t) 0)
-      {
-        while ((written = write(fd, data, size)) < (ssize_t) 0)
-	  {
-            if (errno == EAGAIN)
-	      {
-		pfd.fd = fd;
-		pfd.events = POLLOUT;
-		if (poll(&pfd, (nfds_t) 1, TIMEOUT) <= 0)
-		  {
-		    *errno_return = ETIMEDOUT;
-		    return (ssize_t) -1;
-		  }
-	      }
-	    else if (errno != EINTR)
-	      {
-		*errno_return = errno;
-                return (ssize_t) -1;
-	      }
-	  }
-        data += written;
-        size -= written;
-	result += written;
-    }
-    return result;
 }
