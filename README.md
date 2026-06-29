@@ -49,22 +49,27 @@ operating systems, and the RISC-V privileged architecture.
 ![NetBSD](docs/netbsd.png)
 ![FreeBSD](docs/freebsd.png)
 
-### System emulation and supervisor mode
+## TODO
+
+### Release 1.0
 
 - [ ] VirtIO
   - [x] virtio-blk
   - [x] virtio-rng
-  - [ ] virtio-net
-    - [x] Network with tun devices.
-    - [x] DHCP server
-    - [ ] HTTP proxy
-    - [ ] NTP server
-    - [ ] fix NetBSD receive path
+  - [x] virtio-net
+    - [x] fix NetBSD receive path
   - [ ] virtio-gpu
   - [ ] virtio-console
 - [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
+
+### System emulation and supervisor mode
+
+- [ ] VirtIO
+  - [ ] virtio-net
+    - [ ] HTTP proxy
+    - [ ] NTP server
+    - [ ] Async send path
 - [ ] SMP support
-- [ ] ACLINT timer/IPI support
 - [ ] Parse Linux kernel PE32+ header: load address, symbols
 - [ ] JIT experiments
 
