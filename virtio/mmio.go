@@ -199,10 +199,22 @@ func (vio *MMIO) Load32(paddr uint64) (uint32, error) {
 	case 0x060: // InterruptStatus
 		return vio.interruptStatus, nil
 
-	case 0x070:
+	case 0x070: // Status
 		vio.Debugf("Load32(%v) => %v[0x%x]\n", mmioReg(offset),
 			statusString(vio.status), vio.status)
 		return vio.status, nil
+
+	case 0x0b0: // SHMLenLow
+		return 0xffffffff, nil
+
+	case 0x0b4: // SHMLenHigh
+		return 0xffffffff, nil
+
+	case 0x0b8: // SHMBaseLow
+		return 0, nil
+
+	case 0x0bc: // SHMBaseHigh
+		return 0, nil
 	}
 	return 0, nil
 }
@@ -525,6 +537,10 @@ var mmioRegs = map[uint64]string{
 	0x094: "QueueDriverHigh",
 	0x0a0: "QueueDeviceLow",
 	0x0a4: "QueueDeviceHigh",
+	0x0b0: "SHMLenLow",
+	0x0b4: "SHMLenHigh",
+	0x0b8: "SHMBaseLow",
+	0x0bc: "SHMBaseHigh",
 	0x0fc: "ConfigGeneration",
 }
 

@@ -101,6 +101,8 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig,
 	virtioIRQ++
 	virtioDevices = append(virtioDevices, rng.Device())
 
+	var gpu *virtio.GPU
+
 	// Devices from the configuration.
 	for idx, dev := range cfg.Devices {
 		var vio *virtio.MMIO
@@ -146,6 +148,20 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig,
 			}
 			mmio.Segments = append(mmio.Segments, net)
 			vio = net.Device()
+
+		case "virtio-gpu-device":
+			gpudev := cfg.GPUDev(dev.GPU)
+			if gpudev == nil {
+				return fmt.Errorf("unknown GPU: %v", dev.GPU)
+			}
+			var err error
+			gpu, err = virtio.NewGPU(core, virtioROM, plic, virtioIRQ, mem,
+				gpudev.Width, gpudev.Height)
+			if err != nil {
+				return err
+			}
+			mmio.Segments = append(mmio.Segments, gpu)
+			vio = gpu.Device()
 
 		default:
 			return fmt.Errorf("invalid device type: %v", dev.Type)
@@ -213,9 +229,14 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig,
 
 	go uart.Run()
 
-	err = core.Run()
-	if err != nil {
-		return err
+	if gpu != nil {
+		go core.Run()
+		gpu.EventLoop()
+	} else {
+		err = core.Run()
+		if err != nil {
+			return err
+		}
 	}
 	fmt.Printf("CPU: instret: %v, runtime: %v, MIPS: %.2f\n",
 		core.Instret, core.Runtime,

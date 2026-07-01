@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -22,6 +23,7 @@ type SystemConfig struct {
 	Initrd  string    `json:"initrd,omitempty"`
 	Drives  []*Drive  `json:"drives,omitempty"`
 	Netdevs []*Netdev `json:"netdevs,omitempty"`
+	GPUs    []*GPU    `json:"gpus,omitempty"`
 	Devices []*Device `json:"devices,omitempty"`
 }
 
@@ -41,10 +43,17 @@ type Netdev struct {
 	Domainname string `json:"domainname,omitempty"`
 }
 
+type GPU struct {
+	ID     string `json:"id"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+}
+
 type Device struct {
 	Type   string `json:"type"`
 	Drive  string `json:"drive"`
 	Netdev string `json:"netdev"`
+	GPU    string `json:"gpu"`
 	ID     string `json:"id,omitempty"`
 	Serial string `json:"serial,omitempty"`
 }
@@ -87,6 +96,36 @@ func ParseDrive(args string) (*Drive, error) {
 	}
 
 	return drive, nil
+}
+
+func ParseGPU(args string) (*GPU, error) {
+	gpu := new(GPU)
+	var err error
+
+	for _, arg := range strings.Split(args, ",") {
+		parts := strings.Split(arg, "=")
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid gpu argument: %v", arg)
+		}
+		switch parts[0] {
+		case "id":
+			gpu.ID = parts[1]
+		case "width":
+			gpu.Width, err = strconv.Atoi(parts[1])
+			if err != nil {
+				return nil, fmt.Errorf("invalid width %v: %v", parts[1], err)
+			}
+		case "height":
+			gpu.Height, err = strconv.Atoi(parts[1])
+			if err != nil {
+				return nil, fmt.Errorf("invalid height %v: %v", parts[1], err)
+			}
+		default:
+			return nil, fmt.Errorf("invalid argument: %v", arg)
+		}
+	}
+
+	return gpu, nil
 }
 
 func ParseDevice(args string) (*Device, error) {
@@ -187,6 +226,15 @@ func (cfg *SystemConfig) Netdev(id string) *Netdev {
 	for _, netdev := range cfg.Netdevs {
 		if netdev.ID == id {
 			return netdev
+		}
+	}
+	return nil
+}
+
+func (cfg *SystemConfig) GPUDev(id string) *GPU {
+	for _, gpu := range cfg.GPUs {
+		if gpu.ID == id {
+			return gpu
 		}
 	}
 	return nil

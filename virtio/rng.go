@@ -60,7 +60,7 @@ func (rng *Rng) Reset() error {
 
 // DeviceStats implements Handler.DeviceStats
 func (rng *Rng) DeviceStats() {
-	fmt.Printf("%v: read  : %v\n", rng.Name, FileSize(rng.stRead))
+	fmt.Printf("%v: read   : %v\n", rng.Name, FileSize(rng.stRead))
 }
 
 // ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.

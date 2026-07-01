@@ -75,6 +75,7 @@ func main() {
 	logger := flag.String("log", "", "logger unix domain socket")
 	cooked := flag.Bool("cooked", false, "don't enable raw terminal mode")
 	csr7c2 := flag.String("csr7c2", ",csr7c2", "CSR7c2 CPU profiling filename")
+	gpu := flag.String("gpu", "", "graphics device")
 
 	flag.Var(&argDrives, "drive", "configure drive")
 	flag.Var(&argDevices, "device", "configure device")
@@ -147,6 +148,18 @@ func main() {
 	systemConfig = systemConfig.Merge(argCfg)
 	systemConfig.Drives = append(systemConfig.Drives, argDrives...)
 	systemConfig.Devices = append(systemConfig.Devices, argDevices...)
+
+	if len(*gpu) > 0 {
+		gpu, err := ParseGPU(*gpu)
+		if err != nil {
+			log.Fatal(err)
+		}
+		systemConfig.GPUs = append(systemConfig.GPUs, gpu)
+		systemConfig.Devices = append(systemConfig.Devices, &Device{
+			Type: "virtio-gpu-device",
+			GPU:  gpu.ID,
+		})
+	}
 
 	// If any critical system emulation parameters are set, start
 	// system emulation.

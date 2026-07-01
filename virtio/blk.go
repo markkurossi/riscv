@@ -73,8 +73,8 @@ func (blk *Blk) Reset() error {
 
 // DeviceStats implements Handler.DeviceStats
 func (blk *Blk) DeviceStats() {
-	fmt.Printf("%v: read  : %v\n", blk.Name, FileSize(blk.stRead))
-	fmt.Printf("%v: wrote : %v\n", blk.Name, FileSize(blk.stWrote))
+	fmt.Printf("%v: read   : %v\n", blk.Name, FileSize(blk.stRead))
+	fmt.Printf("%v: wrote  : %v\n", blk.Name, FileSize(blk.stWrote))
 }
 
 // ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
