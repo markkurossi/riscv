@@ -62,6 +62,15 @@ operating systems, and the RISC-V privileged architecture.
   - [ ] virtio-console
 - [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
 
+#### X11
+
+``` shell
+$ sudo startx xterm -- -fp "built-ins"
+```
+
+39b11940ca:  e00787d3   Instr: Op=invalid      # decode failed: OP-FP: funct7=1110000, raw=e00787d3
+
+
 ### System emulation and supervisor mode
 
 - [ ] VirtIO

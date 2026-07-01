@@ -8,13 +8,14 @@ package virtio
 
 //lint:file-ignore ST1003 to match the C coding style for constants.
 
+// XXX virtio-gpu: ERROR: execute descriptor chain: VIRTIO_GPU_CMD_UPDATE_CURSOR: not implemented yet
+
 import (
 	"encoding/hex"
 	"fmt"
 	"image"
 	"image/draw"
 	_ "image/png"
-	"log"
 	"os"
 	"runtime"
 	"sync"
@@ -67,15 +68,26 @@ type GPU struct {
 	Width  int
 	Height int
 
-	m          sync.Mutex
-	window     *glfw.Window
-	pixels     *image.RGBA
-	frameDirty bool
-	source     *GPUResource
+	renderM     sync.Mutex
+	pending     bool
+	pendingDone bool
+	window      *glfw.Window
+	pixels      *image.RGBA
+	frameDirty  bool
+	source      *GPUResource
 
-	resources     map[uint32]*GPUResource
-	controlEvents int
-	cursorEvents  int
+	transferC chan transferReq
+
+	resources map[uint32]*GPUResource
+	logo      image.Image
+	events    [2]int
+}
+
+type transferReq struct {
+	index    uint32
+	rect     GPURect
+	offset   uint64
+	resource *GPUResource
 }
 
 type GPUResource struct {
@@ -106,6 +118,11 @@ const (
 func NewGPU(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	mem *memory.Memory, width, height int) (*GPU, error) {
 
+	logo, err := loadImage("../../docs/goemu-small.png")
+	if err != nil {
+		return nil, err
+	}
+
 	vio := &GPU{
 		MMIO: MMIO{
 			Log: logger.Log{
@@ -126,12 +143,15 @@ func NewGPU(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		pixels: image.NewRGBA(image.Rectangle{
 			Max: image.Point{width, height},
 		}),
+		transferC: make(chan transferReq, 1),
 		resources: make(map[uint32]*GPUResource),
+		logo:      logo,
 	}
 	vio.Init(2)
 	vio.MMIO.Handler = vio
 
 	vio.Infof("screen: %v\u00d7%v", vio.Width, vio.Height)
+	go vio.converter()
 
 	return vio, nil
 }
@@ -139,8 +159,7 @@ func NewGPU(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 func (vio *GPU) EventLoop() {
 	vio.Debugf("eventLoop starting")
 
-	img := loadImage("../../docs/goemu-small.png")
-	vio.drawImage(img)
+	vio.drawImage(vio.logo)
 	vio.frameDirty = true
 
 	err := glfw.Init()
@@ -185,7 +204,7 @@ func (vio *GPU) EventLoop() {
 	for !vio.window.ShouldClose() {
 		if vio.frameDirty {
 			vio.frameDirty = false
-			vio.m.Lock()
+			vio.renderM.Lock()
 			gl.ClearColor(1, 1, 1, 1)
 			gl.Clear(gl.COLOR_BUFFER_BIT)
 
@@ -219,30 +238,30 @@ func (vio *GPU) EventLoop() {
 			gl.Vertex2f(-1, 1)
 
 			gl.End()
-			vio.m.Unlock()
+			vio.renderM.Unlock()
 
 			vio.window.SwapBuffers()
 		}
-		glfw.PollEvents()
+		glfw.WaitEvents()
 	}
 
 	vio.Debugf("eventLoop terminating")
 	glfw.Terminate()
 }
 
-func loadImage(filename string) image.Image {
+func loadImage(filename string) (image.Image, error) {
 	f, err := os.Open(filename)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	defer f.Close()
 
 	img, _, err := image.Decode(f)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
-	return img
+	return img, nil
 }
 
 func (vio *GPU) drawImage(img image.Image) {
@@ -259,21 +278,34 @@ func (vio *GPU) drawImage(img image.Image) {
 	draw.Draw(vio.pixels, dstRect, img, b.Min, draw.Over)
 }
 
+// Halt implements mmu.MMIO.Halt.
+func (vio *GPU) Halt() error {
+	return vio.Reset()
+}
+
 // Reset implements Handler.Reset.
 func (vio *GPU) Reset() error {
-	// glfw.Terminate()
+	vio.drawImage(vio.logo)
+	vio.frameDirty = true
+	glfw.PostEmptyEvent()
+
 	return nil
 }
 
 // DeviceStats implements Handler.DeviceStats
 func (vio *GPU) DeviceStats() {
-	fmt.Printf("%v: control: %v\n", vio.Name, vio.controlEvents)
-	fmt.Printf("%v: cursor : %v\n", vio.Name, vio.cursorEvents)
+	fmt.Printf("%v: control: %v\n", vio.Name, vio.events[0])
+	fmt.Printf("%v: cursor : %v\n", vio.Name, vio.events[1])
 }
 
 // ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
 func (vio *GPU) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	vio.Debugf("vq%v: chain: idx=%v", vq.Index, idx)
+
+	if vq.Index == 0 && vio.pending {
+		return 0, nil
+	}
+	vio.events[vq.Index]++
 
 	desc, err := vq.loadDesc(idx)
 	if err != nil {
@@ -323,7 +355,8 @@ func (vio *GPU) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	case VIRTIO_GPU_CMD_SET_SCANOUT:
 		transferred, err = vio.cmdSetScanout(hdr, chunk, bufs, writable)
 	case VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D:
-		transferred, err = vio.cmdTransferToHost2D(hdr, chunk, bufs, writable)
+		transferred, err = vio.cmdTransferToHost2D(vq, hdr, chunk, bufs,
+			writable)
 	case VIRTIO_GPU_CMD_RESOURCE_FLUSH:
 		transferred, err = vio.cmdResourceFlush(hdr, chunk, bufs, writable)
 	case VIRTIO_GPU_CMD_RESOURCE_UNREF:
@@ -558,7 +591,7 @@ func (vio *GPU) cmdResourceCreate2D(hdr *GPUCtrlHdr, hdrBuf []byte,
 	buf := bufs[0]
 	vioBO.PutUint32(buf[0:], VIRTIO_GPU_RESP_OK_NODATA)
 
-	return uint32(len(hdrBuf)) + 24, nil
+	return 24, nil
 }
 
 func (vio *GPU) cmdResourceAttachBacking(hdr *GPUCtrlHdr, hdrBuf []byte,
@@ -598,7 +631,7 @@ func (vio *GPU) cmdResourceAttachBacking(hdr *GPUCtrlHdr, hdrBuf []byte,
 	}
 	vioBO.PutUint32(bufs[1][0:], VIRTIO_GPU_RESP_OK_NODATA)
 
-	return uint32(len(hdrBuf) + len(bufs[0]) + len(bufs[1])), nil
+	return 24, nil
 }
 
 func (vio *GPU) cmdSetScanout(hdr *GPUCtrlHdr, hdrBuf []byte,
@@ -634,10 +667,10 @@ func (vio *GPU) cmdSetScanout(hdr *GPUCtrlHdr, hdrBuf []byte,
 
 	vioBO.PutUint32(bufs[0][0:], VIRTIO_GPU_RESP_OK_NODATA)
 
-	return uint32(len(hdrBuf) + len(bufs[0])), nil
+	return 24, nil
 }
 
-func (vio *GPU) cmdTransferToHost2D(hdr *GPUCtrlHdr, hdrBuf []byte,
+func (vio *GPU) cmdTransferToHost2D(vq *Queue, hdr *GPUCtrlHdr, hdrBuf []byte,
 	bufs [][]byte, writable []bool) (uint32, error) {
 	if len(bufs) != 1 || !writable[0] {
 		return 0, fmt.Errorf("%v: invalid output buffers", hdr.Type)
@@ -645,6 +678,13 @@ func (vio *GPU) cmdTransferToHost2D(hdr *GPUCtrlHdr, hdrBuf []byte,
 	if len(hdrBuf) < 56 {
 		return 0, fmt.Errorf("%v: truncated request", hdr.Type)
 	}
+	if vio.pendingDone {
+		vio.pendingDone = false
+		vio.Debugf("completing pending cmdTransferToHost2D")
+		vioBO.PutUint32(bufs[0][0:], VIRTIO_GPU_RESP_OK_NODATA)
+		return 24, nil
+	}
+
 	rect := GPURect{
 		X:      vioBO.Uint32(hdrBuf[24:]),
 		Y:      vioBO.Uint32(hdrBuf[28:]),
@@ -661,38 +701,59 @@ func (vio *GPU) cmdTransferToHost2D(hdr *GPUCtrlHdr, hdrBuf []byte,
 		vio.Errorf("unknown resource %v", resourceID)
 		return 0, fmt.Errorf("unknown resource %v", resourceID)
 	}
-	vio.m.Lock()
-	defer vio.m.Unlock()
-
-	var pageIndex, pageStart uint64
-
-	stride := resource.Width * 4
-	for localY := uint32(0); localY < rect.Height; localY++ {
-		currentY := rect.Y + localY
-
-		srcOfs := offset + uint64(currentY*stride+rect.X*4)
-		dstOfs := uint64(currentY*stride + rect.X*4)
-		count := uint64(rect.Width * 4)
-
-		for i := uint64(0); i < count; i += 4 {
-			page := resource.Pages[pageIndex]
-
-			for pageStart+uint64(len(page)) <= srcOfs {
-				pageStart += uint64(len(page))
-				pageIndex++
-			}
-			pageOfs := srcOfs - pageStart
-
-			vio.pixels.Pix[dstOfs+i+0] = page[pageOfs+i+2]
-			vio.pixels.Pix[dstOfs+i+1] = page[pageOfs+i+1]
-			vio.pixels.Pix[dstOfs+i+2] = page[pageOfs+i+0]
-			vio.pixels.Pix[dstOfs+i+3] = 0xff
-		}
+	vio.Debugf("queuing transferReq...")
+	vio.transferC <- transferReq{
+		index:    vq.Index,
+		rect:     rect,
+		offset:   offset,
+		resource: resource,
 	}
+	vio.pending = true
+	vio.Debugf("queuing transferReq done")
+	return 0, nil
+}
 
-	vioBO.PutUint32(bufs[0][0:], VIRTIO_GPU_RESP_OK_NODATA)
+func (vio *GPU) converter() {
+	for {
+		req := <-vio.transferC
+		vio.Debugf("converter: rect: %v", req.rect)
+		vio.renderM.Lock()
 
-	return uint32(len(hdrBuf) + len(bufs[0])), nil
+		var pageIndex, pageStart uint64
+
+		stride := req.resource.Width * 4
+		for localY := uint32(0); localY < req.rect.Height; localY++ {
+			currentY := req.rect.Y + localY
+
+			srcOfs := req.offset + uint64(currentY*stride+req.rect.X*4)
+			dstOfs := uint64(currentY*stride + req.rect.X*4)
+			count := uint64(req.rect.Width * 4)
+
+			for i := uint64(0); i < count; i += 4 {
+				page := req.resource.Pages[pageIndex]
+
+				for pageStart+uint64(len(page)) <= srcOfs {
+					pageStart += uint64(len(page))
+					pageIndex++
+				}
+				pageOfs := srcOfs - pageStart
+
+				vio.pixels.Pix[dstOfs+i+0] = page[pageOfs+i+2]
+				vio.pixels.Pix[dstOfs+i+1] = page[pageOfs+i+1]
+				vio.pixels.Pix[dstOfs+i+2] = page[pageOfs+i+0]
+				vio.pixels.Pix[dstOfs+i+3] = 0xff
+			}
+		}
+		vio.renderM.Unlock()
+
+		vio.M.Lock()
+		vio.pending = false
+		vio.pendingDone = true
+		vio.Debugf("converter: ProcessQueue(%v)...", req.index)
+		vio.ProcessQueue(req.index)
+		vio.Debugf("converter: ProcessQueue(%v) done", req.index)
+		vio.M.Unlock()
+	}
 }
 
 func (vio *GPU) cmdResourceFlush(hdr *GPUCtrlHdr, hdrBuf []byte,
@@ -725,7 +786,7 @@ func (vio *GPU) cmdResourceFlush(hdr *GPUCtrlHdr, hdrBuf []byte,
 
 	vioBO.PutUint32(bufs[0][0:], VIRTIO_GPU_RESP_OK_NODATA)
 
-	return uint32(len(hdrBuf) + len(bufs[0])), nil
+	return 24, nil
 }
 
 func (vio *GPU) cmdResourceUnref(hdr *GPUCtrlHdr, hdrBuf []byte,
@@ -746,5 +807,5 @@ func (vio *GPU) cmdResourceUnref(hdr *GPUCtrlHdr, hdrBuf []byte,
 
 	vioBO.PutUint32(bufs[0][0:], VIRTIO_GPU_RESP_OK_NODATA)
 
-	return uint32(len(hdrBuf) + len(bufs[0])), nil
+	return 24, nil
 }
