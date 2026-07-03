@@ -70,6 +70,8 @@ $ sudo startx xterm -- -fp "built-ins"
 
 39b11940ca:  e00787d3   Instr: Op=invalid      # decode failed: OP-FP: funct7=1110000, raw=e00787d3
 
+30278724be:  20e716d3   Instr: Op=fsgnjn.s     # not implemented
+
 
 ### System emulation and supervisor mode
 

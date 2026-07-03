@@ -68,6 +68,8 @@ type GPU struct {
 	Width  int
 	Height int
 
+	KeyListener KeyListener
+
 	renderM     sync.Mutex
 	pending     bool
 	pendingDone bool
@@ -174,6 +176,10 @@ func (vio *GPU) EventLoop() {
 		vio.Errorf("glfw.CreateWindow: %v", err)
 		return
 	}
+	vio.window.SetCursorPosCallback(vio.cursorPosCallback)
+	vio.window.SetMouseButtonCallback(vio.mouseButtonCallback)
+	vio.window.SetKeyCallback(vio.keyCallback)
+
 	vio.window.MakeContextCurrent()
 	err = gl.Init()
 	if err != nil {
@@ -294,8 +300,8 @@ func (vio *GPU) Reset() error {
 
 // DeviceStats implements Handler.DeviceStats
 func (vio *GPU) DeviceStats() {
-	fmt.Printf("%v: control: %v\n", vio.Name, vio.events[0])
-	fmt.Printf("%v: cursor : %v\n", vio.Name, vio.events[1])
+	fmt.Printf("%v: control  : %v\n", vio.Name, vio.events[0])
+	fmt.Printf("%v: cursor   : %v\n", vio.Name, vio.events[1])
 }
 
 // ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
@@ -808,4 +814,160 @@ func (vio *GPU) cmdResourceUnref(hdr *GPUCtrlHdr, hdrBuf []byte,
 	vioBO.PutUint32(bufs[0][0:], VIRTIO_GPU_RESP_OK_NODATA)
 
 	return 24, nil
+}
+
+func (vio *GPU) cursorPosCallback(w *glfw.Window, x, y float64) {
+	vio.Tracef("cursor: x=%v, y=%v", int(x), int(y))
+}
+
+func (vio *GPU) mouseButtonCallback(w *glfw.Window, button glfw.MouseButton,
+	action glfw.Action, mod glfw.ModifierKey) {
+	vio.Tracef("button: button=%v, action=%v, mod=%v", button, action, mod)
+}
+
+func (vio *GPU) keyCallback(w *glfw.Window, key glfw.Key, scancode int,
+	action glfw.Action, mod glfw.ModifierKey) {
+	vio.Tracef("key: key=%v, scancode=%v, action=%v, mod=%v",
+		key, scancode, action, mod)
+
+	k, ok := inputKeyMap[key]
+	if !ok {
+		vio.Tracef("skipping: key=%v, scancode=%v, action=%v, mod=%v",
+			key, scancode, action, mod)
+		return
+	}
+	if vio.KeyListener != nil {
+		switch action {
+		case glfw.Release:
+			vio.KeyListener.OnKeyRelease(k)
+		case glfw.Press:
+			vio.KeyListener.OnKeyPress(k)
+		case glfw.Repeat:
+			vio.KeyListener.OnKeyRepeat(k)
+		}
+	}
+}
+
+var inputKeyMap = map[glfw.Key]Key{
+	glfw.KeyUnknown:      KEY_UNKNOWN,
+	glfw.KeySpace:        KEY_SPACE,
+	glfw.KeyApostrophe:   KEY_APOSTROPHE,
+	glfw.KeyComma:        KEY_COMMA,
+	glfw.KeyMinus:        KEY_MINUS,
+	glfw.KeyPeriod:       KEY_DOT,
+	glfw.KeySlash:        KEY_SLASH,
+	glfw.Key0:            KEY_0,
+	glfw.Key1:            KEY_1,
+	glfw.Key2:            KEY_2,
+	glfw.Key3:            KEY_3,
+	glfw.Key4:            KEY_4,
+	glfw.Key5:            KEY_5,
+	glfw.Key6:            KEY_6,
+	glfw.Key7:            KEY_7,
+	glfw.Key8:            KEY_8,
+	glfw.Key9:            KEY_9,
+	glfw.KeySemicolon:    KEY_SEMICOLON,
+	glfw.KeyEqual:        KEY_EQUAL,
+	glfw.KeyA:            KEY_A,
+	glfw.KeyB:            KEY_B,
+	glfw.KeyC:            KEY_C,
+	glfw.KeyD:            KEY_D,
+	glfw.KeyE:            KEY_E,
+	glfw.KeyF:            KEY_F,
+	glfw.KeyG:            KEY_G,
+	glfw.KeyH:            KEY_H,
+	glfw.KeyI:            KEY_I,
+	glfw.KeyJ:            KEY_J,
+	glfw.KeyK:            KEY_K,
+	glfw.KeyL:            KEY_L,
+	glfw.KeyM:            KEY_M,
+	glfw.KeyN:            KEY_N,
+	glfw.KeyO:            KEY_O,
+	glfw.KeyP:            KEY_P,
+	glfw.KeyQ:            KEY_Q,
+	glfw.KeyR:            KEY_R,
+	glfw.KeyS:            KEY_S,
+	glfw.KeyT:            KEY_T,
+	glfw.KeyU:            KEY_U,
+	glfw.KeyV:            KEY_V,
+	glfw.KeyW:            KEY_W,
+	glfw.KeyX:            KEY_X,
+	glfw.KeyY:            KEY_Y,
+	glfw.KeyZ:            KEY_Z,
+	glfw.KeyLeftBracket:  KEY_LEFTBRACE,
+	glfw.KeyBackslash:    KEY_BACKSLASH,
+	glfw.KeyRightBracket: KEY_RIGHTBRACE,
+	glfw.KeyGraveAccent:  KEY_GRAVE,
+	glfw.KeyWorld1:       KEY_UNKNOWN,
+	glfw.KeyWorld2:       KEY_UNKNOWN,
+	glfw.KeyEscape:       KEY_ESC,
+	glfw.KeyEnter:        KEY_ENTER,
+	glfw.KeyTab:          KEY_TAB,
+	glfw.KeyBackspace:    KEY_BACKSPACE,
+	glfw.KeyInsert:       KEY_INSERT,
+	glfw.KeyDelete:       KEY_DELETE,
+	glfw.KeyRight:        KEY_RIGHT,
+	glfw.KeyLeft:         KEY_LEFT,
+	glfw.KeyDown:         KEY_DOWN,
+	glfw.KeyUp:           KEY_UP,
+	glfw.KeyPageUp:       KEY_PAGEUP,
+	glfw.KeyPageDown:     KEY_PAGEDOWN,
+	glfw.KeyHome:         KEY_HOME,
+	glfw.KeyEnd:          KEY_END,
+	glfw.KeyCapsLock:     KEY_CAPSLOCK,
+	glfw.KeyScrollLock:   KEY_SCROLLLOCK,
+	glfw.KeyNumLock:      KEY_NUMLOCK,
+	glfw.KeyPrintScreen:  KEY_PRINT,
+	glfw.KeyPause:        KEY_PAUSE,
+	glfw.KeyF1:           KEY_F1,
+	glfw.KeyF2:           KEY_F2,
+	glfw.KeyF3:           KEY_F3,
+	glfw.KeyF4:           KEY_F4,
+	glfw.KeyF5:           KEY_F5,
+	glfw.KeyF6:           KEY_F6,
+	glfw.KeyF7:           KEY_F7,
+	glfw.KeyF8:           KEY_F8,
+	glfw.KeyF9:           KEY_F9,
+	glfw.KeyF10:          KEY_F10,
+	glfw.KeyF11:          KEY_F11,
+	glfw.KeyF12:          KEY_F12,
+	glfw.KeyF13:          KEY_F13,
+	glfw.KeyF14:          KEY_F14,
+	glfw.KeyF15:          KEY_F15,
+	glfw.KeyF16:          KEY_F16,
+	glfw.KeyF17:          KEY_F17,
+	glfw.KeyF18:          KEY_F18,
+	glfw.KeyF19:          KEY_F19,
+	glfw.KeyF20:          KEY_F20,
+	glfw.KeyF21:          KEY_F21,
+	glfw.KeyF22:          KEY_F22,
+	glfw.KeyF23:          KEY_F23,
+	glfw.KeyF24:          KEY_F24,
+	glfw.KeyF25:          KEY_UNKNOWN,
+	glfw.KeyKP0:          KEY_KP0,
+	glfw.KeyKP1:          KEY_KP1,
+	glfw.KeyKP2:          KEY_KP2,
+	glfw.KeyKP3:          KEY_KP3,
+	glfw.KeyKP4:          KEY_KP4,
+	glfw.KeyKP5:          KEY_KP5,
+	glfw.KeyKP6:          KEY_KP6,
+	glfw.KeyKP7:          KEY_KP7,
+	glfw.KeyKP8:          KEY_KP8,
+	glfw.KeyKP9:          KEY_KP9,
+	glfw.KeyKPDecimal:    KEY_KPDOT,
+	glfw.KeyKPDivide:     KEY_KPSLASH,
+	glfw.KeyKPMultiply:   KEY_KPASTERISK,
+	glfw.KeyKPSubtract:   KEY_KPMINUS,
+	glfw.KeyKPAdd:        KEY_KPPLUS,
+	glfw.KeyKPEnter:      KEY_KPENTER,
+	glfw.KeyKPEqual:      KEY_KPEQUAL,
+	glfw.KeyLeftShift:    KEY_LEFTSHIFT,
+	glfw.KeyLeftControl:  KEY_LEFTCTRL,
+	glfw.KeyLeftAlt:      KEY_LEFTALT,
+	glfw.KeyLeftSuper:    KEY_LEFTMETA,
+	glfw.KeyRightShift:   KEY_RIGHTSHIFT,
+	glfw.KeyRightControl: KEY_RIGHTCTRL,
+	glfw.KeyRightAlt:     KEY_RIGHTALT,
+	glfw.KeyRightSuper:   KEY_RIGHTMETA,
+	glfw.KeyMenu:         KEY_MENU,
 }

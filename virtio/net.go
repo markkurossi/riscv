@@ -293,8 +293,8 @@ func (vio *Net) Reset() error {
 
 // DeviceStats implements Handler.DeviceStats
 func (vio *Net) DeviceStats() {
-	fmt.Printf("%v: sent   : %v\n", vio.Name, FileSize(vio.stSent))
-	fmt.Printf("%v: rcvd   : %v\n", vio.Name, FileSize(vio.stRcvd))
+	fmt.Printf("%v: sent    : %v\n", vio.Name, FileSize(vio.stSent))
+	fmt.Printf("%v: rcvd    : %v\n", vio.Name, FileSize(vio.stRcvd))
 }
 
 var netRegs = map[uint64]string{

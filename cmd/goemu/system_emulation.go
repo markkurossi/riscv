@@ -172,6 +172,18 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig,
 		virtioDevices = append(virtioDevices, vio)
 	}
 
+	// If gpu is configured, add its input devices.
+	if gpu != nil {
+		input := virtio.NewInput(core, virtioROM, plic, virtioIRQ, mem)
+		mmio.Segments = append(mmio.Segments, input)
+		gpu.KeyListener = input
+
+		vio := input.Device()
+		virtioROM = vio.End
+		virtioIRQ++
+		virtioDevices = append(virtioDevices, vio)
+	}
+
 	// Rest argument files as drives.
 	for idx, arg := range args {
 		fs, err := os.OpenFile(arg, os.O_RDWR, 06444)
