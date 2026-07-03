@@ -300,8 +300,8 @@ func (vio *GPU) Reset() error {
 
 // DeviceStats implements Handler.DeviceStats
 func (vio *GPU) DeviceStats() {
-	fmt.Printf("%v: control  : %v\n", vio.Name, vio.events[0])
-	fmt.Printf("%v: cursor   : %v\n", vio.Name, vio.events[1])
+	fmt.Printf("%v: control : %v\n", vio.Name, vio.events[0])
+	fmt.Printf("%v: cursor  : %v\n", vio.Name, vio.events[1])
 }
 
 // ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
