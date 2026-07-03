@@ -42,7 +42,7 @@ type Emulator struct {
 }
 
 func New(params kernel.Params) (*Emulator, error) {
-	mem := memory.New(0, 2048*memory.PageSize) // 8 MB
+	mem := memory.New(memory.RAMBase, 2048*memory.PageSize) // 8 MB
 
 	// Skip page 0. XXX remove this
 	_, err := mem.AllocPage()
@@ -518,7 +518,7 @@ func (emu *Emulator) TrapHandler(acpu *cpu.CPU, trap *isa.Trap) (bool, error) {
 	switch trap.Cause {
 	case isa.CauseInstAccessFault, isa.CauseLoadAccessFault,
 		isa.CauseStoreAccessFault:
-		fmt.Printf("trap: %vn", trap)
+		fmt.Printf("trap: %v\n", trap)
 		emu.Kernel.PrintVMA()
 		return false, nil
 
