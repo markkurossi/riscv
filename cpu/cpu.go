@@ -154,7 +154,10 @@ func (cpu *CPU) Run() error {
 	cpu.Runtime = time.Since(cpu.StartTime)
 
 	// Halt all memory-mapped devices.
-	return cpu.MMU.MMIO.Halt()
+	if cpu.MMU.MMIO != nil {
+		return cpu.MMU.MMIO.Halt()
+	}
+	return nil
 }
 
 func (cpu *CPU) Shutdown() {
