@@ -6,6 +6,8 @@
 
 package virtio
 
+//lint:file-ignore ST1003 to match the C coding style for constants.
+
 import (
 	"encoding/hex"
 	"fmt"
