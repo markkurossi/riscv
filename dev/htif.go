@@ -4,7 +4,7 @@
 // All rights reserved.
 //
 
-package testdata
+package dev
 
 import (
 	"encoding/binary"
@@ -13,10 +13,6 @@ import (
 
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/memory"
-)
-
-const (
-	HTIFSize = 0x80
 )
 
 var (

@@ -4,7 +4,7 @@
 // All rights reserved.
 //
 
-package testdata
+package riscv
 
 import (
 	"bytes"
@@ -15,18 +15,20 @@ import (
 	"testing"
 
 	"github.com/markkurossi/riscv/cpu"
+	"github.com/markkurossi/riscv/dev"
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/memory"
 )
 
 func TestISA(t *testing.T) {
-	entries, err := os.ReadDir("isa")
+	dir := "testdata/isa"
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatalf("ReadDir: %v", err)
 	}
 	var success, failure int
 	for _, entry := range entries {
-		if runTest(t, filepath.Join("isa", entry.Name())) {
+		if runTest(t, filepath.Join(dir, entry.Name())) {
 			success++
 		} else {
 			failure++
@@ -60,7 +62,9 @@ func runTest(t *testing.T, file string) bool {
 	return true
 }
 
-func loadELF(hart *cpu.CPU, mem *memory.Memory, file string) (*HTIF, error) {
+func loadELF(hart *cpu.CPU, mem *memory.Memory, file string) (
+	*dev.HTIF, error) {
+
 	data, err := os.ReadFile(file)
 	if err != nil {
 		return nil, err
@@ -121,7 +125,7 @@ func loadELF(hart *cpu.CPU, mem *memory.Memory, file string) (*HTIF, error) {
 		size = toAddr + toSize - fromAddr
 	}
 
-	htif := NewHTIF(hart, start, size, toAddr, fromAddr, mem)
+	htif := dev.NewHTIF(hart, start, size, toAddr, fromAddr, mem)
 
 	hart.MMU.Overlay = htif
 
