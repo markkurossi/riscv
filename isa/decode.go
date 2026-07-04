@@ -813,7 +813,7 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = AmoaddD
 			default:
 				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct7, funct3, raw)
+					funct5, funct3, raw)
 			}
 
 		case 0b00001:
@@ -824,7 +824,7 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = AmoswapD
 			default:
 				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct7, funct3, raw)
+					funct5, funct3, raw)
 			}
 
 		case 0b00010:
@@ -835,7 +835,7 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = LrD
 			default:
 				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct7, funct3, raw)
+					funct5, funct3, raw)
 			}
 
 		case 0b00011:
@@ -846,7 +846,7 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = ScD
 			default:
 				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct7, funct3, raw)
+					funct5, funct3, raw)
 			}
 
 		case 0b00100:
@@ -857,7 +857,7 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = AmoxorD
 			default:
 				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct7, funct3, raw)
+					funct5, funct3, raw)
 			}
 
 		case 0b01000:
@@ -868,7 +868,7 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = AmoorD
 			default:
 				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct7, funct3, raw)
+					funct5, funct3, raw)
 			}
 
 		case 0b01100:
@@ -879,7 +879,40 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = AmoandD
 			default:
 				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct7, funct3, raw)
+					funct5, funct3, raw)
+			}
+
+		case 0b10000:
+			switch funct3 {
+			case 2:
+				instr.Op = AmominW
+			case 3:
+				instr.Op = AmominD
+			default:
+				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
+					funct5, funct3, raw)
+			}
+
+		case 0b10100:
+			switch funct3 {
+			case 2:
+				instr.Op = AmomaxW
+			case 3:
+				instr.Op = AmomaxD
+			default:
+				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
+					funct5, funct3, raw)
+			}
+
+		case 0b11000:
+			switch funct3 {
+			case 2:
+				instr.Op = AmominuW
+			case 3:
+				instr.Op = AmominuD
+			default:
+				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
+					funct5, funct3, raw)
 			}
 
 		case 0b11100:
@@ -890,7 +923,7 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = AmomaxuD
 			default:
 				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct7, funct3, raw)
+					funct5, funct3, raw)
 			}
 
 		default:

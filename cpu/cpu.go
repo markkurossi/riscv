@@ -1083,6 +1083,38 @@ dispatch:
 			}
 			cpu.X[instr.Rd] = uint64(int64(int32(v)))
 
+		case isa.AmomaxD:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.MMU.Load64(addr)
+			if err != nil {
+				return err
+			}
+			t := cpu.X[instr.Rs2]
+			if int64(v) > int64(t) {
+				t = v
+			}
+			err = cpu.MMU.Store64(addr, t)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = v
+
+		case isa.AmomaxW:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.MMU.Load32(addr)
+			if err != nil {
+				return err
+			}
+			t := uint32(cpu.X[instr.Rs2])
+			if int32(v) > int32(t) {
+				t = uint32(v)
+			}
+			err = cpu.MMU.Store32(addr, t)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = uint64(v)
+
 		case isa.AmomaxuD:
 			addr := cpu.X[instr.Rs1]
 			v, err := cpu.MMU.Load64(addr)
@@ -1108,6 +1140,70 @@ dispatch:
 			t := uint32(cpu.X[instr.Rs2])
 			if v > t {
 				t = v
+			}
+			err = cpu.MMU.Store32(addr, t)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = uint64(v)
+
+		case isa.AmominD:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.MMU.Load64(addr)
+			if err != nil {
+				return err
+			}
+			t := cpu.X[instr.Rs2]
+			if int64(v) < int64(t) {
+				t = v
+			}
+			err = cpu.MMU.Store64(addr, t)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = v
+
+		case isa.AmominW:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.MMU.Load32(addr)
+			if err != nil {
+				return err
+			}
+			t := uint32(cpu.X[instr.Rs2])
+			if int32(v) < int32(t) {
+				t = uint32(v)
+			}
+			err = cpu.MMU.Store32(addr, t)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = uint64(v)
+
+		case isa.AmominuD:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.MMU.Load64(addr)
+			if err != nil {
+				return err
+			}
+			t := cpu.X[instr.Rs2]
+			if v < t {
+				t = v
+			}
+			err = cpu.MMU.Store64(addr, t)
+			if err != nil {
+				return err
+			}
+			cpu.X[instr.Rd] = v
+
+		case isa.AmominuW:
+			addr := cpu.X[instr.Rs1]
+			v, err := cpu.MMU.Load32(addr)
+			if err != nil {
+				return err
+			}
+			t := uint32(cpu.X[instr.Rs2])
+			if uint32(v) < t {
+				t = uint32(v)
 			}
 			err = cpu.MMU.Store32(addr, t)
 			if err != nil {
