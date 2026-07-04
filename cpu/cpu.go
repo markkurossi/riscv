@@ -728,10 +728,10 @@ dispatch:
 
 		case isa.Remuw:
 			if cpu.X[instr.Rs2] == 0 {
-				cpu.X[instr.Rd] = uint64(uint32(cpu.X[instr.Rs1]))
+				cpu.X[instr.Rd] = uint64(int64(int32(uint32(cpu.X[instr.Rs1]))))
 			} else {
-				cpu.X[instr.Rd] = uint64(uint32(cpu.X[instr.Rs1]) %
-					uint32(cpu.X[instr.Rs2]))
+				cpu.X[instr.Rd] = uint64(int64(int32(uint32(cpu.X[instr.Rs1]) %
+					uint32(cpu.X[instr.Rs2]))))
 			}
 
 		case isa.Remw:
