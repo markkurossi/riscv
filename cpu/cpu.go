@@ -1338,8 +1338,15 @@ dispatch:
 		case isa.FmvXD:
 			cpu.X[instr.Rd] = math.Float64bits(cpu.F[instr.Rs1])
 
+		case isa.FmvXW:
+			cpu.X[instr.Rd] = uint64(int64(int32(
+				math.Float32bits(float32(cpu.F[instr.Rs1])))))
+
 		case isa.FclassD:
 			cpu.X[instr.Rd] = fclassD(cpu.F[instr.Rs1])
+
+		case isa.FclassS:
+			cpu.X[instr.Rd] = uint64(fclassS(float32(cpu.F[instr.Rs1])))
 
 		case isa.FmaddS:
 			// Imm is Rs3
@@ -1469,8 +1476,22 @@ dispatch:
 				cpu.F[instr.Rd] = cpu.F[instr.Rs2]
 			}
 
+		case isa.FminS:
+			if float32(cpu.F[instr.Rs1]) < float32(cpu.F[instr.Rs2]) {
+				cpu.F[instr.Rd] = cpu.F[instr.Rs1]
+			} else {
+				cpu.F[instr.Rd] = cpu.F[instr.Rs2]
+			}
+
 		case isa.FmaxD:
 			if cpu.F[instr.Rs1] > cpu.F[instr.Rs2] {
+				cpu.F[instr.Rd] = cpu.F[instr.Rs1]
+			} else {
+				cpu.F[instr.Rd] = cpu.F[instr.Rs2]
+			}
+
+		case isa.FmaxS:
+			if float32(cpu.F[instr.Rs1]) > float32(cpu.F[instr.Rs2]) {
 				cpu.F[instr.Rd] = cpu.F[instr.Rs1]
 			} else {
 				cpu.F[instr.Rd] = cpu.F[instr.Rs2]
@@ -1783,6 +1804,57 @@ func fclassD(fVal float64) uint64 {
 			// NaN check (Signal vs Quiet)
 			// RISC-V typically uses the MSB of the mantissa to denote Quiet NaN (1) vs Signaling NaN (0)
 			isQuiet := (mantissa & (1 << 51)) != 0
+			if !isQuiet {
+				mask = 1 << 8 // Signaling NaN
+			} else {
+				mask = 1 << 9 // Quiet NaN
+			}
+		}
+	} else if exponent == 0 {
+		if mantissa == 0 {
+			if sign {
+				mask = 1 << 3 // -0
+			} else {
+				mask = 1 << 4 // +0
+			}
+		} else {
+			if sign {
+				mask = 1 << 2 // Negative subnormal
+			} else {
+				mask = 1 << 5 // Positive subnormal
+			}
+		}
+	} else {
+		if sign {
+			mask = 1 << 1 // Negative normal
+		} else {
+			mask = 1 << 6 // Positive normal
+		}
+	}
+
+	return mask
+}
+
+func fclassS(fVal float32) uint32 {
+	bits := math.Float32bits(fVal)
+
+	sign := (bits >> 31) == 1
+	exponent := (bits >> 23) & 0xFF
+	mantissa := bits & 0x7FFFFF
+
+	var mask uint32
+
+	if exponent == 0xFF {
+		if mantissa == 0 {
+			if sign {
+				mask = 1 << 0 // -Infinity
+			} else {
+				mask = 1 << 7 // +Infinity
+			}
+		} else {
+			// NaN check (Signal vs Quiet)
+			// RISC-V uses the MSB of the mantissa (bit 22 for float32)
+			isQuiet := (mantissa & (1 << 22)) != 0
 			if !isQuiet {
 				mask = 1 << 8 // Signaling NaN
 			} else {

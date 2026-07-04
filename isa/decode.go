@@ -990,9 +990,14 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FsgnjnS
 			case 0b010:
 				instr.Op = FsgnjxS
-			default:
-				return instr, fmt.Errorf("%v: funct7=%07b, funct3=%03b",
-					group, funct7, funct3)
+			}
+
+		case 0b0010100:
+			switch funct3 {
+			case 0b000:
+				instr.Op = FminS
+			case 0b001:
+				instr.Op = FmaxS
 			}
 
 		case 0b0010101:
@@ -1001,9 +1006,6 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FminD
 			case 0b001:
 				instr.Op = FmaxD
-			default:
-				return instr, fmt.Errorf("%v: funct7=%07b, funct3=%03b",
-					group, funct7, funct3)
 			}
 
 		case 0b0101101:
@@ -1018,9 +1020,6 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FltD
 			case 0b010:
 				instr.Op = FeqD
-			default:
-				return instr, fmt.Errorf("OP-FP: funct7=%07b, funct3=%03b",
-					funct7, funct3)
 			}
 
 		case 0b1100000:
@@ -1037,9 +1036,6 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FcvtLD
 			case 0b00011:
 				instr.Op = FcvtLUD
-			default:
-				return instr, fmt.Errorf("OP-FP: funct7=%07b, funct5=%05b",
-					funct7, funct5)
 			}
 
 		case 0b1101000:
@@ -1053,10 +1049,6 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FcvtSL
 			case 0b00011:
 				instr.Op = FcvtSLU
-
-			default:
-				return instr, fmt.Errorf("%v: funct7=%07b, funct5=%05b",
-					group, funct7, funct5)
 			}
 
 		case 0b1101001:
@@ -1070,9 +1062,14 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FcvtDL
 			case 0b00011:
 				instr.Op = FcvtDLU
-			default:
-				return instr, fmt.Errorf("OP-FP: funct7=%07b, funct5=%05b",
-					funct7, funct5)
+			}
+
+		case 0b1110000:
+			switch funct3 {
+			case 0b000:
+				instr.Op = FmvXW
+			case 0b001:
+				instr.Op = FclassS
 			}
 
 		case 0b1110001:
@@ -1081,9 +1078,6 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FmvXD
 			case 0b001:
 				instr.Op = FclassD
-			default:
-				return instr, fmt.Errorf("OP-FP: funct7=%07b, funct3=%03b",
-					funct7, funct3)
 			}
 
 		case 0b1111000:
@@ -1101,8 +1095,8 @@ func Decode(raw uint32) (Instr, error) {
 			instr.Op = FcvtDS
 
 		default:
-			return instr, fmt.Errorf("OP-FP: funct7=%07b, raw=%08x",
-				funct7, raw)
+			return instr, fmt.Errorf("OP-FP/%07b/%03b: raw=%08x",
+				funct7, funct3, raw)
 		}
 
 	case GroupMADD:
