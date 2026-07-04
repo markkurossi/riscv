@@ -56,12 +56,19 @@ type MMIO interface {
 	Store64(paddr uint64, v uint64) error
 }
 
+type Overlay interface {
+	Contains(paddr uint64) bool
+	Load(paddr uint64) error
+	Store(paddr uint64) error
+}
+
 // MMU implements the memory management unit.
 type MMU struct {
-	satp Satp
-	Hart isa.Hart
-	Mem  *memory.Memory
-	MMIO MMIO
+	satp    Satp
+	Hart    isa.Hart
+	Mem     *memory.Memory
+	MMIO    MMIO
+	Overlay Overlay
 
 	TLB [4096]TLBEntry
 }
@@ -816,6 +823,9 @@ func (mmu *MMU) Store32(vaddr uint64, v uint32) error {
 			return mmu.MMIO.Store32(paddr, v)
 		}
 		bo.PutUint32(mmu.Mem.RAM[mmu.Mem.Offset(paddr):], uint32(v))
+		if mmu.Overlay != nil && mmu.Overlay.Contains(paddr) {
+			return mmu.Overlay.Store(paddr)
+		}
 		return nil
 	}
 	var buf [4]byte
