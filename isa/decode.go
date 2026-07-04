@@ -811,9 +811,6 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = AmoaddW
 			case 3:
 				instr.Op = AmoaddD
-			default:
-				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct5, funct3, raw)
 			}
 
 		case 0b00001:
@@ -822,9 +819,6 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = AmoswapW
 			case 3:
 				instr.Op = AmoswapD
-			default:
-				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct5, funct3, raw)
 			}
 
 		case 0b00010:
@@ -833,9 +827,6 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = LrW
 			case 3:
 				instr.Op = LrD
-			default:
-				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct5, funct3, raw)
 			}
 
 		case 0b00011:
@@ -844,9 +835,6 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = ScW
 			case 3:
 				instr.Op = ScD
-			default:
-				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct5, funct3, raw)
 			}
 
 		case 0b00100:
@@ -855,9 +843,6 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = AmoxorW
 			case 3:
 				instr.Op = AmoxorD
-			default:
-				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct5, funct3, raw)
 			}
 
 		case 0b01000:
@@ -866,9 +851,6 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = AmoorW
 			case 3:
 				instr.Op = AmoorD
-			default:
-				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct5, funct3, raw)
 			}
 
 		case 0b01100:
@@ -877,9 +859,6 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = AmoandW
 			case 3:
 				instr.Op = AmoandD
-			default:
-				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct5, funct3, raw)
 			}
 
 		case 0b10000:
@@ -888,9 +867,6 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = AmominW
 			case 3:
 				instr.Op = AmominD
-			default:
-				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct5, funct3, raw)
 			}
 
 		case 0b10100:
@@ -899,9 +875,6 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = AmomaxW
 			case 3:
 				instr.Op = AmomaxD
-			default:
-				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct5, funct3, raw)
 			}
 
 		case 0b11000:
@@ -910,9 +883,6 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = AmominuW
 			case 3:
 				instr.Op = AmominuD
-			default:
-				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct5, funct3, raw)
 			}
 
 		case 0b11100:
@@ -921,13 +891,11 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = AmomaxuW
 			case 3:
 				instr.Op = AmomaxuD
-			default:
-				return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
-					funct5, funct3, raw)
 			}
 
 		default:
-			return instr, fmt.Errorf("AMO/%05b: raw=%08x", funct5, raw)
+			return instr, fmt.Errorf("AMO/%05b/%03b: raw=%08x",
+				funct5, funct3, raw)
 		}
 
 	case GroupLOADFP:
