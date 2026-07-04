@@ -55,7 +55,7 @@ func runTest(t *testing.T, file string) bool {
 		t.Fatalf("%v: hart.Run: %v", file, err)
 	}
 	if htif.ExitStatus != 1 {
-		t.Errorf("%v: failed assertion %v", file, htif.ExitStatus>>1)
+		t.Errorf("%v: assertion %v", file, htif.ExitStatus>>1)
 		return false
 	}
 
