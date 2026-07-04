@@ -211,15 +211,22 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig,
 		core.Symtab = sm
 	}
 
-	data, err := os.ReadFile(cfg.BIOS)
-	if err != nil {
-		return fmt.Errorf("failed to read BIOS: %w", err)
-	}
-	copy(mem.RAM[mem.Offset(OfsBIOS):], data)
+	var data []byte
+	var err error
 
-	err = loadKernel(cfg.Kernel, mem)
-	if err != nil {
-		return fmt.Errorf("failed to read kernel: %w", err)
+	if len(cfg.BIOS) > 0 {
+		data, err = os.ReadFile(cfg.BIOS)
+		if err != nil {
+			return fmt.Errorf("failed to read BIOS: %w", err)
+		}
+		copy(mem.RAM[mem.Offset(OfsBIOS):], data)
+	}
+
+	if len(cfg.Kernel) > 0 {
+		err = loadKernel(cfg.Kernel, mem)
+		if err != nil {
+			return fmt.Errorf("failed to read kernel: %w", err)
+		}
 	}
 
 	var initrdSize uint64
