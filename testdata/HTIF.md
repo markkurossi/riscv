@@ -33,11 +33,13 @@ communication registers.
 Both tohost and fromhost packets pack commands, device IDs, and
 payload metadata into a single 64-bit doubleword.
 
+```
  63        56 55        48 47                                        0
 +------------+------------+-------------------------------------------+
 | Device ID  |  Command   |                  Payload                  |
 +------------+------------+-------------------------------------------+
  [Bits 63:56] [Bits 55:48]              [Bits 47:0]
+```
 
 ## Bitfield Extractor Definitions
 
