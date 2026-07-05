@@ -850,14 +850,15 @@ dispatch:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> (cpu.X[instr.Rs2] & 0b111111)
 
 		case isa.Srlw:
-			cpu.X[instr.Rd] = uint64(uint32(cpu.X[instr.Rs1]) >>
-				(cpu.X[instr.Rs2] & 0b11111))
+			cpu.X[instr.Rd] = uint64(int64(int32(uint32(cpu.X[instr.Rs1]) >>
+				(cpu.X[instr.Rs2] & 0b11111))))
 
 		case isa.Srli:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> instr.Imm
 
 		case isa.Srliw:
-			cpu.X[instr.Rd] = uint64(uint32(cpu.X[instr.Rs1]) >> instr.Imm)
+			cpu.X[instr.Rd] = uint64(int64(int32(uint32(cpu.X[instr.Rs1]) >>
+				instr.Imm)))
 
 		case isa.Sub:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] - cpu.X[instr.Rs2]
@@ -1448,12 +1449,42 @@ dispatch:
 
 			cpu.F[instr.Rd] = math.Float64frombits(v)
 
+		case isa.FsgnjnD:
+			v := math.Float64bits(cpu.F[instr.Rs1])
+			b := math.Float64bits(cpu.F[instr.Rs2])
+
+			v &^= 1 << 63
+			v |= (^b) & (1 << 63) // Inject the inverted sign bit
+
+			cpu.F[instr.Rd] = math.Float64frombits(v)
+
+		case isa.FsgnjxD:
+			v := math.Float64bits(cpu.F[instr.Rs1])
+			b := math.Float64bits(cpu.F[instr.Rs2])
+
+			vs := v & (1 << 63)
+			bs := b & (1 << 63)
+
+			v &^= 1 << 63
+			v |= vs ^ bs // XOR the sign bits
+
+			cpu.F[instr.Rd] = math.Float64frombits(v)
+
 		case isa.FsgnjS:
 			v := math.Float32bits(float32(cpu.F[instr.Rs1]))
 			b := math.Float32bits(float32(cpu.F[instr.Rs2]))
 
 			v &^= 1 << 31
 			v |= b & (1 << 31)
+
+			cpu.F[instr.Rd] = float64(math.Float32frombits(v))
+
+		case isa.FsgnjnS:
+			v := math.Float32bits(float32(cpu.F[instr.Rs1]))
+			b := math.Float32bits(float32(cpu.F[instr.Rs2]))
+
+			v &^= 1 << 31
+			v |= (^b) & (1 << 31) // Inject the inverted sign bit
 
 			cpu.F[instr.Rd] = float64(math.Float32frombits(v))
 
