@@ -65,13 +65,11 @@ operating systems, and the RISC-V privileged architecture.
 #### X11
 
 ``` shell
-$ sudo startx xterm -- -fp "built-ins"
+$ LC_ALL=C startx xterm
+$ xdotool windowfocus 6291468
 ```
 
-39b11940ca:  e00787d3   Instr: Op=invalid      # decode failed: OP-FP: funct7=1110000, raw=e00787d3
-
-30278724be:  20e716d3   Instr: Op=fsgnjn.s     # not implemented
-
+2c0e4bc660:  62e7f14f   Instr: Op=invalid      # decode failed: group NMADD not implemented yet: raw=62e7f14f
 
 ### System emulation and supervisor mode
 
