@@ -68,7 +68,10 @@ type GPU struct {
 	Width  int
 	Height int
 
-	KeyListener KeyListener
+	lastX float64
+	lastY float64
+
+	InputListener InputListener
 
 	renderM     sync.Mutex
 	pending     bool
@@ -818,11 +821,37 @@ func (vio *GPU) cmdResourceUnref(hdr *GPUCtrlHdr, hdrBuf []byte,
 
 func (vio *GPU) cursorPosCallback(w *glfw.Window, x, y float64) {
 	vio.Tracef("cursor: x=%v, y=%v", int(x), int(y))
+	dx := int32(x - vio.lastX)
+	dy := int32(y - vio.lastY)
+
+	vio.lastX = x
+	vio.lastY = y
+
+	if vio.InputListener != nil && (dx != 0 || dy != 0) {
+		vio.InputListener.OnMouseMove(dx, dy)
+	}
 }
 
 func (vio *GPU) mouseButtonCallback(w *glfw.Window, button glfw.MouseButton,
 	action glfw.Action, mod glfw.ModifierKey) {
 	vio.Tracef("button: button=%v, action=%v, mod=%v", button, action, mod)
+
+	k, ok := mouseButtonMap[button]
+	if !ok {
+		vio.Tracef("skipping: button=%v, action=%v, mod=%v",
+			button, action, mod)
+		return
+	}
+	if vio.InputListener != nil {
+		switch action {
+		case glfw.Release:
+			vio.InputListener.OnButtonRelease(k)
+		case glfw.Press:
+			vio.InputListener.OnButtonPress(k)
+		case glfw.Repeat:
+			vio.InputListener.OnButtonRepeat(k)
+		}
+	}
 }
 
 func (vio *GPU) keyCallback(w *glfw.Window, key glfw.Key, scancode int,
@@ -836,14 +865,14 @@ func (vio *GPU) keyCallback(w *glfw.Window, key glfw.Key, scancode int,
 			key, scancode, action, mod)
 		return
 	}
-	if vio.KeyListener != nil {
+	if vio.InputListener != nil {
 		switch action {
 		case glfw.Release:
-			vio.KeyListener.OnKeyRelease(k)
+			vio.InputListener.OnKeyRelease(k)
 		case glfw.Press:
-			vio.KeyListener.OnKeyPress(k)
+			vio.InputListener.OnKeyPress(k)
 		case glfw.Repeat:
-			vio.KeyListener.OnKeyRepeat(k)
+			vio.InputListener.OnKeyRepeat(k)
 		}
 	}
 }
@@ -970,4 +999,10 @@ var inputKeyMap = map[glfw.Key]Key{
 	glfw.KeyRightAlt:     KEY_RIGHTALT,
 	glfw.KeyRightSuper:   KEY_RIGHTMETA,
 	glfw.KeyMenu:         KEY_MENU,
+}
+
+var mouseButtonMap = map[glfw.MouseButton]MouseButton{
+	glfw.MouseButtonLeft:   BTN_LEFT,
+	glfw.MouseButtonRight:  BTN_RIGHT,
+	glfw.MouseButtonMiddle: BTN_MIDDLE,
 }

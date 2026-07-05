@@ -142,11 +142,13 @@ func (vio *Input) cfg() ([]byte, int) {
 	var data []byte
 	switch uint16(vio.sel)<<8 | uint16(vio.subsel) {
 	case 0x0100: // VIRTIO_INPUT_CFG_ID_NAME
-		data = []byte("GoEMU Keyboard")
+		data = []byte("GoEMU Input Device")
 	case 0x0200: // VIRTIO_INPUT_CFG_ID_SERIAL
 		data = []byte("424242")
 	case 0x1101: // VIRTIO_INPUT_CFG_EV_BITS | EV_KEY
 		data = inputKeyBitmap[:]
+	case 0x1102: // VIRTIO_INPUT_CFG_EV_BITS | EV_REL
+		data = inputRelBitmap[:]
 	}
 
 	return data, len(data)
@@ -253,30 +255,74 @@ func (vio *Input) Store64(paddr uint64, v uint64) error {
 	return vio.MMIO.Store64(paddr, v)
 }
 
-type KeyListener interface {
+type InputListener interface {
 	OnKeyRelease(key Key)
 	OnKeyPress(key Key)
 	OnKeyRepeat(key Key)
+	OnButtonRelease(key MouseButton)
+	OnButtonPress(key MouseButton)
+	OnButtonRepeat(key MouseButton)
+	OnMouseMove(dx, dy int32)
 }
 
-// OnKeyRelease implements KeyListener.OnKeyRelease.
+// OnKeyRelease implements InputListener.OnKeyRelease.
 func (vio *Input) OnKeyRelease(key Key) {
 	vio.keyEvent(uint16(key), 0)
 }
 
-// OnKeyPress implements KeyListener.OnKeyPress.
+// OnKeyPress implements InputListener.OnKeyPress.
 func (vio *Input) OnKeyPress(key Key) {
 	vio.keyEvent(uint16(key), 1)
 }
 
-// OnKeyRepeat implements KeyListener.OnKeyRepeat.
+// OnKeyRepeat implements InputListener.OnKeyRepeat.
 func (vio *Input) OnKeyRepeat(key Key) {
 	vio.keyEvent(uint16(key), 2)
+}
+
+// OnButtonRelease implements InputListener.OnButtonRelease.
+func (vio *Input) OnButtonRelease(button MouseButton) {
+	vio.keyEvent(uint16(button), 0)
+}
+
+// OnButtonPress implements InputListener.OnButtonPress.
+func (vio *Input) OnButtonPress(button MouseButton) {
+	vio.keyEvent(uint16(button), 1)
+}
+
+// OnButtonRepeat implements InputListener.OnButtonRepeat.
+func (vio *Input) OnButtonRepeat(button MouseButton) {
+	vio.keyEvent(uint16(button), 2)
+}
+
+// OnMouseMove implements InputListener.OnMouseMove
+func (vio *Input) OnMouseMove(dx, dy int32) {
+	vio.M.Lock()
+	defer vio.M.Unlock()
+
+	if !vio.DriverOK() {
+		return
+	}
+
+	if dx != 0 {
+		vio.addEvent(uint16(EV_REL), REL_X, uint32(dx))
+	}
+	if dy != 0 {
+		vio.addEvent(uint16(EV_REL), REL_Y, uint32(dy))
+	}
+	if dx != 0 || dy != 0 {
+		vio.addEvent(uint16(EV_SYN), SYN_REPORT, 0)
+		vio.ProcessQueue(0)
+	}
 }
 
 func (vio *Input) keyEvent(code uint16, value uint32) {
 	vio.M.Lock()
 	defer vio.M.Unlock()
+
+	if !vio.DriverOK() {
+		return
+	}
 
 	vio.addEvent(uint16(EV_KEY), code, value)
 	vio.addEvent(uint16(EV_SYN), SYN_REPORT, 0)
@@ -579,12 +625,49 @@ const (
 	KEY_MICMUTE          Key = 248 /* Mute / unmute the microphone */
 )
 
+type MouseButton uint16
+
+// Mouse buttons.
+const (
+	BTN_MOUSE   MouseButton = 0x110
+	BTN_LEFT    MouseButton = 0x110
+	BTN_RIGHT   MouseButton = 0x111
+	BTN_MIDDLE  MouseButton = 0x112
+	BTN_SIDE    MouseButton = 0x113
+	BTN_EXTRA   MouseButton = 0x114
+	BTN_FORWARD MouseButton = 0x115
+	BTN_BACK    MouseButton = 0x116
+	BTN_TASK    MouseButton = 0x117
+)
+
+const (
+	REL_X      uint16 = 0x00
+	REL_Y      uint16 = 0x01
+	REL_Z      uint16 = 0x02
+	REL_RX     uint16 = 0x03
+	REL_RY     uint16 = 0x04
+	REL_RZ     uint16 = 0x05
+	REL_HWHEEL uint16 = 0x06
+	REL_DIAL   uint16 = 0x07
+	REL_WHEEL  uint16 = 0x08
+	REL_MISC   uint16 = 0x09
+)
+
 var inputKeyBitmap [128]byte
+
+var inputRelBitmap = [128]byte{
+	0x03, 0x01,
+}
+
+func setBit(v uint16) {
+	inputKeyBitmap[v/8] |= 1 << (v % 8)
+}
 
 func init() {
 	for _, v := range inputKeyMap {
-		idx := v / 8
-		ofs := v % 8
-		inputKeyBitmap[idx] |= 1 << ofs
+		setBit(uint16(v))
+	}
+	for _, v := range mouseButtonMap {
+		setBit(uint16(v))
 	}
 }

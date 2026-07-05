@@ -114,6 +114,40 @@ type MMIO struct {
 	queues   []*Queue
 }
 
+const (
+	// Indicates that the guest OS has found the device and recognized
+	// it as a valid virtio device.
+	ACKNOWLEDGE uint32 = 1
+
+	// Indicates that the guest OS knows how to drive the
+	// device. Note: There could be a significant (or infinite) delay
+	// before setting this bit. For example, under Linux, drivers can
+	// be loadable modules.
+	DRIVER uint32 = 2
+
+	// Indicates that something went wrong in the guest, and it has
+	// given up on the device. This could be an internal error, or the
+	// driver didn’t like the device for some reason, or even a fatal
+	// error during device operation.
+	FAILED uint32 = 128
+
+	// Indicates that the driver has acknowledged all the features it
+	// understands, and feature negotiation is complete.
+	FEATURES_OK uint32 = 8
+
+	// Indicates that the driver is set up and ready to drive the
+	// device.
+	DRIVER_OK uint32 = 4
+
+	// Indicates that the device has experienced an error from which
+	// it can’t recover.
+	DEVICE_NEEDS_RESET uint32 = 64
+)
+
+func (vio *MMIO) DriverOK() bool {
+	return vio.status&DRIVER_OK != 0
+}
+
 type Handler interface {
 	Reset() error
 	DeviceStats()

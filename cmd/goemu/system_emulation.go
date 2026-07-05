@@ -176,7 +176,7 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig,
 	if gpu != nil {
 		input := virtio.NewInput(core, virtioROM, plic, virtioIRQ, mem)
 		mmio.Segments = append(mmio.Segments, input)
-		gpu.KeyListener = input
+		gpu.InputListener = input
 
 		vio := input.Device()
 		virtioROM = vio.End
