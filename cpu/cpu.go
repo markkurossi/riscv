@@ -1114,7 +1114,7 @@ dispatch:
 			if err != nil {
 				return err
 			}
-			cpu.X[instr.Rd] = uint64(v)
+			cpu.X[instr.Rd] = uint64(int64(int32(v)))
 
 		case isa.AmomaxuD:
 			addr := cpu.X[instr.Rs1]
@@ -1146,7 +1146,7 @@ dispatch:
 			if err != nil {
 				return err
 			}
-			cpu.X[instr.Rd] = uint64(v)
+			cpu.X[instr.Rd] = uint64(int64(int32(v)))
 
 		case isa.AmominD:
 			addr := cpu.X[instr.Rs1]
@@ -1178,7 +1178,7 @@ dispatch:
 			if err != nil {
 				return err
 			}
-			cpu.X[instr.Rd] = uint64(v)
+			cpu.X[instr.Rd] = uint64(int64(int32(v)))
 
 		case isa.AmominuD:
 			addr := cpu.X[instr.Rs1]
@@ -1210,7 +1210,7 @@ dispatch:
 			if err != nil {
 				return err
 			}
-			cpu.X[instr.Rd] = uint64(v)
+			cpu.X[instr.Rd] = uint64(int64(int32(v)))
 
 		case isa.LrW:
 			addr := cpu.X[instr.Rs1]
@@ -1833,7 +1833,8 @@ func fclassD(fVal float64) uint64 {
 			}
 		} else {
 			// NaN check (Signal vs Quiet)
-			// RISC-V typically uses the MSB of the mantissa to denote Quiet NaN (1) vs Signaling NaN (0)
+			// RISC-V typically uses the MSB of the mantissa to denote
+			// Quiet NaN (1) vs Signaling NaN (0)
 			isQuiet := (mantissa & (1 << 51)) != 0
 			if !isQuiet {
 				mask = 1 << 8 // Signaling NaN
