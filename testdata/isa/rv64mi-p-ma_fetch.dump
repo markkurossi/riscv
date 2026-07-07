@@ -1,0 +1,259 @@
+
+rv64mi-p-ma_fetch:     file format elf64-littleriscv
+
+
+Disassembly of section .text.init:
+
+0000000080000040 <_start>:
+    80000040:	0540006f          	j	80000094 <reset_vector>
+
+0000000080000044 <trap_vector>:
+    80000044:	34202f73          	csrr	t5,mcause
+    80000048:	00800f93          	li	t6,8
+    8000004c:	03ff0a63          	beq	t5,t6,80000080 <write_tohost>
+    80000050:	00900f93          	li	t6,9
+    80000054:	03ff0663          	beq	t5,t6,80000080 <write_tohost>
+    80000058:	00b00f93          	li	t6,11
+    8000005c:	03ff0263          	beq	t5,t6,80000080 <write_tohost>
+    80000060:	00002f17          	auipc	t5,0x2
+    80000064:	010f3f03          	ld	t5,16(t5) # 80002070 <_GLOBAL_OFFSET_TABLE_+0x70>
+    80000068:	000f0463          	beqz	t5,80000070 <trap_vector+0x2c>
+    8000006c:	000f0067          	jr	t5
+    80000070:	34202f73          	csrr	t5,mcause
+    80000074:	000f5463          	bgez	t5,8000007c <handle_exception>
+    80000078:	0040006f          	j	8000007c <handle_exception>
+
+000000008000007c <handle_exception>:
+    8000007c:	5391e193          	ori	gp,gp,1337
+
+0000000080000080 <write_tohost>:
+    80000080:	00001f17          	auipc	t5,0x1
+    80000084:	f83f2023          	sw	gp,-128(t5) # 80001000 <tohost>
+    80000088:	00001f17          	auipc	t5,0x1
+    8000008c:	f60f2e23          	sw	zero,-132(t5) # 80001004 <tohost+0x4>
+    80000090:	ff1ff06f          	j	80000080 <write_tohost>
+
+0000000080000094 <reset_vector>:
+    80000094:	00000093          	li	ra,0
+    80000098:	00000113          	li	sp,0
+    8000009c:	00000193          	li	gp,0
+    800000a0:	00000213          	li	tp,0
+    800000a4:	00000293          	li	t0,0
+    800000a8:	00000313          	li	t1,0
+    800000ac:	00000393          	li	t2,0
+    800000b0:	00000413          	li	s0,0
+    800000b4:	00000493          	li	s1,0
+    800000b8:	00000513          	li	a0,0
+    800000bc:	00000593          	li	a1,0
+    800000c0:	00000613          	li	a2,0
+    800000c4:	00000693          	li	a3,0
+    800000c8:	00000713          	li	a4,0
+    800000cc:	00000793          	li	a5,0
+    800000d0:	00000813          	li	a6,0
+    800000d4:	00000893          	li	a7,0
+    800000d8:	00000913          	li	s2,0
+    800000dc:	00000993          	li	s3,0
+    800000e0:	00000a13          	li	s4,0
+    800000e4:	00000a93          	li	s5,0
+    800000e8:	00000b13          	li	s6,0
+    800000ec:	00000b93          	li	s7,0
+    800000f0:	00000c13          	li	s8,0
+    800000f4:	00000c93          	li	s9,0
+    800000f8:	00000d13          	li	s10,0
+    800000fc:	00000d93          	li	s11,0
+    80000100:	00000e13          	li	t3,0
+    80000104:	00000e93          	li	t4,0
+    80000108:	00000f13          	li	t5,0
+    8000010c:	00000f93          	li	t6,0
+    80000110:	f1402573          	csrr	a0,mhartid
+    80000114:	00051063          	bnez	a0,80000114 <reset_vector+0x80>
+    80000118:	00002297          	auipc	t0,0x2
+    8000011c:	ef82b283          	ld	t0,-264(t0) # 80002010 <_GLOBAL_OFFSET_TABLE_+0x10>
+    80000120:	30529073          	csrw	mtvec,t0
+    80000124:	74445073          	csrwi	0x744,8
+    80000128:	00002297          	auipc	t0,0x2
+    8000012c:	ef02b283          	ld	t0,-272(t0) # 80002018 <_GLOBAL_OFFSET_TABLE_+0x18>
+    80000130:	30529073          	csrw	mtvec,t0
+    80000134:	18005073          	csrwi	satp,0
+    80000138:	00002297          	auipc	t0,0x2
+    8000013c:	ee82b283          	ld	t0,-280(t0) # 80002020 <_GLOBAL_OFFSET_TABLE_+0x20>
+    80000140:	30529073          	csrw	mtvec,t0
+    80000144:	0010029b          	addiw	t0,zero,1
+    80000148:	03529293          	slli	t0,t0,0x35
+    8000014c:	fff28293          	addi	t0,t0,-1
+    80000150:	3b029073          	csrw	pmpaddr0,t0
+    80000154:	01f00293          	li	t0,31
+    80000158:	3a029073          	csrw	pmpcfg0,t0
+    8000015c:	30405073          	csrwi	mie,0
+    80000160:	00002297          	auipc	t0,0x2
+    80000164:	ec82b283          	ld	t0,-312(t0) # 80002028 <_GLOBAL_OFFSET_TABLE_+0x28>
+    80000168:	30529073          	csrw	mtvec,t0
+    8000016c:	30205073          	csrwi	medeleg,0
+    80000170:	30305073          	csrwi	mideleg,0
+    80000174:	00000193          	li	gp,0
+    80000178:	00002297          	auipc	t0,0x2
+    8000017c:	e902b283          	ld	t0,-368(t0) # 80002008 <_GLOBAL_OFFSET_TABLE_+0x8>
+    80000180:	30529073          	csrw	mtvec,t0
+    80000184:	00100513          	li	a0,1
+    80000188:	01f51513          	slli	a0,a0,0x1f
+    8000018c:	00055c63          	bgez	a0,800001a4 <reset_vector+0x110>
+    80000190:	0ff0000f          	fence
+    80000194:	00100193          	li	gp,1
+    80000198:	05d00893          	li	a7,93
+    8000019c:	00000513          	li	a0,0
+    800001a0:	00000073          	ecall
+    800001a4:	00002297          	auipc	t0,0x2
+    800001a8:	ed42b283          	ld	t0,-300(t0) # 80002078 <_GLOBAL_OFFSET_TABLE_+0x78>
+    800001ac:	00028a63          	beqz	t0,800001c0 <reset_vector+0x12c>
+    800001b0:	10529073          	csrw	stvec,t0
+    800001b4:	0000b2b7          	lui	t0,0xb
+    800001b8:	1092829b          	addiw	t0,t0,265 # b109 <_start-0x7fff4f37>
+    800001bc:	30229073          	csrw	medeleg,t0
+    800001c0:	30005073          	csrwi	mstatus,0
+    800001c4:	00002537          	lui	a0,0x2
+    800001c8:	8005051b          	addiw	a0,a0,-2048 # 1800 <_start-0x7fffe840>
+    800001cc:	30052073          	csrs	mstatus,a0
+    800001d0:	00002297          	auipc	t0,0x2
+    800001d4:	e602b283          	ld	t0,-416(t0) # 80002030 <_GLOBAL_OFFSET_TABLE_+0x30>
+    800001d8:	34129073          	csrw	mepc,t0
+    800001dc:	f1402573          	csrr	a0,mhartid
+    800001e0:	30200073          	mret
+    800001e4:	00200193          	li	gp,2
+    800001e8:	00000313          	li	t1,0
+    800001ec:	00002297          	auipc	t0,0x2
+    800001f0:	e4c2b283          	ld	t0,-436(t0) # 80002038 <_GLOBAL_OFFSET_TABLE_+0x38>
+    800001f4:	00228367          	jalr	t1,2(t0)
+    800001f8:	a011                	j	800001fc <reset_vector+0x168>
+    800001fa:	a019                	j	80000200 <reset_vector+0x16c>
+    800001fc:	1200006f          	j	8000031c <fail>
+    80000200:	00300193          	li	gp,3
+    80000204:	00002297          	auipc	t0,0x2
+    80000208:	e3c2b283          	ld	t0,-452(t0) # 80002040 <_GLOBAL_OFFSET_TABLE_+0x40>
+    8000020c:	00128367          	jalr	t1,1(t0)
+    80000210:	0080006f          	j	80000218 <reset_vector+0x184>
+    80000214:	1080006f          	j	8000031c <fail>
+    80000218:	00400193          	li	gp,4
+    8000021c:	00000313          	li	t1,0
+    80000220:	00002297          	auipc	t0,0x2
+    80000224:	e282b283          	ld	t0,-472(t0) # 80002048 <_GLOBAL_OFFSET_TABLE_+0x48>
+    80000228:	00328367          	jalr	t1,3(t0)
+    8000022c:	a011                	j	80000230 <reset_vector+0x19c>
+    8000022e:	a019                	j	80000234 <reset_vector+0x1a0>
+    80000230:	0ec0006f          	j	8000031c <fail>
+    80000234:	00500193          	li	gp,5
+    80000238:	00000313          	li	t1,0
+    8000023c:	00002297          	auipc	t0,0x2
+    80000240:	e142b283          	ld	t0,-492(t0) # 80002050 <_GLOBAL_OFFSET_TABLE_+0x50>
+    80000244:	0060036f          	jal	t1,8000024a <reset_vector+0x1b6>
+    80000248:	a011                	j	8000024c <reset_vector+0x1b8>
+    8000024a:	a019                	j	80000250 <reset_vector+0x1bc>
+    8000024c:	0d00006f          	j	8000031c <fail>
+    80000250:	00600193          	li	gp,6
+    80000254:	00000313          	li	t1,0
+    80000258:	00002297          	auipc	t0,0x2
+    8000025c:	e002b283          	ld	t0,-512(t0) # 80002058 <_GLOBAL_OFFSET_TABLE_+0x58>
+    80000260:	00000363          	beqz	zero,80000266 <reset_vector+0x1d2>
+    80000264:	a011                	j	80000268 <reset_vector+0x1d4>
+    80000266:	a019                	j	8000026c <reset_vector+0x1d8>
+    80000268:	0b40006f          	j	8000031c <fail>
+    8000026c:	00700193          	li	gp,7
+    80000270:	00001563          	bnez	zero,8000027a <reset_vector+0x1e6>
+    80000274:	00c0006f          	j	80000280 <reset_vector+0x1ec>
+    80000278:	a009                	j	8000027a <reset_vector+0x1e6>
+    8000027a:	a009                	j	8000027c <reset_vector+0x1e8>
+    8000027c:	0a00006f          	j	8000031c <fail>
+    80000280:	30126073          	csrsi	misa,4
+    80000284:	301023f3          	csrr	t2,misa
+    80000288:	0043f393          	andi	t2,t2,4
+    8000028c:	0a038663          	beqz	t2,80000338 <pass>
+    80000290:	30127073          	csrci	misa,4
+    80000294:	301023f3          	csrr	t2,misa
+    80000298:	0043f393          	andi	t2,t2,4
+    8000029c:	08039e63          	bnez	t2,80000338 <pass>
+    800002a0:	305022f3          	csrr	t0,mtvec
+    800002a4:	00002317          	auipc	t1,0x2
+    800002a8:	dbc33303          	ld	t1,-580(t1) # 80002060 <_GLOBAL_OFFSET_TABLE_+0x60>
+    800002ac:	00230313          	addi	t1,t1,2
+    800002b0:	30531073          	csrw	mtvec,t1
+    800002b4:	0060006f          	j	800002ba <reset_vector+0x226>
+    800002b8:	0001                	nop
+    800002ba:	a8bd                	j	80000338 <pass>
+    800002bc:	30529073          	csrw	mtvec,t0
+    800002c0:	30126073          	csrsi	misa,4
+    800002c4:	00800193          	li	gp,8
+    800002c8:	301023f3          	csrr	t2,misa
+    800002cc:	0043f393          	andi	t2,t2,4
+    800002d0:	06038463          	beqz	t2,80000338 <pass>
+    800002d4:	0001                	nop
+    800002d6:	30127073          	csrci	misa,4
+    800002da:	0001                	nop
+    800002dc:	301023f3          	csrr	t2,misa
+    800002e0:	0043f393          	andi	t2,t2,4
+    800002e4:	02038c63          	beqz	t2,8000031c <fail>
+    800002e8:	00002297          	auipc	t0,0x2
+    800002ec:	d802b283          	ld	t0,-640(t0) # 80002068 <_GLOBAL_OFFSET_TABLE_+0x68>
+    800002f0:	ffe28293          	addi	t0,t0,-2
+    800002f4:	34129073          	csrw	mepc,t0
+    800002f8:	30127073          	csrci	misa,4
+    800002fc:	000023b7          	lui	t2,0x2
+    80000300:	8003839b          	addiw	t2,t2,-2048 # 1800 <_start-0x7fffe840>
+    80000304:	3003a073          	csrs	mstatus,t2
+    80000308:	30200073          	mret
+    8000030c:	00000263          	beqz	zero,80000310 <reset_vector+0x27c>
+    80000310:	30126073          	csrsi	misa,4
+    80000314:	0240006f          	j	80000338 <pass>
+    80000318:	02301063          	bne	zero,gp,80000338 <pass>
+
+000000008000031c <fail>:
+    8000031c:	0ff0000f          	fence
+    80000320:	00018063          	beqz	gp,80000320 <fail+0x4>
+    80000324:	00119193          	slli	gp,gp,0x1
+    80000328:	0011e193          	ori	gp,gp,1
+    8000032c:	05d00893          	li	a7,93
+    80000330:	00018513          	mv	a0,gp
+    80000334:	00000073          	ecall
+
+0000000080000338 <pass>:
+    80000338:	0ff0000f          	fence
+    8000033c:	00100193          	li	gp,1
+    80000340:	05d00893          	li	a7,93
+    80000344:	00000513          	li	a0,0
+    80000348:	00000073          	ecall
+
+000000008000034c <mtvec_handler>:
+    8000034c:	00200513          	li	a0,2
+    80000350:	02a18063          	beq	gp,a0,80000370 <mtvec_handler+0x24>
+    80000354:	00400513          	li	a0,4
+    80000358:	00a18c63          	beq	gp,a0,80000370 <mtvec_handler+0x24>
+    8000035c:	00500513          	li	a0,5
+    80000360:	00a18863          	beq	gp,a0,80000370 <mtvec_handler+0x24>
+    80000364:	00600513          	li	a0,6
+    80000368:	00a18463          	beq	gp,a0,80000370 <mtvec_handler+0x24>
+    8000036c:	fb1ff06f          	j	8000031c <fail>
+    80000370:	fa0316e3          	bnez	t1,8000031c <fail>
+    80000374:	00000593          	li	a1,0
+    80000378:	34202573          	csrr	a0,mcause
+    8000037c:	fab510e3          	bne	a0,a1,8000031c <fail>
+    80000380:	341025f3          	csrr	a1,mepc
+    80000384:	00458593          	addi	a1,a1,4
+    80000388:	f8b29ae3          	bne	t0,a1,8000031c <fail>
+    8000038c:	34302573          	csrr	a0,mtval
+    80000390:	00050663          	beqz	a0,8000039c <mtvec_handler+0x50>
+    80000394:	ffe50513          	addi	a0,a0,-2
+    80000398:	f85512e3          	bne	a0,t0,8000031c <fail>
+    8000039c:	00858593          	addi	a1,a1,8
+    800003a0:	34159073          	csrw	mepc,a1
+    800003a4:	30200073          	mret
+    800003a8:	c0001073          	unimp
+    800003ac:	0000                	.insn	2, 0x
+    800003ae:	0000                	.insn	2, 0x
+    800003b0:	0000                	.insn	2, 0x
+    800003b2:	0000                	.insn	2, 0x
+    800003b4:	0000                	.insn	2, 0x
+    800003b6:	0000                	.insn	2, 0x
+    800003b8:	0000                	.insn	2, 0x
+    800003ba:	0000                	.insn	2, 0x
+    800003bc:	0000                	.insn	2, 0x
+    800003be:	0000                	.insn	2, 0x
+    800003c0:	0000                	.insn	2, 0x
+    800003c2:	0000                	.insn	2, 0x

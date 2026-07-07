@@ -114,3 +114,12 @@ $ qemu-system-riscv64 -machine virt -m 2048 -nographic \
     -drive file=FreeBSD-15.1-RC3-riscv-riscv64-GENERICSD.img,format=raw,id=hd0,if=none \
     -device virtio-blk-device,drive=hd0
 ```
+
+## RISC-V Testsuite
+
+[riscv-tests](https://github.com/riscv-software-src/riscv-tests/tree/master)
+
+``` shell
+$ XLEN=64 RISCV_PREFIX=riscv64-linux-gnu- ./configure --prefix=/workspace/riscv-tests/out
+$ XLEN=64 RISCV_PREFIX=riscv64-linux-gnu- make -i install
+```

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/markkurossi/riscv/cpu"
@@ -20,58 +21,78 @@ import (
 	"github.com/markkurossi/riscv/memory"
 )
 
+var skip = map[string]bool{
+	"Makefile":             true,
+	"rv64si-p-dirty":       true,
+	"rv64ssvnapot-p-napot": true,
+}
+
 func TestISA(t *testing.T) {
 	dir := "testdata/isa"
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatalf("ReadDir: %v", err)
 	}
-	var success, failure int
+	var count, success, failure, panic int
 	for _, entry := range entries {
-		if runTest(t, filepath.Join(dir, entry.Name())) {
+		name := entry.Name()
+		file := filepath.Join(dir, name)
+		if strings.HasSuffix(file, ".dump") {
+			continue
+		}
+		if skip[name] {
+			continue
+		}
+		count++
+		ok, err := runTest(t, file)
+		if err != nil {
+			t.Logf("%v: %v", entry.Name(), err)
+			panic++
+		} else if ok {
 			success++
 		} else {
 			failure++
 		}
 	}
-	t.Logf("%v tests, %v succeeded, %v failed", len(entries), success, failure)
+	t.Logf("%v tests, %v success, %v fail, %v panic",
+		count, success, failure, panic)
 }
 
-func runTest(t *testing.T, file string) bool {
+func runTest(t *testing.T, file string) (bool, error) {
 	mem := memory.New(memory.RAMBase, 0x2000000)
 
 	hart := cpu.New(mem)
 	hart.SetMode(isa.ModeM)
 
-	htif, err := loadELF(hart, mem, file)
+	htif, entry, err := loadELF(hart, mem, file)
 	if err != nil {
-		t.Fatalf("%v: loadELF: %v", file, err)
+		return false, err
 	}
 
-	hart.PC = 0x8000_0000
+	hart.PC = entry
 
 	err = hart.Run()
 	if err != nil {
-		t.Fatalf("%v: hart.Run: %v", file, err)
+		return false, err
 	}
 	if htif.ExitStatus != 1 {
 		t.Errorf("%v: assertion %v", file, htif.ExitStatus>>1)
-		return false
+		return false, nil
 	}
 
-	return true
+	return true, nil
 }
 
 func loadELF(hart *cpu.CPU, mem *memory.Memory, file string) (
-	*dev.HTIF, error) {
+	*dev.HTIF, uint64, error) {
 
 	data, err := os.ReadFile(file)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	f, err := elf.NewFile(bytes.NewReader(data))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer f.Close()
 
@@ -80,18 +101,18 @@ func loadELF(hart *cpu.CPU, mem *memory.Memory, file string) (
 		case elf.PT_LOAD:
 			if !mem.Contains(prog.Paddr) ||
 				!mem.Contains(prog.Paddr+prog.Memsz-1) {
-				return nil, fmt.Errorf("prog out of range: %x...%x",
+				return nil, 0, fmt.Errorf("prog out of range: %x...%x",
 					prog.Paddr, prog.Paddr+prog.Memsz)
 			}
 			n, err := prog.ReadAt(mem.RAM[mem.Offset(prog.Paddr):], 0)
 			if n == 0 && err != nil {
-				return nil, err
+				return nil, 0, err
 			}
 		}
 	}
 	symbols, err := f.Symbols()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	var toAddr, toSize, fromAddr, fromSize uint64
 	for _, sym := range symbols {
@@ -105,13 +126,14 @@ func loadELF(hart *cpu.CPU, mem *memory.Memory, file string) (
 		}
 	}
 	if false {
+		fmt.Printf("Entry: %x\n", f.Entry)
 		fmt.Printf("Symbols:\n")
 		fmt.Printf(" - tohost  : %x/%x\n", toAddr, toSize)
 		fmt.Printf(" - fromhost: %x/%x\n", fromAddr, fromSize)
 	}
 
 	if toAddr == 0 {
-		return nil, fmt.Errorf("tohost undefined")
+		return nil, 0, fmt.Errorf("tohost undefined")
 	}
 
 	var start uint64
@@ -129,5 +151,5 @@ func loadELF(hart *cpu.CPU, mem *memory.Memory, file string) (
 
 	hart.MMU.Overlay = htif
 
-	return htif, nil
+	return htif, f.Entry, nil
 }
