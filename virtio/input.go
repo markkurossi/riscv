@@ -184,8 +184,7 @@ func (vio *Input) cfg() ([]byte, int) {
 	case 0x1201: // VIRTIO_INPUT_CFG_ABS_INFO | ABS_Y
 		data = vio.absY
 	default:
-		vio.Infof("cfg: skipping: sel=%02x, subsel=%02x",
-			vio.sel, vio.subsel)
+		vio.Debugf("cfg: skipping: sel=%02x, subsel=%02x", vio.sel, vio.subsel)
 	}
 
 	return data, len(data)

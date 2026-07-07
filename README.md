@@ -58,8 +58,7 @@ operating systems, and the RISC-V privileged architecture.
   - [x] virtio-rng
   - [x] virtio-net
     - [x] fix NetBSD receive path
-  - [ ] virtio-gpu
-  - [ ] virtio-console
+  - [x] virtio-gpu
 - [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
 
 #### X11
@@ -80,6 +79,9 @@ virtio-gpu: ERROR: execute descriptor chain: VIRTIO_GPU_CMD_UPDATE_CURSOR: not i
     - [ ] HTTP proxy
     - [ ] NTP server
     - [ ] Async send path
+  - [ ] virtio-blk
+    - [ ] Async I/O
+  - [ ] virtio-console
 - [ ] SMP support
 - [ ] Parse Linux kernel PE32+ header: load address, symbols
 - [ ] JIT experiments

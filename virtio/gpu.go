@@ -320,9 +320,6 @@ func (vio *GPU) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 		return 0, err
 	}
 	vio.Debugf("desc: %v", desc)
-	if vq.Index == 1 {
-		vio.Infof("desc: %v", desc)
-	}
 
 	if desc.Len < 24 {
 		return 0, fmt.Errorf("truncated virtio_gpu_ctrl_hdr: %v", desc.Len)
@@ -529,6 +526,9 @@ func (hdr *GPUCtrlHdr) String() string {
 }
 
 func (hdr *GPUCtrlHdr) Response(code GPUCtrlType, buf []byte) {
+	if len(buf) < 24 {
+		return
+	}
 	vioBO.PutUint32(buf[0:], uint32(code))
 
 	if hdr.Flags&VIRTIO_GPU_FLAG_FENCE != 0 {
@@ -848,14 +848,8 @@ func (vio *GPU) cmdResourceUnref(hdr *GPUCtrlHdr, hdrBuf []byte,
 func (vio *GPU) cmdUpdateCursor(hdr *GPUCtrlHdr, hdrBuf []byte,
 	bufs [][]byte, writable []bool) (uint32, error) {
 
-	vio.Infof("cmdUpdateCursor")
-
-	for idx, buf := range bufs {
-		vio.Infof("updateCursor: idx=%v, writable=%v:\n%s",
-			idx, writable[idx], hex.Dump(buf))
-		if writable[idx] {
-			hdr.Response(VIRTIO_GPU_RESP_OK_NODATA, buf[0:])
-		}
+	if len(bufs) > 0 && writable[0] {
+		hdr.Response(VIRTIO_GPU_RESP_OK_NODATA, bufs[0])
 	}
 
 	return 24, nil
@@ -864,14 +858,8 @@ func (vio *GPU) cmdUpdateCursor(hdr *GPUCtrlHdr, hdrBuf []byte,
 func (vio *GPU) cmdMoveCursor(hdr *GPUCtrlHdr, hdrBuf []byte,
 	bufs [][]byte, writable []bool) (uint32, error) {
 
-	vio.Infof("cmdMoveCursor")
-
-	for idx, buf := range bufs {
-		vio.Infof("moveCursor: idx=%v, writable=%v:\n%s",
-			idx, writable[idx], hex.Dump(buf))
-		if writable[idx] {
-			hdr.Response(VIRTIO_GPU_RESP_OK_NODATA, buf[0:])
-		}
+	if len(bufs) > 0 && writable[0] {
+		hdr.Response(VIRTIO_GPU_RESP_OK_NODATA, bufs[0])
 	}
 
 	return 24, nil
