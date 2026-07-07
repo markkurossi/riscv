@@ -53,7 +53,7 @@ operating systems, and the RISC-V privileged architecture.
 
 ### Release 1.0
 
-- [ ] VirtIO
+- [x] VirtIO
   - [x] virtio-blk
   - [x] virtio-rng
   - [x] virtio-net
