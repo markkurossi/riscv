@@ -1305,6 +1305,10 @@ dispatch:
 			cpu.F[instr.Rd] = -(cpu.F[instr.Rs1] * cpu.F[instr.Rs2]) +
 				cpu.F[instr.Imm]
 
+		case isa.FnmaddD:
+			cpu.F[instr.Rd] = -(cpu.F[instr.Rs1] * cpu.F[instr.Rs2]) -
+				cpu.F[instr.Imm]
+
 		case isa.FsqrtD:
 			cpu.F[instr.Rd] = math.Sqrt(cpu.F[instr.Rs1])
 
