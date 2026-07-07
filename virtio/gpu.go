@@ -68,10 +68,9 @@ type GPU struct {
 	Width  int
 	Height int
 
-	lastX float64
-	lastY float64
-
 	InputListener InputListener
+	lastX         int
+	lastY         int
 
 	renderM     sync.Mutex
 	pending     bool
@@ -321,6 +320,9 @@ func (vio *GPU) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 		return 0, err
 	}
 	vio.Debugf("desc: %v", desc)
+	if vq.Index == 1 {
+		vio.Infof("desc: %v", desc)
+	}
 
 	if desc.Len < 24 {
 		return 0, fmt.Errorf("truncated virtio_gpu_ctrl_hdr: %v", desc.Len)
@@ -370,6 +372,13 @@ func (vio *GPU) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 		transferred, err = vio.cmdResourceFlush(hdr, chunk, bufs, writable)
 	case VIRTIO_GPU_CMD_RESOURCE_UNREF:
 		transferred, err = vio.cmdResourceUnref(hdr, chunk, bufs, writable)
+
+	case VIRTIO_GPU_CMD_UPDATE_CURSOR:
+		transferred, err = vio.cmdUpdateCursor(hdr, chunk, bufs, writable)
+
+	case VIRTIO_GPU_CMD_MOVE_CURSOR:
+		transferred, err = vio.cmdMoveCursor(hdr, chunk, bufs, writable)
+
 	default:
 		err = fmt.Errorf("%v: not implemented yet", hdr.Type)
 	}
@@ -478,7 +487,7 @@ const (
 
 /* success responses */
 const (
-	VIRTIO_GPU_RESP_OK_NODATA uint32 = iota + 0x1100
+	VIRTIO_GPU_RESP_OK_NODATA GPUCtrlType = iota + 0x1100
 	VIRTIO_GPU_RESP_OK_DISPLAY_INFO
 	VIRTIO_GPU_RESP_OK_CAPSET_INFO
 	VIRTIO_GPU_RESP_OK_CAPSET
@@ -489,12 +498,18 @@ const (
 
 /* error responses */
 const (
-	VIRTIO_GPU_RESP_ERR_UNSPEC uint32 = iota + 0x1200
+	VIRTIO_GPU_RESP_ERR_UNSPEC GPUCtrlType = iota + 0x1200
 	VIRTIO_GPU_RESP_ERR_OUT_OF_MEMORY
 	VIRTIO_GPU_RESP_ERR_INVALID_SCANOUT_ID
 	VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID
 	VIRTIO_GPU_RESP_ERR_INVALID_CONTEXT_ID
 	VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER
+)
+
+// Control header flags.
+const (
+	VIRTIO_GPU_FLAG_FENCE uint32 = 1 << iota
+	VIRTIO_GPU_FLAG_INFO_RING_IDX
 )
 
 type GPUCtrlHdr struct {
@@ -511,6 +526,15 @@ type GPUCtrlHdr struct {
 func (hdr *GPUCtrlHdr) String() string {
 	return fmt.Sprintf("%v: flags=%x, fenceID=%v, ctxID=%v, ringIdx=%v",
 		hdr.Type, hdr.Flags, hdr.FenceID, hdr.CtxID, hdr.RingIdx)
+}
+
+func (hdr *GPUCtrlHdr) Response(code GPUCtrlType, buf []byte) {
+	vioBO.PutUint32(buf[0:], uint32(code))
+
+	if hdr.Flags&VIRTIO_GPU_FLAG_FENCE != 0 {
+		vioBO.PutUint32(buf[4:], VIRTIO_GPU_FLAG_FENCE)
+		vioBO.PutUint64(buf[8:], hdr.FenceID)
+	}
 }
 
 func (vio *GPU) decodeHdr(data []byte) *GPUCtrlHdr {
@@ -555,7 +579,9 @@ func (vio *GPU) cmdGetDisplayInfo(hdr *GPUCtrlHdr, hdrBuf []byte, bufs [][]byte,
 		return 0, fmt.Errorf("%v: invalid output buffers", hdr.Type)
 	}
 	buf := bufs[0]
-	vioBO.PutUint32(buf[0:], VIRTIO_GPU_RESP_OK_DISPLAY_INFO)
+
+	hdr.Response(VIRTIO_GPU_RESP_OK_DISPLAY_INFO, buf[0:])
+
 	// struct virtio_gpu_display_one
 	vioBO.PutUint32(buf[24:], 0) // x
 	vioBO.PutUint32(buf[28:], 0) // y
@@ -598,7 +624,7 @@ func (vio *GPU) cmdResourceCreate2D(hdr *GPUCtrlHdr, hdrBuf []byte,
 	vio.resources[resource.ID] = resource
 
 	buf := bufs[0]
-	vioBO.PutUint32(buf[0:], VIRTIO_GPU_RESP_OK_NODATA)
+	hdr.Response(VIRTIO_GPU_RESP_OK_NODATA, buf)
 
 	return 24, nil
 }
@@ -638,7 +664,7 @@ func (vio *GPU) cmdResourceAttachBacking(hdr *GPUCtrlHdr, hdrBuf []byte,
 		}
 		resource.Pages = append(resource.Pages, buf)
 	}
-	vioBO.PutUint32(bufs[1][0:], VIRTIO_GPU_RESP_OK_NODATA)
+	hdr.Response(VIRTIO_GPU_RESP_OK_NODATA, bufs[1][0:])
 
 	return 24, nil
 }
@@ -674,7 +700,7 @@ func (vio *GPU) cmdSetScanout(hdr *GPUCtrlHdr, hdrBuf []byte,
 		vio.source = resource
 	}
 
-	vioBO.PutUint32(bufs[0][0:], VIRTIO_GPU_RESP_OK_NODATA)
+	hdr.Response(VIRTIO_GPU_RESP_OK_NODATA, bufs[0][0:])
 
 	return 24, nil
 }
@@ -690,7 +716,7 @@ func (vio *GPU) cmdTransferToHost2D(vq *Queue, hdr *GPUCtrlHdr, hdrBuf []byte,
 	if vio.pendingDone {
 		vio.pendingDone = false
 		vio.Debugf("completing pending cmdTransferToHost2D")
-		vioBO.PutUint32(bufs[0][0:], VIRTIO_GPU_RESP_OK_NODATA)
+		hdr.Response(VIRTIO_GPU_RESP_OK_NODATA, bufs[0][0:])
 		return 24, nil
 	}
 
@@ -793,7 +819,7 @@ func (vio *GPU) cmdResourceFlush(hdr *GPUCtrlHdr, hdrBuf []byte,
 	vio.frameDirty = true
 	glfw.PostEmptyEvent()
 
-	vioBO.PutUint32(bufs[0][0:], VIRTIO_GPU_RESP_OK_NODATA)
+	hdr.Response(VIRTIO_GPU_RESP_OK_NODATA, bufs[0][0:])
 
 	return 24, nil
 }
@@ -814,22 +840,61 @@ func (vio *GPU) cmdResourceUnref(hdr *GPUCtrlHdr, hdrBuf []byte,
 	}
 	delete(vio.resources, resourceID)
 
-	vioBO.PutUint32(bufs[0][0:], VIRTIO_GPU_RESP_OK_NODATA)
+	hdr.Response(VIRTIO_GPU_RESP_OK_NODATA, bufs[0][0:])
+
+	return 24, nil
+}
+
+func (vio *GPU) cmdUpdateCursor(hdr *GPUCtrlHdr, hdrBuf []byte,
+	bufs [][]byte, writable []bool) (uint32, error) {
+
+	vio.Infof("cmdUpdateCursor")
+
+	for idx, buf := range bufs {
+		vio.Infof("updateCursor: idx=%v, writable=%v:\n%s",
+			idx, writable[idx], hex.Dump(buf))
+		if writable[idx] {
+			hdr.Response(VIRTIO_GPU_RESP_OK_NODATA, buf[0:])
+		}
+	}
+
+	return 24, nil
+}
+
+func (vio *GPU) cmdMoveCursor(hdr *GPUCtrlHdr, hdrBuf []byte,
+	bufs [][]byte, writable []bool) (uint32, error) {
+
+	vio.Infof("cmdMoveCursor")
+
+	for idx, buf := range bufs {
+		vio.Infof("moveCursor: idx=%v, writable=%v:\n%s",
+			idx, writable[idx], hex.Dump(buf))
+		if writable[idx] {
+			hdr.Response(VIRTIO_GPU_RESP_OK_NODATA, buf[0:])
+		}
+	}
 
 	return 24, nil
 }
 
 func (vio *GPU) cursorPosCallback(w *glfw.Window, x, y float64) {
-	vio.Tracef("cursor: x=%v, y=%v", int(x), int(y))
-	dx := int32(x - vio.lastX)
-	dy := int32(y - vio.lastY)
+	ix := int(x)
+	iy := int(y)
 
-	vio.lastX = x
-	vio.lastY = y
-
-	if vio.InputListener != nil && (dx != 0 || dy != 0) {
-		vio.InputListener.OnMouseMove(dx, dy)
+	if ix == vio.lastX && iy == vio.lastY {
+		return
 	}
+	vio.lastX = ix
+	vio.lastY = iy
+
+	vio.Tracef("cursor: x=%v, y=%v", ix, iy)
+
+	if vio.InputListener == nil ||
+		ix < 0 || ix >= vio.Width || iy < 0 || iy >= vio.Height {
+		return
+	}
+
+	vio.InputListener.OnMouseMove(int32(ix), int32(iy))
 }
 
 func (vio *GPU) mouseButtonCallback(w *glfw.Window, button glfw.MouseButton,

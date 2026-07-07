@@ -69,7 +69,9 @@ $ LC_ALL=C startx xterm
 $ xdotool windowfocus 6291468
 ```
 
-2c0e4bc660:  62e7f14f   Instr: Op=invalid      # decode failed: group NMADD not implemented yet: raw=62e7f14f
+virtio-gpu: ERROR: execute descriptor chain: VIRTIO_GPU_CMD_UPDATE_CURSOR: not implemented yet
+
+- remove .twmrc
 
 ### System emulation and supervisor mode
 

@@ -26,6 +26,11 @@ const (
 type Input struct {
 	MMIO
 
+	Width  int
+	Height int
+	absX   []byte
+	absY   []byte
+
 	sel    uint8
 	subsel uint8
 	size   uint8
@@ -42,13 +47,13 @@ type InputEvent struct {
 }
 
 func NewInput(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
-	mem *memory.Memory) *Input {
+	mem *memory.Memory, width, height int) *Input {
 
 	vio := &Input{
 		MMIO: MMIO{
 			Log: logger.Log{
 				Name:  "virtio-input",
-				Level: logger.Trace,
+				Level: logger.Info,
 			},
 			DeviceID: InputDeviceID,
 			Hart:     hart,
@@ -58,10 +63,28 @@ func NewInput(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 			IRQ:      irq,
 			Mem:      mem,
 		},
+		Width:  width,
+		Height: height,
 	}
 
 	vio.Init(2)
 	vio.MMIO.Handler = vio
+
+	// struct virtio_input_absinfo {
+	//   le32  min;
+	//   le32  max;
+	//   le32  fuzz;
+	//   le32  flat;
+	//   le32  res;
+	// };
+
+	vio.Infof("screen: %v\u00d7%v", vio.Width, vio.Height)
+
+	vio.absX = make([]byte, 20)
+	vioBO.PutUint32(vio.absX[4:], uint32(vio.Width-1))
+
+	vio.absY = make([]byte, 20)
+	vioBO.PutUint32(vio.absY[4:], uint32(vio.Height-1))
 
 	return vio
 }
@@ -106,6 +129,10 @@ func (vio *Input) ExecuteDescriptorChain(vq *Queue, idx uint16) (
 		vioBO.PutUint16(buf[0:], ev.Type)
 		vioBO.PutUint16(buf[2:], ev.Code)
 		vioBO.PutUint32(buf[4:], ev.Value)
+
+		vio.Debugf("vq%v: wrote 1 event [%vB], %v events left in input queue",
+			vq.Index, desc.Len, len(vio.events))
+
 		return desc.Len, nil
 
 	case 1: // statusq
@@ -141,14 +168,24 @@ var inputRegs = map[uint64]string{
 func (vio *Input) cfg() ([]byte, int) {
 	var data []byte
 	switch uint16(vio.sel)<<8 | uint16(vio.subsel) {
+	case 0x0000: // VIRTIO_INPUT_CFG_UNSET
 	case 0x0100: // VIRTIO_INPUT_CFG_ID_NAME
 		data = []byte("GoEMU Input Device")
 	case 0x0200: // VIRTIO_INPUT_CFG_ID_SERIAL
 		data = []byte("424242")
+	case 0x1100: // VIRTIO_INPUT_CFG_EV_BITS | 0 - supported categories
+		data = inputCategoriesBitmap[:]
 	case 0x1101: // VIRTIO_INPUT_CFG_EV_BITS | EV_KEY
 		data = inputKeyBitmap[:]
-	case 0x1102: // VIRTIO_INPUT_CFG_EV_BITS | EV_REL
-		data = inputRelBitmap[:]
+	case 0x1103: // VIRTIO_INPUT_CFG_EV_BITS | EV_ABS
+		data = inputAbsBitmap[:]
+	case 0x1200: // VIRTIO_INPUT_CFG_ABS_INFO | ABS_X
+		data = vio.absX
+	case 0x1201: // VIRTIO_INPUT_CFG_ABS_INFO | ABS_Y
+		data = vio.absY
+	default:
+		vio.Infof("cfg: skipping: sel=%02x, subsel=%02x",
+			vio.sel, vio.subsel)
 	}
 
 	return data, len(data)
@@ -165,13 +202,11 @@ func (vio *Input) Load8(paddr uint64) (uint8, error) {
 	case 0x101:
 		return vio.subsel, nil
 	case 0x102:
-		vio.Debugf("*** Load8: offset=%x", offset)
 		return uint8(size), nil
 
 	default:
-		if 0x108 <= offset && offset < 0x108+128 {
+		if 0x108 <= offset && offset+1 <= 0x108+uint64(size) {
 			offset -= 0x108
-			vio.Debugf("*** Load8: cfg[%x]", offset)
 			return cfg[offset], nil
 		}
 
@@ -182,9 +217,11 @@ func (vio *Input) Load8(paddr uint64) (uint8, error) {
 func (vio *Input) Load16(paddr uint64) (uint16, error) {
 	offset := paddr - vio.Start
 
-	if offset >= 0x100 {
-		vio.Debugf("*** Load16: offset=%x", offset)
-		return 0, nil
+	cfg, size := vio.cfg()
+
+	if 0x108 <= offset && offset+2 <= 0x108+uint64(size) {
+		offset -= 0x108
+		return vioBO.Uint16(cfg[offset:]), nil
 	}
 	return vio.MMIO.Load16(paddr)
 }
@@ -192,9 +229,11 @@ func (vio *Input) Load16(paddr uint64) (uint16, error) {
 func (vio *Input) Load32(paddr uint64) (uint32, error) {
 	offset := paddr - vio.Start
 
-	if offset >= 0x100 {
-		vio.Debugf("*** Load32: offset=%x", offset)
-		return 0, nil
+	cfg, size := vio.cfg()
+
+	if 0x108 <= offset && offset+4 <= 0x108+uint64(size) {
+		offset -= 0x108
+		return vioBO.Uint32(cfg[offset:]), nil
 	}
 	return vio.MMIO.Load32(paddr)
 }
@@ -202,9 +241,11 @@ func (vio *Input) Load32(paddr uint64) (uint32, error) {
 func (vio *Input) Load64(paddr uint64) (uint64, error) {
 	offset := paddr - vio.Start
 
-	if offset >= 0x100 {
-		vio.Debugf("*** Load64: offset=%x", offset)
-		return 0, nil
+	cfg, size := vio.cfg()
+
+	if 0x108 <= offset && offset+8 <= 0x108+uint64(size) {
+		offset -= 0x108
+		return vioBO.Uint64(cfg[offset:]), nil
 	}
 	return vio.MMIO.Load64(paddr)
 }
@@ -234,7 +275,7 @@ func (vio *Input) Store8(paddr uint64, v uint8) error {
 func (vio *Input) Store16(paddr uint64, v uint16) error {
 	offset := paddr - vio.Start
 	if offset >= 0x100 {
-		vio.Debugf("*** Store16(%x,%v)", paddr, v)
+		vio.Errorf("Store16(%x,%v)", paddr, v)
 	}
 	return vio.MMIO.Store16(paddr, v)
 }
@@ -242,7 +283,7 @@ func (vio *Input) Store16(paddr uint64, v uint16) error {
 func (vio *Input) Store32(paddr uint64, v uint32) error {
 	offset := paddr - vio.Start
 	if offset >= 0x100 {
-		vio.Debugf("*** Store32(%x[0x%03x],%v)", paddr, offset, v)
+		vio.Errorf("Store32(%x[0x%03x],%v)", paddr, offset, v)
 	}
 	return vio.MMIO.Store32(paddr, v)
 }
@@ -250,7 +291,7 @@ func (vio *Input) Store32(paddr uint64, v uint32) error {
 func (vio *Input) Store64(paddr uint64, v uint64) error {
 	offset := paddr - vio.Start
 	if offset >= 0x100 {
-		vio.Debugf("*** Store64(%x,%v)", paddr, v)
+		vio.Errorf("Store64(%x,%v)", paddr, v)
 	}
 	return vio.MMIO.Store64(paddr, v)
 }
@@ -262,7 +303,7 @@ type InputListener interface {
 	OnButtonRelease(key MouseButton)
 	OnButtonPress(key MouseButton)
 	OnButtonRepeat(key MouseButton)
-	OnMouseMove(dx, dy int32)
+	OnMouseMove(x, y int32)
 }
 
 // OnKeyRelease implements InputListener.OnKeyRelease.
@@ -296,7 +337,7 @@ func (vio *Input) OnButtonRepeat(button MouseButton) {
 }
 
 // OnMouseMove implements InputListener.OnMouseMove
-func (vio *Input) OnMouseMove(dx, dy int32) {
+func (vio *Input) OnMouseMove(x, y int32) {
 	vio.M.Lock()
 	defer vio.M.Unlock()
 
@@ -304,16 +345,10 @@ func (vio *Input) OnMouseMove(dx, dy int32) {
 		return
 	}
 
-	if dx != 0 {
-		vio.addEvent(uint16(EV_REL), REL_X, uint32(dx))
-	}
-	if dy != 0 {
-		vio.addEvent(uint16(EV_REL), REL_Y, uint32(dy))
-	}
-	if dx != 0 || dy != 0 {
-		vio.addEvent(uint16(EV_SYN), SYN_REPORT, 0)
-		vio.ProcessQueue(0)
-	}
+	vio.addEvent(uint16(EV_ABS), ABS_X, uint32(x))
+	vio.addEvent(uint16(EV_ABS), ABS_Y, uint32(y))
+	vio.addEvent(uint16(EV_SYN), SYN_REPORT, 0)
+	vio.ProcessQueue(0)
 }
 
 func (vio *Input) keyEvent(code uint16, value uint32) {
@@ -653,10 +688,49 @@ const (
 	REL_MISC   uint16 = 0x09
 )
 
+const (
+	ABS_X           uint16 = 0x00
+	ABS_Y           uint16 = 0x01
+	ABS_Z           uint16 = 0x02
+	ABS_RX          uint16 = 0x03
+	ABS_RY          uint16 = 0x04
+	ABS_RZ          uint16 = 0x05
+	ABS_THROTTLE    uint16 = 0x06
+	ABS_RUDDER      uint16 = 0x07
+	ABS_WHEEL       uint16 = 0x08
+	ABS_GAS         uint16 = 0x09
+	ABS_BRAKE       uint16 = 0x0a
+	ABS_HAT0X       uint16 = 0x10
+	ABS_HAT0Y       uint16 = 0x11
+	ABS_HAT1X       uint16 = 0x12
+	ABS_HAT1Y       uint16 = 0x13
+	ABS_HAT2X       uint16 = 0x14
+	ABS_HAT2Y       uint16 = 0x15
+	ABS_HAT3X       uint16 = 0x16
+	ABS_HAT3Y       uint16 = 0x17
+	ABS_PRESSURE    uint16 = 0x18
+	ABS_DISTANCE    uint16 = 0x19
+	ABS_TILT_X      uint16 = 0x1a
+	ABS_TILT_Y      uint16 = 0x1b
+	ABS_TOOL_WIDTH  uint16 = 0x1c
+	ABS_VOLUME      uint16 = 0x20
+	ABS_PROFILE     uint16 = 0x21
+	ABS_SND_PROFILE uint16 = 0x22
+	ABS_MISC        uint16 = 0x28
+)
+
+var inputCategoriesBitmap = [128]byte{
+	0x0a, // EV_KEY | EV_ABS
+}
+
 var inputKeyBitmap [128]byte
 
 var inputRelBitmap = [128]byte{
 	0x03, 0x01,
+}
+
+var inputAbsBitmap = [128]byte{
+	0x03,
 }
 
 func setBit(v uint16) {
