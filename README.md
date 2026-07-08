@@ -48,6 +48,7 @@ operating systems, and the RISC-V privileged architecture.
 ![Linux Boot](docs/linux-shell.png)
 ![NetBSD](docs/netbsd.png)
 ![FreeBSD](docs/freebsd.png)
+![X11](docs/x11.png)
 
 ## TODO
 
