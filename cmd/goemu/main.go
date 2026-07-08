@@ -76,6 +76,7 @@ func main() {
 	cooked := flag.Bool("cooked", false, "don't enable raw terminal mode")
 	csr7c2 := flag.String("csr7c2", ",csr7c2", "CSR7c2 CPU profiling filename")
 	gpu := flag.String("gpu", "", "graphics device")
+	htif := flag.Bool("htif", false, "enable host target interface")
 
 	flag.Var(&argDrives, "drive", "configure drive")
 	flag.Var(&argDevices, "device", "configure device")
@@ -164,7 +165,7 @@ func main() {
 	// If any critical system emulation parameters are set, start
 	// system emulation.
 	if systemConfig.Defined() {
-		err := systemEmulation(params, systemConfig, rest)
+		err := systemEmulation(*htif, params, systemConfig, rest)
 		if err != nil {
 			log.Fatal(err)
 		}

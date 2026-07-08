@@ -50,7 +50,7 @@ const (
 	PLICSize = 0x400000
 )
 
-func systemEmulation(params kernel.Params, cfg *SystemConfig,
+func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 	args []string) error {
 
 	var ramSize uint64 = 0x20000000
@@ -214,6 +214,8 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig,
 
 	var data []byte
 	var err error
+	var entrypoint, entry uint64
+	var htifDev *dev.HTIF
 
 	if len(cfg.BIOS) > 0 {
 		data, err = os.ReadFile(cfg.BIOS)
@@ -221,12 +223,22 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig,
 			return fmt.Errorf("failed to read BIOS: %w", err)
 		}
 		copy(mem.RAM[mem.Offset(OfsBIOS):], data)
+		entrypoint = OfsBIOS
 	}
 
 	if len(cfg.Kernel) > 0 {
-		err = loadKernel(cfg.Kernel, mem)
+		htifDev, entry, err = loadKernel(core, mem, cfg.Kernel)
 		if err != nil {
 			return fmt.Errorf("failed to read kernel: %w", err)
+		}
+		if len(cfg.BIOS) == 0 {
+			entrypoint = entry
+		}
+		if htif {
+			if htifDev == nil {
+				return fmt.Errorf("no HTIF device")
+			}
+			core.MMU.Overlay = htifDev
 		}
 	}
 
@@ -245,7 +257,7 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig,
 
 	core.X[isa.A0] = 0
 	core.X[isa.A1] = OfsDTB
-	core.PC = OfsBIOS
+	core.PC = entrypoint
 
 	go uart.Run()
 
@@ -264,26 +276,31 @@ func systemEmulation(params kernel.Params, cfg *SystemConfig,
 	for _, vio := range virtioDevices {
 		vio.Stats()
 	}
+	if htif && htifDev.ExitStatus != 1 {
+		fmt.Printf("HTIF: assertion %v\n", htifDev.ExitStatus>>1)
+	}
 	return nil
 }
 
-func loadKernel(file string, mem *memory.Memory) error {
+func loadKernel(hart *cpu.CPU, mem *memory.Memory, file string) (
+	*dev.HTIF, uint64, error) {
+
 	data, err := os.ReadFile(file)
 	if err != nil {
-		return err
+		return nil, 0, err
 	}
 
 	// Is it ELF?
 	if len(data) < 4 || !bytes.Equal(data[:4], []byte{0x7f, 0x45, 0x4c, 0x46}) {
 		// Raw image.
 		copy(mem.RAM[mem.Offset(OfsKernel):], data)
-		return nil
+		return nil, OfsKernel, nil
 	}
 
 	// ELF kernel.
 	f, err := elf.NewFile(bytes.NewReader(data))
 	if err != nil {
-		return err
+		return nil, 0, err
 	}
 	defer f.Close()
 
@@ -295,17 +312,56 @@ func loadKernel(file string, mem *memory.Memory) error {
 			fmt.Printf("ELF: loading %v bytes to %x\n", prog.Memsz, prog.Paddr)
 			if !mem.Contains(prog.Paddr) ||
 				!mem.Contains(prog.Paddr+prog.Memsz-1) {
-				return fmt.Errorf("prog out of range: %x...%x",
+				return nil, 0, fmt.Errorf("prog out of range: %x...%x",
 					prog.Paddr, prog.Paddr+prog.Memsz)
 			}
 			n, err := prog.ReadAt(mem.RAM[mem.Offset(prog.Paddr):], 0)
 			if n == 0 && err != nil {
-				return err
+				return nil, 0, err
 			}
 		}
 	}
 
-	return nil
+	symbols, err := f.Symbols()
+	if err != nil {
+		return nil, 0, err
+	}
+	var toAddr, toSize, fromAddr, fromSize uint64
+	for _, sym := range symbols {
+		switch sym.Name {
+		case "tohost":
+			toAddr = sym.Value
+			toSize = sym.Size
+		case "fromhost":
+			fromAddr = sym.Value
+			fromSize = sym.Size
+		}
+	}
+	if false {
+		fmt.Printf("Entry: %x\n", f.Entry)
+		fmt.Printf("Symbols:\n")
+		fmt.Printf(" - tohost  : %x/%x\n", toAddr, toSize)
+		fmt.Printf(" - fromhost: %x/%x\n", fromAddr, fromSize)
+	}
+
+	if toAddr == 0 {
+		return nil, f.Entry, nil
+	}
+
+	var start uint64
+	var size uint64
+
+	if toAddr < fromAddr {
+		start = toAddr
+		size = fromAddr + fromSize - toAddr
+	} else {
+		start = fromAddr
+		size = toAddr + toSize - fromAddr
+	}
+
+	htif := dev.NewHTIF(hart, start, size, toAddr, fromAddr, mem)
+
+	return htif, f.Entry, nil
 }
 
 func makeDTB(initrdSize uint64, mem *memory.Memory,
