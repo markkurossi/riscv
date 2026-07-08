@@ -628,8 +628,8 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = And
 			default:
 				return instr,
-					fmt.Errorf("invalid group OP funct3: %v, raw=%08x",
-						funct3, raw)
+					fmt.Errorf("%v/%07b/%03b: raw=%08x",
+						group, funct7, funct3, raw)
 			}
 
 			// The 'M' Extension (Multiply/Divide)
@@ -681,16 +681,18 @@ func Decode(raw uint32) (Instr, error) {
 					fmt.Errorf("zicond: funct3=%03b, raw=%08x", funct3, raw)
 			}
 
-		case 32:
+		case 0b0100000:
 			switch funct3 {
-			case 0:
+			case 0b000:
 				instr.Op = Sub
-			case 5:
+			case 0b101:
 				instr.Op = Sra
+			case 0b111:
+				instr.Op = Andn
 			default:
 				return instr,
-					fmt.Errorf("invalid group OP funct3: %v, raw=%08x",
-						funct3, raw)
+					fmt.Errorf("%v/%07b/%03b: raw=%08x",
+						group, funct7, funct3, raw)
 			}
 
 			// Zba (Address Generation Instructions) extension.
@@ -710,8 +712,7 @@ func Decode(raw uint32) (Instr, error) {
 			}
 
 		default:
-			return instr, fmt.Errorf("group OP funct7: %v, raw=%08x",
-				funct7, raw)
+			return instr, fmt.Errorf("%v/%07b: raw=%08x", group, funct7, raw)
 		}
 
 	case GroupOP32:

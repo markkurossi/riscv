@@ -494,9 +494,9 @@ func csrName(csr int) string {
 }
 
 func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
-	if cpu.Mode() < csr.Privilege() && false {
+	if cpu.Mode() < csr.Privilege() {
 		return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
-			fmt.Errorf("GetCSR(%x), mode=%v", csr, cpu.Mode()))
+			fmt.Errorf("GetCSR(%v), mode=%v", csr, cpu.Mode()))
 	}
 	// Handle read-only CSRs here by returning the fixed or computed
 	// value.
@@ -504,6 +504,12 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 	var v uint64
 
 	switch csr {
+	case CsrFcsr:
+		if cpu.mstatus.FS() == isa.RegOff && checkFSRegOff {
+			return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
+				fmt.Errorf("read fcsr when FS is off"))
+		}
+
 	case CsrMstatus:
 		v = uint64(cpu.mstatus)
 
@@ -602,25 +608,31 @@ func (cpu *CPU) SetCSR(csr CSR, v uint64) error {
 }
 
 func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
-
 	if debugCSR {
 		log.Printf("SetCSR(%v, %v)", csr, v)
 	}
 
 	if cpu.Mode() < csr.Privilege() && false {
 		return cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
-			fmt.Errorf("SetCSR(%x)=%v, mode=%v", csr, v, cpu.Mode()))
+			fmt.Errorf("SetCSR(%v)=%v, mode=%v", csr, v, cpu.Mode()))
 	}
 	if csr.ReadOnly() {
 		return cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
-			fmt.Errorf("SetCSR(%x)=%v: read-only", csr, v))
+			fmt.Errorf("SetCSR(%v)=%v: read-only", csr, v))
 	}
 
 	// Handle read-only and functional CSRs here by ignoring update or
 	// by updating CPU state accordingly.
 	switch csr {
 	case CsrMstatus:
-		cpu.mstatus = isa.Mstatus(v)
+		if cpu.mstatus.FS() == isa.RegOff && checkFSRegOff {
+			return cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
+				fmt.Errorf("write fcsr when FS is off"))
+		}
+
+		cpu.mstatus = cpu.mstatus&isa.MConstMask |
+			isa.Mstatus(v)&^isa.MConstMask
+		cpu.updateMstatusSD()
 
 	case CsrMisa:
 		cpu.CSR[csr] = v
@@ -631,6 +643,7 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 	case CsrSstatus:
 		cpu.mstatus = (cpu.mstatus & ^isa.SstatusMask) |
 			(isa.Mstatus(v) & isa.SstatusMask)
+		cpu.updateMstatusSD()
 
 	case CsrStimecmp:
 		cpu.CSR[csr] = v
@@ -698,6 +711,14 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 	}
 
 	return nil
+}
+
+func (cpu *CPU) updateMstatusSD() {
+	if cpu.mstatus.VS() == isa.RegDirty || cpu.mstatus.FS() == isa.RegDirty {
+		cpu.mstatus.SetSD(true)
+	} else {
+		cpu.mstatus.SetSD(false)
+	}
 }
 
 func (cpu *CPU) Mstatus() isa.Mstatus {

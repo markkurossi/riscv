@@ -22,7 +22,12 @@ import (
 )
 
 var skip = map[string]bool{
-	"Makefile":             true,
+	"Makefile":                         true,
+	"hypervisor-p-2-stage_translation": true,
+	"hypervisor-p-2-stage_translation_implicit_load_error":           true,
+	"hypervisor-p-2-stage_translation_implicit_load_error_hs":        true,
+	"hypervisor-svadu-p-2-stage_translation_implicit_store_error":    true,
+	"hypervisor-svadu-p-2-stage_translation_implicit_store_error_hs": true,
 	"rv64si-p-dirty":       true,
 	"rv64ssvnapot-p-napot": true,
 }

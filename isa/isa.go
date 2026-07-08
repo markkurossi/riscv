@@ -433,15 +433,15 @@ const (
 	AmominuD
 	AmomaxuD
 
-	// Floating point loads/stores.
+	// Floating point extension.
 
+	// Floating point loads/stores.
 	Flw
 	Fld
 	Fsw
 	Fsd
 
 	// Floating point arithmetic (F/D).
-
 	FaddS
 	FaddD
 	FsubS
@@ -542,6 +542,7 @@ const (
 
 	// Zba & Zbb Bit-Manipulation Extensions.
 	AddUw
+	Andn
 	Maxu
 	Sh1add
 	Sh2add
@@ -1110,6 +1111,9 @@ var Operands = map[Op]OpInfo{
 
 	AddUw: OpInfo{
 		Name: "add.uw",
+	},
+	Andn: OpInfo{
+		Name: "andn",
 	},
 	Maxu: OpInfo{
 		Name: "maxu",

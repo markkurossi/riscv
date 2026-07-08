@@ -93,19 +93,15 @@ func New(params kernel.Params) (*Emulator, error) {
 		}
 	}
 
-	cpu := &cpu.CPU{
-		Trace: params.CPUtrace,
-		MMU: &mmu.MMU{
-			Mem: mem,
-		},
-	}
-	cpu.SetMode(isa.ModeU)
-	cpu.MMU.Hart = cpu
-	cpu.MMU.SetSatp(satp)
-	cpu.X[isa.Sp] = stackTop
+	hart := cpu.New(mem)
+	hart.Trace = params.CPUtrace
+	hart.SetMode(isa.ModeU)
+	hart.MMU.SetSatp(satp)
+
+	hart.X[isa.Sp] = stackTop
 
 	emu := &Emulator{
-		CPU:         cpu,
+		CPU:         hart,
 		Mem:         mem,
 		ProgBase:    0x400000,
 		ProgBaseEnd: 0x400000,
@@ -113,7 +109,7 @@ func New(params kernel.Params) (*Emulator, error) {
 		Kernel: kernel,
 	}
 
-	cpu.TrapHandler = emu.TrapHandler
+	hart.TrapHandler = emu.TrapHandler
 
 	return emu, nil
 }

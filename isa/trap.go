@@ -63,6 +63,9 @@ const (
 		Mstatus(1)<<MsSDT |
 		Mstatus(3)<<MsUXL |
 		Mstatus(1)<<MsSD
+
+	MConstMask = Mstatus(0) |
+		Mstatus(3)<<MsUXL
 )
 
 // SIE returns the global supervisor interrupt enable flag.
@@ -169,6 +172,17 @@ func (m *Mstatus) SetMPP(mode PrivilegeMode) {
 	*m |= Mstatus(mode&0b11) << MsMPP
 }
 
+// FS returns the floating point extension state.
+func (m Mstatus) FS() RegStatus {
+	return RegStatus(m >> MsFS & 0b11)
+}
+
+// SetFS sets the floating point extension state.
+func (m *Mstatus) SetFS(s RegStatus) {
+	*m &^= 0b11 << MsFS
+	*m |= Mstatus(s&0b11) << MsFS
+}
+
 // SUM returns the permit Supervisor User Memory access flag.
 func (m Mstatus) SUM() bool {
 	return m&(1<<MsSUM) != 0
@@ -194,6 +208,20 @@ func (m *Mstatus) SetMXR(v bool) {
 		*m |= 1 << MsMXR
 	} else {
 		*m &^= 1 << MsMXR
+	}
+}
+
+// SD returns the combined dirty status flag.
+func (m Mstatus) SD() bool {
+	return m&(1<<MsSD) != 0
+}
+
+// SetSD sets the combined dirty status flag.
+func (m *Mstatus) SetSD(v bool) {
+	if v {
+		*m |= 1 << MsSD
+	} else {
+		*m &^= 1 << MsSD
 	}
 }
 

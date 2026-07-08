@@ -155,7 +155,8 @@ func (cpu *CPU) HandleTrap(trap *isa.Trap) error {
 }
 
 func (cpu *CPU) Dump(epc uint64) {
-	fmt.Printf("CPU: 0 Mode: %v IC: %v\r\n", cpu.mode, cpu.Instret)
+	fmt.Printf("CPU: 0 Mode: %v IC: %v Mstatus: %x\r\n",
+		cpu.mode, cpu.Instret, cpu.mstatus)
 
 	if cpu.Symtab != nil {
 		entry, mapped := cpu.FuncName(epc)

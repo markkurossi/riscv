@@ -89,11 +89,13 @@ type CPU struct {
 
 func New(mem *memory.Memory) *CPU {
 	cpu := &CPU{
-		vpu: NewVPU(),
+		mstatus: isa.Mstatus(uint64(2) << isa.MsUXL),
+		vpu:     NewVPU(),
 		MMU: &mmu.MMU{
 			Mem: mem,
 		},
 	}
+	cpu.mstatus.SetFS(isa.RegInitial)
 	cpu.c = sync.NewCond(&cpu.m)
 	cpu.MMU.Hart = cpu
 
@@ -532,52 +534,12 @@ dispatch:
 				cpu.CSR[CsrMip] |= isa.IntSTIP
 			}
 
-		case isa.Fld:
-			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			v, err := cpu.MMU.Load64(addr)
-			if err != nil {
-				return err
-			}
-			cpu.F[instr.Rd] = math.Float64frombits(v)
-
-		case isa.Flw:
-			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			v32, err := cpu.MMU.Load32(addr)
-			if err != nil {
-				return err
-			}
-			f32 := math.Float32frombits(v32)
-			cpu.F[instr.Rd] = float64(f32)
-
-		case isa.Fsd:
-			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			v := math.Float64bits(cpu.F[instr.Rs2])
-			if err := cpu.MMU.Store64(addr, v); err != nil {
-				return err
-			}
-			cpu.ReservationValid = false
-
-		case isa.Fsw:
-			addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
-			v := math.Float32bits(float32(cpu.F[instr.Rs2]))
-			if err := cpu.MMU.Store32(addr, uint32(v)); err != nil {
-				return err
-			}
-			cpu.ReservationValid = false
-
 		case isa.Fence:
 
 		case isa.SfenceVMA:
 			cpu.MMU.FlushTLB()
 			cpu.codePagenum = 0
 			cpu.ReservationValid = false
-
-		case isa.FeqS:
-			if float32(cpu.F[instr.Rs1]) == float32(cpu.F[instr.Rs2]) {
-				cpu.X[instr.Rd] = 1
-			} else {
-				cpu.X[instr.Rd] = 0
-			}
 
 		case isa.Jal:
 			cpu.X[instr.Rd] = cpu.PC + uint64(size)
@@ -908,6 +870,7 @@ dispatch:
 			if err != nil {
 				return err
 			}
+			// If zimm is zero, csrrsi is read-only.
 			if instr.Rs1 != isa.Zero {
 				err = cpu.SetCSRX(csr, t & ^uint64(instr.Rs1), raw, instr)
 				if err != nil {
@@ -922,9 +885,12 @@ dispatch:
 			if err != nil {
 				return err
 			}
-			err = cpu.SetCSRX(csr, t|uint64(instr.Rs1), raw, instr)
-			if err != nil {
-				return err
+			// If zimm is zero, csrrsi is read-only.
+			if instr.Rs1 != 0 {
+				err = cpu.SetCSRX(csr, t|uint64(instr.Rs1), raw, instr)
+				if err != nil {
+					return err
+				}
 			}
 			cpu.X[instr.Rd] = t
 
@@ -944,10 +910,15 @@ dispatch:
 
 		case isa.Csrrwi:
 			csr := CSR(instr.Imm)
+			oldCSR, err := cpu.GetCSR(csr) // 1. Capture old CSR value
+			if err != nil {
+				return err
+			}
 			err = cpu.SetCSRX(csr, uint64(instr.Rs1), raw, instr)
 			if err != nil {
 				return err
 			}
+			cpu.X[instr.Rd] = oldCSR
 
 			// Atomic (A extension).
 
@@ -1267,271 +1238,6 @@ dispatch:
 			}
 			cpu.ReservationValid = false
 
-			// Floating point extension.
-
-		case isa.FaddD:
-			cpu.F[instr.Rd] = cpu.F[instr.Rs1] + cpu.F[instr.Rs2]
-
-		case isa.FaddS:
-			cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]) +
-				float32(cpu.F[instr.Rs2]))
-
-		case isa.FsubD:
-			cpu.F[instr.Rd] = cpu.F[instr.Rs1] - cpu.F[instr.Rs2]
-
-		case isa.FsubS:
-			cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]) -
-				float32(cpu.F[instr.Rs2]))
-
-		case isa.FmulD:
-			cpu.F[instr.Rd] = cpu.F[instr.Rs1] * cpu.F[instr.Rs2]
-
-		case isa.FmulS:
-			cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]) *
-				float32(cpu.F[instr.Rs2]))
-
-		case isa.FdivD:
-			cpu.F[instr.Rd] = cpu.F[instr.Rs1] / cpu.F[instr.Rs2]
-
-		case isa.FdivS:
-			cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]) /
-				float32(cpu.F[instr.Rs2]))
-
-		case isa.FmsubD:
-			cpu.F[instr.Rd] = cpu.F[instr.Rs1]*cpu.F[instr.Rs2] -
-				cpu.F[instr.Imm]
-
-		case isa.FnmsubD:
-			cpu.F[instr.Rd] = -(cpu.F[instr.Rs1] * cpu.F[instr.Rs2]) +
-				cpu.F[instr.Imm]
-
-		case isa.FnmaddD:
-			cpu.F[instr.Rd] = -(cpu.F[instr.Rs1] * cpu.F[instr.Rs2]) -
-				cpu.F[instr.Imm]
-
-		case isa.FsqrtD:
-			cpu.F[instr.Rd] = math.Sqrt(cpu.F[instr.Rs1])
-
-		case isa.FleD:
-			if cpu.F[instr.Rs1] <= cpu.F[instr.Rs2] {
-				cpu.X[instr.Rd] = 1
-			} else {
-				cpu.X[instr.Rd] = 0
-			}
-
-		case isa.FltD:
-			if cpu.F[instr.Rs1] < cpu.F[instr.Rs2] {
-				cpu.X[instr.Rd] = 1
-			} else {
-				cpu.X[instr.Rd] = 0
-			}
-
-		case isa.FeqD:
-			if cpu.F[instr.Rs1] == cpu.F[instr.Rs2] {
-				cpu.X[instr.Rd] = 1
-			} else {
-				cpu.X[instr.Rd] = 0
-			}
-
-		case isa.FmvDX:
-			cpu.F[instr.Rd] = math.Float64frombits(cpu.X[instr.Rs1])
-
-		case isa.FmvWX:
-			v := uint32(cpu.X[instr.Rs1])
-			cpu.F[instr.Rd] = float64(math.Float32frombits(v))
-
-		case isa.FmvXD:
-			cpu.X[instr.Rd] = math.Float64bits(cpu.F[instr.Rs1])
-
-		case isa.FmvXW:
-			cpu.X[instr.Rd] = uint64(int64(int32(
-				math.Float32bits(float32(cpu.F[instr.Rs1])))))
-
-		case isa.FclassD:
-			cpu.X[instr.Rd] = fclassD(cpu.F[instr.Rs1])
-
-		case isa.FclassS:
-			cpu.X[instr.Rd] = uint64(fclassS(float32(cpu.F[instr.Rs1])))
-
-		case isa.FmaddS:
-			// Imm is Rs3
-			cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1])*
-				float32(cpu.F[instr.Rs2]) + float32(cpu.F[instr.Imm]))
-
-		case isa.FmaddD:
-			// Imm is Rs3
-			cpu.F[instr.Rd] = cpu.F[instr.Rs1]*cpu.F[instr.Rs2] +
-				cpu.F[instr.Imm]
-
-		case isa.FcvtDL:
-			// XXX The rounding mode (RM) is specified in the fcsr
-			// (Floating-point Control and Status Register)
-			cpu.F[instr.Rd] = float64(int64(cpu.X[instr.Rs1]))
-
-		case isa.FcvtDLU:
-			// XXX The rounding mode (RM) is specified in the fcsr
-			// (Floating-point Control and Status Register)
-			cpu.F[instr.Rd] = float64(cpu.X[instr.Rs1])
-
-		case isa.FcvtDWU:
-			cpu.F[instr.Rd] = float64(uint32(cpu.X[instr.Rs1]))
-
-		case isa.FcvtLD:
-			// XXX If the value is out of range, fcsr.fflags.NV is set
-			// to 1
-			f := cpu.F[instr.Rs1]
-			var v uint64
-			if math.IsNaN(f) {
-				// RISC-V default NaN value for signed 64-bit
-				v = 0x7fffffffffffffff
-			} else if f >= math.MaxInt64 {
-				// Handles +Inf and positive overflow.
-				v = 0x7fffffffffffffff
-			} else if f < math.MinInt64 {
-				// Handles -Inf and negative overflow.
-				v = 0x8000000000000000
-			} else {
-				v = uint64(int64(f))
-			}
-			cpu.X[instr.Rd] = v
-
-		case isa.FcvtLUD:
-			// XXX If the value is out of range, fcsr.fflags.NV is set
-			// to 1
-			f := cpu.F[instr.Rs1]
-			var v uint64
-			if math.IsNaN(f) {
-				// RISC-V default NaN value for signed 64-bit
-				v = 0xffffffffffffffff
-			} else if f >= math.MaxUint64 {
-				// Handles +Inf and positive overflow.
-				v = 0xffffffffffffffff
-			} else if f < 0.0 {
-				// Handles -Inf and negative overflow.
-				v = 0
-			} else {
-				v = uint64(f)
-			}
-			cpu.X[instr.Rd] = v
-
-		case isa.FcvtWD:
-			cpu.X[instr.Rd] = uint64(int64(int32(cpu.F[instr.Rs1])))
-
-		case isa.FcvtWUD:
-			cpu.X[instr.Rd] = uint64(uint32(cpu.F[instr.Rs1]))
-
-		case isa.FcvtLUS:
-			cpu.X[instr.Rd] = uint64(cpu.F[instr.Rs1])
-
-		case isa.FcvtSD:
-			cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]))
-
-		case isa.FcvtSW:
-			cpu.F[instr.Rd] = float64(float32(int32(cpu.X[instr.Rs1])))
-
-		case isa.FcvtSWU:
-			cpu.F[instr.Rd] = float64(float32(uint32(cpu.X[instr.Rs1])))
-
-		case isa.FcvtSL:
-			cpu.F[instr.Rd] = float64(float32(int64(cpu.X[instr.Rs1])))
-
-		case isa.FcvtSLU:
-			cpu.F[instr.Rd] = float64(float32(cpu.X[instr.Rs1]))
-
-		case isa.FcvtDS:
-			cpu.F[instr.Rd] = cpu.F[instr.Rs1]
-
-		case isa.FcvtDW:
-			cpu.F[instr.Rd] = float64(int32(cpu.X[instr.Rs1]))
-
-		case isa.FsgnjD:
-			v := math.Float64bits(cpu.F[instr.Rs1])
-			b := math.Float64bits(cpu.F[instr.Rs2])
-
-			v &^= 1 << 63
-			v |= b & (1 << 63)
-
-			cpu.F[instr.Rd] = math.Float64frombits(v)
-
-		case isa.FsgnjnD:
-			v := math.Float64bits(cpu.F[instr.Rs1])
-			b := math.Float64bits(cpu.F[instr.Rs2])
-
-			v &^= 1 << 63
-			v |= (^b) & (1 << 63) // Inject the inverted sign bit
-
-			cpu.F[instr.Rd] = math.Float64frombits(v)
-
-		case isa.FsgnjxD:
-			v := math.Float64bits(cpu.F[instr.Rs1])
-			b := math.Float64bits(cpu.F[instr.Rs2])
-
-			vs := v & (1 << 63)
-			bs := b & (1 << 63)
-
-			v &^= 1 << 63
-			v |= vs ^ bs // XOR the sign bits
-
-			cpu.F[instr.Rd] = math.Float64frombits(v)
-
-		case isa.FsgnjS:
-			v := math.Float32bits(float32(cpu.F[instr.Rs1]))
-			b := math.Float32bits(float32(cpu.F[instr.Rs2]))
-
-			v &^= 1 << 31
-			v |= b & (1 << 31)
-
-			cpu.F[instr.Rd] = float64(math.Float32frombits(v))
-
-		case isa.FsgnjnS:
-			v := math.Float32bits(float32(cpu.F[instr.Rs1]))
-			b := math.Float32bits(float32(cpu.F[instr.Rs2]))
-
-			v &^= 1 << 31
-			v |= (^b) & (1 << 31) // Inject the inverted sign bit
-
-			cpu.F[instr.Rd] = float64(math.Float32frombits(v))
-
-		case isa.FsgnjxS:
-			v := math.Float32bits(float32(cpu.F[instr.Rs1]))
-			b := math.Float32bits(float32(cpu.F[instr.Rs2]))
-
-			vs := v & (1 << 31)
-			bs := b & (1 << 31)
-
-			v &^= 1 << 31
-			v |= vs ^ bs
-
-			cpu.F[instr.Rd] = float64(math.Float32frombits(v))
-
-		case isa.FminD:
-			if cpu.F[instr.Rs1] < cpu.F[instr.Rs2] {
-				cpu.F[instr.Rd] = cpu.F[instr.Rs1]
-			} else {
-				cpu.F[instr.Rd] = cpu.F[instr.Rs2]
-			}
-
-		case isa.FminS:
-			if float32(cpu.F[instr.Rs1]) < float32(cpu.F[instr.Rs2]) {
-				cpu.F[instr.Rd] = cpu.F[instr.Rs1]
-			} else {
-				cpu.F[instr.Rd] = cpu.F[instr.Rs2]
-			}
-
-		case isa.FmaxD:
-			if cpu.F[instr.Rs1] > cpu.F[instr.Rs2] {
-				cpu.F[instr.Rd] = cpu.F[instr.Rs1]
-			} else {
-				cpu.F[instr.Rd] = cpu.F[instr.Rs2]
-			}
-
-		case isa.FmaxS:
-			if float32(cpu.F[instr.Rs1]) > float32(cpu.F[instr.Rs2]) {
-				cpu.F[instr.Rd] = cpu.F[instr.Rs1]
-			} else {
-				cpu.F[instr.Rd] = cpu.F[instr.Rs2]
-			}
-
 			// Extension 'B' Bit Manipulation.
 
 		case isa.Maxu:
@@ -1562,6 +1268,9 @@ dispatch:
 		case isa.AddUw:
 			cpu.X[instr.Rd] = uint64(uint32(cpu.X[instr.Rs1])) +
 				cpu.X[instr.Rs2]
+
+		case isa.Andn:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] & ^cpu.X[instr.Rs2]
 
 		case isa.Sh1add:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs2] + (cpu.X[instr.Rs1] << 1)
@@ -1809,14 +1518,371 @@ dispatch:
 			cpu.mstatus.SetVS(isa.RegDirty)
 
 		default:
-			cpu.tracef(raw, instr, "not implemented")
-			cpu.Dump(cpu.PC)
-			return cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("instruction %v[0x%x] not implemented yet",
-					instr, raw))
+			if isa.Flw <= instr.Op && instr.Op <= isa.FmaddD {
+				// Floating point extension.
+				err := cpu.floatingPointExtension(instr, raw)
+				if err != nil {
+					return err
+				}
+			} else {
+				cpu.tracef(raw, instr, "not implemented")
+				cpu.Dump(cpu.PC)
+				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+					fmt.Errorf("instruction %v[0x%x] not implemented yet",
+						instr, raw))
+			}
 		}
 		cpu.PC += uint64(size)
 	}
+}
+
+const checkFSRegOff = false
+
+func (cpu *CPU) floatingPointExtension(instr isa.Instr, raw uint32) error {
+	if cpu.mstatus.FS() == isa.RegOff {
+		if checkFSRegOff {
+			// XXX true blocks FreeBSD boot in a trap loop.
+			fmt.Printf("would trap: pc=%x, instr=%v, raw=%x\r\n",
+				cpu.PC, instr, raw)
+			// cpu.Dump(cpu.PC)
+			// os.Exit(1)
+			return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
+		}
+	}
+
+	// Dirty as a default: #dirty = 38, #clean=15.
+	dirty := true
+
+	switch instr.Op {
+	case isa.Flw: // F: dirty
+		addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+		v32, err := cpu.MMU.Load32(addr)
+		if err != nil {
+			return err
+		}
+		f32 := math.Float32frombits(v32)
+		cpu.F[instr.Rd] = float64(f32)
+
+	case isa.Fld: // F: dirty
+		addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+		v, err := cpu.MMU.Load64(addr)
+		if err != nil {
+			return err
+		}
+		cpu.F[instr.Rd] = math.Float64frombits(v)
+
+	case isa.Fsw: // F: clean
+		addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+		v := math.Float32bits(float32(cpu.F[instr.Rs2]))
+		if err := cpu.MMU.Store32(addr, uint32(v)); err != nil {
+			return err
+		}
+		cpu.ReservationValid = false
+		dirty = false
+
+	case isa.Fsd: // F: clean
+		addr := uint64(int64(cpu.X[instr.Rs1]) + int64(instr.Imm))
+		v := math.Float64bits(cpu.F[instr.Rs2])
+		if err := cpu.MMU.Store64(addr, v); err != nil {
+			return err
+		}
+		cpu.ReservationValid = false
+		dirty = false
+
+	case isa.FeqS: // F: clean
+		if float32(cpu.F[instr.Rs1]) == float32(cpu.F[instr.Rs2]) {
+			cpu.X[instr.Rd] = 1
+		} else {
+			cpu.X[instr.Rd] = 0
+		}
+		dirty = false
+
+	case isa.FaddD: // F: dirty
+		cpu.F[instr.Rd] = cpu.F[instr.Rs1] + cpu.F[instr.Rs2]
+
+	case isa.FaddS: // F: dirty
+		cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]) +
+			float32(cpu.F[instr.Rs2]))
+
+	case isa.FsubD: // F: dirty
+		cpu.F[instr.Rd] = cpu.F[instr.Rs1] - cpu.F[instr.Rs2]
+
+	case isa.FsubS: // F: dirty
+		cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]) -
+			float32(cpu.F[instr.Rs2]))
+
+	case isa.FmulD: // F: dirty
+		cpu.F[instr.Rd] = cpu.F[instr.Rs1] * cpu.F[instr.Rs2]
+
+	case isa.FmulS: // F: dirty
+		cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]) *
+			float32(cpu.F[instr.Rs2]))
+
+	case isa.FdivD: // F: dirty
+		cpu.F[instr.Rd] = cpu.F[instr.Rs1] / cpu.F[instr.Rs2]
+
+	case isa.FdivS: // F: dirty
+		cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]) /
+			float32(cpu.F[instr.Rs2]))
+
+	case isa.FmsubD: // F: dirty
+		cpu.F[instr.Rd] = cpu.F[instr.Rs1]*cpu.F[instr.Rs2] -
+			cpu.F[instr.Imm]
+
+	case isa.FnmsubD: // F: dirty
+		cpu.F[instr.Rd] = -(cpu.F[instr.Rs1] * cpu.F[instr.Rs2]) +
+			cpu.F[instr.Imm]
+
+	case isa.FnmaddD: // F: dirty
+		cpu.F[instr.Rd] = -(cpu.F[instr.Rs1] * cpu.F[instr.Rs2]) -
+			cpu.F[instr.Imm]
+
+	case isa.FsqrtD: // F: dirty
+		cpu.F[instr.Rd] = math.Sqrt(cpu.F[instr.Rs1])
+
+	case isa.FleD: // F: clean
+		if cpu.F[instr.Rs1] <= cpu.F[instr.Rs2] {
+			cpu.X[instr.Rd] = 1
+		} else {
+			cpu.X[instr.Rd] = 0
+		}
+		dirty = false
+
+	case isa.FltD: // F: clean
+		if cpu.F[instr.Rs1] < cpu.F[instr.Rs2] {
+			cpu.X[instr.Rd] = 1
+		} else {
+			cpu.X[instr.Rd] = 0
+		}
+		dirty = false
+
+	case isa.FeqD: // F: clean
+		if cpu.F[instr.Rs1] == cpu.F[instr.Rs2] {
+			cpu.X[instr.Rd] = 1
+		} else {
+			cpu.X[instr.Rd] = 0
+		}
+		dirty = false
+
+	case isa.FmvDX: // F: dirty
+		cpu.F[instr.Rd] = math.Float64frombits(cpu.X[instr.Rs1])
+
+	case isa.FmvWX: // F: dirty
+		v := uint32(cpu.X[instr.Rs1])
+		cpu.F[instr.Rd] = float64(math.Float32frombits(v))
+
+	case isa.FmvXD: // F: clean
+		cpu.X[instr.Rd] = math.Float64bits(cpu.F[instr.Rs1])
+		dirty = false
+
+	case isa.FmvXW: // F: clean
+		cpu.X[instr.Rd] = uint64(int64(int32(
+			math.Float32bits(float32(cpu.F[instr.Rs1])))))
+		dirty = false
+
+	case isa.FclassD: // F: clean
+		cpu.X[instr.Rd] = fclassD(cpu.F[instr.Rs1])
+		dirty = false
+
+	case isa.FclassS: // F: clean
+		cpu.X[instr.Rd] = uint64(fclassS(float32(cpu.F[instr.Rs1])))
+		dirty = false
+
+	case isa.FmaddS: // F: dirty
+		// Imm is Rs3
+		cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1])*
+			float32(cpu.F[instr.Rs2]) + float32(cpu.F[instr.Imm]))
+
+	case isa.FmaddD: // F: dirty
+		// Imm is Rs3
+		cpu.F[instr.Rd] = cpu.F[instr.Rs1]*cpu.F[instr.Rs2] +
+			cpu.F[instr.Imm]
+
+	case isa.FcvtDL: // F: dirty
+		// XXX The rounding mode (RM) is specified in the fcsr
+		// (Floating-point Control and Status Register)
+		cpu.F[instr.Rd] = float64(int64(cpu.X[instr.Rs1]))
+
+	case isa.FcvtDLU: // F: dirty
+		// XXX The rounding mode (RM) is specified in the fcsr
+		// (Floating-point Control and Status Register)
+		cpu.F[instr.Rd] = float64(cpu.X[instr.Rs1])
+
+	case isa.FcvtDWU: // F: dirty
+		cpu.F[instr.Rd] = float64(uint32(cpu.X[instr.Rs1]))
+
+	case isa.FcvtLD: // F: clean
+		// XXX If the value is out of range, fcsr.fflags.NV is set
+		// to 1
+		f := cpu.F[instr.Rs1]
+		var v uint64
+		if math.IsNaN(f) {
+			// RISC-V default NaN value for signed 64-bit
+			v = 0x7fffffffffffffff
+		} else if f >= math.MaxInt64 {
+			// Handles +Inf and positive overflow.
+			v = 0x7fffffffffffffff
+		} else if f < math.MinInt64 {
+			// Handles -Inf and negative overflow.
+			v = 0x8000000000000000
+		} else {
+			v = uint64(int64(f))
+		}
+		cpu.X[instr.Rd] = v
+		dirty = false
+
+	case isa.FcvtLUD: // F: clean
+		// XXX If the value is out of range, fcsr.fflags.NV is set
+		// to 1
+		f := cpu.F[instr.Rs1]
+		var v uint64
+		if math.IsNaN(f) {
+			// RISC-V default NaN value for signed 64-bit
+			v = 0xffffffffffffffff
+		} else if f >= math.MaxUint64 {
+			// Handles +Inf and positive overflow.
+			v = 0xffffffffffffffff
+		} else if f < 0.0 {
+			// Handles -Inf and negative overflow.
+			v = 0
+		} else {
+			v = uint64(f)
+		}
+		cpu.X[instr.Rd] = v
+		dirty = false
+
+	case isa.FcvtWD: // F: clean
+		cpu.X[instr.Rd] = uint64(int64(int32(cpu.F[instr.Rs1])))
+		dirty = false
+
+	case isa.FcvtWUD: // F: clean
+		cpu.X[instr.Rd] = uint64(uint32(cpu.F[instr.Rs1]))
+		dirty = false
+
+	case isa.FcvtLUS: // F: clean
+		cpu.X[instr.Rd] = uint64(cpu.F[instr.Rs1])
+		dirty = false
+
+	case isa.FcvtSD: // F: dirty
+		cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]))
+
+	case isa.FcvtSW: // F: dirty
+		cpu.F[instr.Rd] = float64(float32(int32(cpu.X[instr.Rs1])))
+
+	case isa.FcvtSWU: // F: dirty
+		cpu.F[instr.Rd] = float64(float32(uint32(cpu.X[instr.Rs1])))
+
+	case isa.FcvtSL: // F: dirty
+		cpu.F[instr.Rd] = float64(float32(int64(cpu.X[instr.Rs1])))
+
+	case isa.FcvtSLU: // F: dirty
+		cpu.F[instr.Rd] = float64(float32(cpu.X[instr.Rs1]))
+
+	case isa.FcvtDS: // F: dirty
+		cpu.F[instr.Rd] = cpu.F[instr.Rs1]
+
+	case isa.FcvtDW: // F: dirty
+		cpu.F[instr.Rd] = float64(int32(cpu.X[instr.Rs1]))
+
+	case isa.FsgnjD: // F: dirty
+		v := math.Float64bits(cpu.F[instr.Rs1])
+		b := math.Float64bits(cpu.F[instr.Rs2])
+
+		v &^= 1 << 63
+		v |= b & (1 << 63)
+
+		cpu.F[instr.Rd] = math.Float64frombits(v)
+
+	case isa.FsgnjnD: // F: dirty
+		v := math.Float64bits(cpu.F[instr.Rs1])
+		b := math.Float64bits(cpu.F[instr.Rs2])
+
+		v &^= 1 << 63
+		v |= (^b) & (1 << 63) // Inject the inverted sign bit
+
+		cpu.F[instr.Rd] = math.Float64frombits(v)
+
+	case isa.FsgnjxD: // F: dirty
+		v := math.Float64bits(cpu.F[instr.Rs1])
+		b := math.Float64bits(cpu.F[instr.Rs2])
+
+		vs := v & (1 << 63)
+		bs := b & (1 << 63)
+
+		v &^= 1 << 63
+		v |= vs ^ bs // XOR the sign bits
+
+		cpu.F[instr.Rd] = math.Float64frombits(v)
+
+	case isa.FsgnjS: // F: dirty
+		v := math.Float32bits(float32(cpu.F[instr.Rs1]))
+		b := math.Float32bits(float32(cpu.F[instr.Rs2]))
+
+		v &^= 1 << 31
+		v |= b & (1 << 31)
+
+		cpu.F[instr.Rd] = float64(math.Float32frombits(v))
+
+	case isa.FsgnjnS: // F: dirty
+		v := math.Float32bits(float32(cpu.F[instr.Rs1]))
+		b := math.Float32bits(float32(cpu.F[instr.Rs2]))
+
+		v &^= 1 << 31
+		v |= (^b) & (1 << 31) // Inject the inverted sign bit
+
+		cpu.F[instr.Rd] = float64(math.Float32frombits(v))
+
+	case isa.FsgnjxS: // F: dirty
+		v := math.Float32bits(float32(cpu.F[instr.Rs1]))
+		b := math.Float32bits(float32(cpu.F[instr.Rs2]))
+
+		vs := v & (1 << 31)
+		bs := b & (1 << 31)
+
+		v &^= 1 << 31
+		v |= vs ^ bs
+
+		cpu.F[instr.Rd] = float64(math.Float32frombits(v))
+
+	case isa.FminD: // F: dirty
+		if cpu.F[instr.Rs1] < cpu.F[instr.Rs2] {
+			cpu.F[instr.Rd] = cpu.F[instr.Rs1]
+		} else {
+			cpu.F[instr.Rd] = cpu.F[instr.Rs2]
+		}
+
+	case isa.FminS: // F: dirty
+		if float32(cpu.F[instr.Rs1]) < float32(cpu.F[instr.Rs2]) {
+			cpu.F[instr.Rd] = cpu.F[instr.Rs1]
+		} else {
+			cpu.F[instr.Rd] = cpu.F[instr.Rs2]
+		}
+
+	case isa.FmaxD: // F: dirty
+		if cpu.F[instr.Rs1] > cpu.F[instr.Rs2] {
+			cpu.F[instr.Rd] = cpu.F[instr.Rs1]
+		} else {
+			cpu.F[instr.Rd] = cpu.F[instr.Rs2]
+		}
+
+	case isa.FmaxS: // F: dirty
+		if float32(cpu.F[instr.Rs1]) > float32(cpu.F[instr.Rs2]) {
+			cpu.F[instr.Rd] = cpu.F[instr.Rs1]
+		} else {
+			cpu.F[instr.Rd] = cpu.F[instr.Rs2]
+		}
+
+	default:
+		return cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+			fmt.Errorf("unknown floating point instruction 0x%x", raw))
+	}
+
+	if dirty {
+		cpu.mstatus.SetFS(isa.RegDirty)
+		cpu.mstatus.SetSD(true)
+	}
+
+	return nil
 }
 
 func fclassD(fVal float64) uint64 {
