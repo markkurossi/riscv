@@ -536,6 +536,28 @@ dispatch:
 
 		case isa.Fence:
 
+		case isa.FenceI:
+			cpu.codePagenum = 0
+			for i := range cpu.decodeCache {
+				cpu.decodeCache[i].Raw = 0
+			}
+
+		case isa.CboInval, isa.CboClean, isa.CboFlush:
+			// nop
+
+		case isa.CboZero:
+			paddr := cpu.X[instr.Rs1]
+			page, err := cpu.MMU.Mem.Page(memory.Page(paddr))
+			if err != nil {
+				return err
+			}
+			if false {
+				clear(page[:64])
+			}
+
+		case isa.PrefetchI, isa.PrefetchR, isa.PrefetchW:
+			// nop
+
 		case isa.SfenceVMA:
 			cpu.MMU.FlushTLB()
 			cpu.codePagenum = 0

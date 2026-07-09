@@ -406,6 +406,13 @@ const (
 	Fence
 	FenceI
 	SfenceVMA
+	CboInval
+	CboClean
+	CboFlush
+	CboZero
+	PrefetchI
+	PrefetchR
+	PrefetchW
 
 	// Atomic (A extension).
 
@@ -814,6 +821,27 @@ var Operands = map[Op]OpInfo{
 	},
 	SfenceVMA: OpInfo{
 		Name: "sfence.vma",
+	},
+	CboInval: OpInfo{
+		Name: "cbo.inval",
+	},
+	CboClean: OpInfo{
+		Name: "cbo.clean",
+	},
+	CboFlush: OpInfo{
+		Name: "cbo.flush",
+	},
+	CboZero: OpInfo{
+		Name: "cbo.zero",
+	},
+	PrefetchI: OpInfo{
+		Name: "prefetch.i",
+	},
+	PrefetchR: OpInfo{
+		Name: "prefetch.r",
+	},
+	PrefetchW: OpInfo{
+		Name: "prefetch.w",
 	},
 	LrW: OpInfo{
 		Name: "lr.w",

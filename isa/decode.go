@@ -797,8 +797,46 @@ func Decode(raw uint32) (Instr, error) {
 		}
 
 	case GroupMISCMEM:
-		// XXX
-		instr.Op = Fence
+		switch funct3 {
+		case 0b000:
+			instr.Op = Fence
+		case 0b001:
+			instr.Op = FenceI
+
+		case 0b010: // CBO
+			funct12 := raw >> 20
+			switch funct12 {
+			case 0b000000000000:
+				instr.Op = CboInval
+			case 0b000000000001:
+				instr.Op = CboClean
+			case 0b000000000010:
+				instr.Op = CboFlush
+			case 0b000000000100:
+				instr.Op = CboZero
+			default:
+				return instr, fmt.Errorf("%v/%03b/%012b: raw=%x",
+					group, funct3, funct12, raw)
+			}
+
+		case 0b110: // ORI
+			funct5 := raw >> 20 & 0b11111
+			switch funct5 {
+			case 0b00000:
+				instr.Op = PrefetchI
+			case 0b00001:
+				instr.Op = PrefetchR
+			case 0b00011:
+				instr.Op = PrefetchW
+			default:
+				return instr, fmt.Errorf("%v/%03b/%05b: raw=%x",
+					group, funct3, funct5, raw)
+			}
+
+		default:
+			return instr, fmt.Errorf("%v/%03b: raw=%x",
+				group, funct3, raw)
+		}
 
 	case GroupAMO:
 		funct5 := raw >> 27 & 0b11111
