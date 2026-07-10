@@ -66,6 +66,7 @@ Build NetBSD kernel:
 
 ``` shell
 $ cd netbsd/src
+$ ./build.sh -m riscv -a riscv64 -U -u tools
 $ ./build.sh -m riscv -a riscv64 -U -u kernel=GENERIC64
 ```
 
