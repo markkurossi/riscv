@@ -21,15 +21,29 @@ import (
 	"github.com/markkurossi/riscv/memory"
 )
 
-var skip = map[string]bool{
-	"Makefile":                         true,
-	"hypervisor-p-2-stage_translation": true,
-	"hypervisor-p-2-stage_translation_implicit_load_error":           true,
-	"hypervisor-p-2-stage_translation_implicit_load_error_hs":        true,
-	"hypervisor-svadu-p-2-stage_translation_implicit_store_error":    true,
-	"hypervisor-svadu-p-2-stage_translation_implicit_store_error_hs": true,
-	"rv64si-p-dirty":       true,
-	"rv64ssvnapot-p-napot": true,
+var skip = map[string]uint64{
+	"Makefile":                         0,
+	"hypervisor-p-2-stage_translation": 0,
+	"hypervisor-p-2-stage_translation_implicit_load_error":           0,
+	"hypervisor-p-2-stage_translation_implicit_load_error_hs":        0,
+	"hypervisor-svadu-p-2-stage_translation_implicit_store_error":    0,
+	"hypervisor-svadu-p-2-stage_translation_implicit_store_error_hs": 0,
+	"rv64si-p-dirty":       0,
+	"rv64ssvnapot-p-napot": 0,
+
+	// Zfh extension - 16 bit floating points.
+
+	"rv64uzfh-p-fadd":     0,
+	"rv64uzfh-p-fclass":   0,
+	"rv64uzfh-p-fcmp":     0,
+	"rv64uzfh-p-fcvt":     0,
+	"rv64uzfh-p-fcvt_w":   0,
+	"rv64uzfh-p-fdiv":     0,
+	"rv64uzfh-p-fmadd":    0,
+	"rv64uzfh-p-fmin":     0,
+	"rv64uzfh-p-ldst":     0,
+	"rv64uzfh-p-move":     0,
+	"rv64uzfh-p-recoding": 0,
 }
 
 func TestISA(t *testing.T) {
@@ -38,32 +52,36 @@ func TestISA(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadDir: %v", err)
 	}
-	var count, success, failure, panic int
+	var count, success, known, failure, panic int
 	for _, entry := range entries {
 		name := entry.Name()
 		file := filepath.Join(dir, name)
 		if strings.HasSuffix(file, ".dump") {
 			continue
 		}
-		if skip[name] {
+		expect, ok := skip[name]
+		if ok && expect == 0 {
 			continue
 		}
 		count++
-		ok, err := runTest(t, file)
+		ok, assertion, err := runTest(t, file)
 		if err != nil {
 			t.Logf("%v: %v", entry.Name(), err)
 			panic++
 		} else if ok {
 			success++
+		} else if assertion == expect {
+			known++
 		} else {
+			t.Errorf("%v: assertion %v", file, assertion)
 			failure++
 		}
 	}
-	t.Logf("%v tests, %v success, %v fail, %v panic",
-		count, success, failure, panic)
+	t.Logf("%v tests, %v success, %v broken, %v fail, %v panic",
+		count, success, known, failure, panic)
 }
 
-func runTest(t *testing.T, file string) (bool, error) {
+func runTest(t *testing.T, file string) (bool, uint64, error) {
 	mem := memory.New(memory.RAMBase, 0x2000000)
 
 	hart := cpu.New(mem)
@@ -71,21 +89,20 @@ func runTest(t *testing.T, file string) (bool, error) {
 
 	htif, entry, err := loadELF(hart, mem, file)
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
 
 	hart.PC = entry
 
 	err = hart.Run()
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
 	if htif.ExitStatus != 1 {
-		t.Errorf("%v: assertion %v", file, htif.ExitStatus>>1)
-		return false, nil
+		return false, htif.ExitStatus >> 1, nil
 	}
 
-	return true, nil
+	return true, 0, nil
 }
 
 func loadELF(hart *cpu.CPU, mem *memory.Memory, file string) (
