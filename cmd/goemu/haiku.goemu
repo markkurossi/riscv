@@ -1,0 +1,28 @@
+{
+  "bios":    "opensbi/fw_jump.bin",
+  "kernel":  "u-boot-2026.04/u-boot.bin",
+  "drives": [
+    {
+      "id":     "hd0",
+      "format": "raw",
+      "file":   "haiku/haiku-master-hrev59791-riscv64-mmc.image"
+    }
+  ],
+  "gpus": [
+    {
+      "id":     "gpu",
+      "width":  1024,
+      "height": 768
+    }
+  ],
+  "devices": [
+    {
+      "type":  "virtio-blk-device",
+      "drive": "hd0"
+    },
+    {
+      "type": "virtio-gpu-device",
+      "gpu":  "gpu"
+    }
+  ]
+}

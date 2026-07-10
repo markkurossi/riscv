@@ -18,6 +18,13 @@
       "domainname": "goemu.markkurossi.com"
     }
   ],
+  "gpus": [
+    {
+      "id":     "gpu",
+      "width":  1024,
+      "height": 768
+    }
+  ],
   "devices": [
     {
       "type":  "virtio-blk-device",
@@ -26,6 +33,10 @@
     {
       "type":   "virtio-net-device",
       "netdev": "eth0"
+    },
+    {
+      "type": "virtio-gpu-device",
+      "gpu":  "gpu"
     }
   ]
 }
