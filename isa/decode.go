@@ -1050,7 +1050,14 @@ func Decode(raw uint32) (Instr, error) {
 		case 0b0101101:
 			instr.Op = FsqrtD
 		case 0b1010000:
-			instr.Op = FeqS
+			switch funct3 {
+			case 0b000:
+				instr.Op = FleS
+			case 0b001:
+				instr.Op = FltS
+			case 0b010:
+				instr.Op = FeqS
+			}
 		case 0b1010001:
 			switch funct3 {
 			case 0b000:
@@ -1062,7 +1069,17 @@ func Decode(raw uint32) (Instr, error) {
 			}
 
 		case 0b1100000:
-			instr.Op = FcvtLUS
+			funct5 := raw >> 20 & 0b11111
+			switch funct5 {
+			case 0b00000:
+				instr.Op = FcvtWS
+			case 0b00001:
+				instr.Op = FcvtWUS
+			case 0b00010:
+				instr.Op = FcvtLS
+			case 0b00011:
+				instr.Op = FcvtLUS
+			}
 
 		case 0b1100001:
 			funct5 := raw >> 20 & 0b11111
