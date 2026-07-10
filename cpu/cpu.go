@@ -1563,11 +1563,6 @@ const checkFSRegOff = false
 func (cpu *CPU) floatingPointExtension(instr isa.Instr, raw uint32) error {
 	if cpu.mstatus.FS() == isa.RegOff {
 		if checkFSRegOff {
-			// XXX true blocks FreeBSD boot in a trap loop.
-			fmt.Printf("would trap: pc=%x, instr=%v, raw=%x\r\n",
-				cpu.PC, instr, raw)
-			// cpu.Dump(cpu.PC)
-			// os.Exit(1)
 			return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
 		}
 	}
@@ -1609,6 +1604,22 @@ func (cpu *CPU) floatingPointExtension(instr isa.Instr, raw uint32) error {
 			return err
 		}
 		cpu.ReservationValid = false
+		dirty = false
+
+	case isa.FleS: // F: clean
+		if float32(cpu.F[instr.Rs1]) <= float32(cpu.F[instr.Rs2]) {
+			cpu.X[instr.Rd] = 1
+		} else {
+			cpu.X[instr.Rd] = 0
+		}
+		dirty = false
+
+	case isa.FltS: // F: clean
+		if float32(cpu.F[instr.Rs1]) < float32(cpu.F[instr.Rs2]) {
+			cpu.X[instr.Rd] = 1
+		} else {
+			cpu.X[instr.Rd] = 0
+		}
 		dirty = false
 
 	case isa.FeqS: // F: clean
@@ -1779,6 +1790,18 @@ func (cpu *CPU) floatingPointExtension(instr isa.Instr, raw uint32) error {
 
 	case isa.FcvtWUD: // F: clean
 		cpu.X[instr.Rd] = uint64(uint32(cpu.F[instr.Rs1]))
+		dirty = false
+
+	case isa.FcvtWS: // F: clean
+		cpu.X[instr.Rd] = uint64(int64(int32(cpu.F[instr.Rs1])))
+		dirty = false
+
+	case isa.FcvtWUS: // F: clean
+		cpu.X[instr.Rd] = uint64(uint32(cpu.F[instr.Rs1]))
+		dirty = false
+
+	case isa.FcvtLS: // F: clean
+		cpu.X[instr.Rd] = uint64(int64(cpu.F[instr.Rs1]))
 		dirty = false
 
 	case isa.FcvtLUS: // F: clean
