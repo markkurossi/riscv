@@ -482,26 +482,44 @@ func Decode(raw uint32) (Instr, error) {
 	case GroupOPIMM:
 		instr.typeI(raw)
 		switch funct3 {
-		case 0:
+		case 0b000:
 			instr.Op = Addi
-		case 1:
-			instr.Op = Slli
-		case 2:
+
+		case 0b001:
+			funct6 := raw >> 26
+			switch funct6 {
+			case 0b000000:
+				instr.Op = Slli
+			case 0b001010:
+				instr.Op = Bseti
+			case 0b010010:
+				instr.Op = Bclri
+			case 0b011010:
+				instr.Op = Binvi
+			default:
+				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
+					group, funct3, funct6, raw)
+			}
+			instr.Imm &= 0b111111
+
+		case 0b010:
 			instr.Op = Slti
-		case 3:
+		case 0b011:
 			instr.Op = Sltiu
-		case 4:
+		case 0b100:
 			instr.Op = Xori
-		case 5:
+
+		case 0b101:
 			if funct7&0b100000 == 0 {
 				instr.Op = Srli
 			} else {
 				instr.Op = Srai
 			}
 			instr.Imm &= 0b111111
-		case 6:
+
+		case 0b110:
 			instr.Op = Ori
-		case 7:
+		case 0b111:
 			instr.Op = Andi
 		}
 
@@ -1142,7 +1160,14 @@ func Decode(raw uint32) (Instr, error) {
 			instr.Op = FmvDX
 
 		case 0b0010001:
-			instr.Op = FsgnjD
+			switch funct3 {
+			case 0b000:
+				instr.Op = FsgnjD
+			case 0b001:
+				instr.Op = FsgnjnD
+			case 0b010:
+				instr.Op = FsgnjxD
+			}
 
 		case 0b0100000:
 			instr.Op = FcvtSD

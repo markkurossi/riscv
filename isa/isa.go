@@ -547,6 +547,16 @@ const (
 	CzeroEqz
 	CzeroNez
 
+	// Zbs Extension for Single-bit instructions.
+	Bclr
+	Bclri
+	Bext
+	Bexti
+	Binv
+	Binvi
+	Bset
+	Bseti
+
 	// Zba & Zbb Bit-Manipulation Extensions.
 	AddUw
 	Andn
@@ -1135,6 +1145,31 @@ var Operands = map[Op]OpInfo{
 	},
 	CzeroNez: OpInfo{
 		Name: "czero.nez",
+	},
+
+	Bclr: OpInfo{
+		Name: "bclr",
+	},
+	Bclri: OpInfo{
+		Name: "bclri",
+	},
+	Bext: OpInfo{
+		Name: "bext",
+	},
+	Bexti: OpInfo{
+		Name: "bexti",
+	},
+	Binv: OpInfo{
+		Name: "binv",
+	},
+	Binvi: OpInfo{
+		Name: "binvi",
+	},
+	Bset: OpInfo{
+		Name: "bset",
+	},
+	Bseti: OpInfo{
+		Name: "bseti",
 	},
 
 	AddUw: OpInfo{

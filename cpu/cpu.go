@@ -331,10 +331,10 @@ dispatch:
 
 		switch instr.Op {
 		case isa.Invalid:
-			cpu.tracef(raw, instr, "invalid: %v", instr)
-			cpu.Dump(cpu.PC)
 			err = fmt.Errorf("invalid %v[0x%x]", instr, raw)
-			if true {
+			if false {
+				cpu.tracef(raw, instr, "invalid: %v", instr)
+				cpu.Dump(cpu.PC)
 				return err
 			} else {
 				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), err)
@@ -1284,6 +1284,17 @@ dispatch:
 			} else {
 				cpu.X[instr.Rd] = cpu.X[instr.Rs1]
 			}
+
+			// Zbs Extension for Single-bit instructions.
+
+		case isa.Bclri:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] &^ (uint64(1) << instr.Imm)
+
+		case isa.Binvi:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] ^ uint64(1)<<instr.Imm
+
+		case isa.Bseti:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] | uint64(1)<<instr.Imm
 
 			// Zba (Address Generation Instructions) extensions.
 
