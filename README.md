@@ -102,8 +102,6 @@ $ xdotool windowfocus 6291468
 
 virtio-gpu: ERROR: execute descriptor chain: VIRTIO_GPU_CMD_UPDATE_CURSOR: not implemented yet
 
-- remove .twmrc
-
 ### System emulation and supervisor mode
 
 - [ ] VirtIO
@@ -545,4 +543,27 @@ $ df -h
 $ lsblk -f
 $ sudo growpart /dev/vda 1
 $ sudo resize2fs /dev/vda1
+```
+
+# Conformance tests
+
+``` shell
+$ ./goemu -cooked -htif -kernel ../../testdata/isa/rv64mi-p-illegal
+```
+
+fails on
+
+``` asm
+bad6:
+  # Make sure SFENCE.VMA and satp do trap when TVM=1.
+  sfence.vma
+  j fail
+bad7:
+  csrr t0, satp
+  j fail
+
+000000008000036c <bad6>:
+    8000036c:	12000073          	sfence.vma
+    80000370:	0700006f          	j	800003e0 <fail>
+
 ```

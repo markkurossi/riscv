@@ -1673,9 +1673,18 @@ func (cpu *CPU) floatingPointExtension(instr isa.Instr, raw uint32) error {
 		cpu.F[instr.Rd] = cpu.F[instr.Rs1]*cpu.F[instr.Rs2] -
 			cpu.F[instr.Imm]
 
+	case isa.FmsubS: // F: dirty
+		cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1]*cpu.F[instr.Rs2]) -
+			float32(cpu.F[instr.Imm]))
+
 	case isa.FnmsubD: // F: dirty
 		cpu.F[instr.Rd] = -(cpu.F[instr.Rs1] * cpu.F[instr.Rs2]) +
 			cpu.F[instr.Imm]
+
+	case isa.FnmsubS: // F: dirty
+		cpu.F[instr.Rd] = float64(-(float32(cpu.F[instr.Rs1]) *
+			float32(cpu.F[instr.Rs2])) +
+			float32(cpu.F[instr.Imm]))
 
 	case isa.FnmaddD: // F: dirty
 		cpu.F[instr.Rd] = -(cpu.F[instr.Rs1] * cpu.F[instr.Rs2]) -

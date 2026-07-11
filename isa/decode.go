@@ -1234,6 +1234,9 @@ func Decode(raw uint32) (Instr, error) {
 	case GroupMSUB:
 		funct2 := raw >> 25 & 0b11
 		switch funct2 {
+		case 0b00:
+			instr.Imm = int32(raw >> 27 & 0b11111)
+			instr.Op = FmsubS
 		case 0b01:
 			instr.Imm = int32(raw >> 27 & 0b11111)
 			instr.Op = FmsubD
@@ -1245,6 +1248,9 @@ func Decode(raw uint32) (Instr, error) {
 	case GroupNMSUB:
 		funct2 := raw >> 25 & 0b11
 		switch funct2 {
+		case 0b00:
+			instr.Imm = int32(raw >> 27 & 0b11111)
+			instr.Op = FnmsubS
 		case 0b01:
 			instr.Imm = int32(raw >> 27 & 0b11111)
 			instr.Op = FnmsubD
