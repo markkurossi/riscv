@@ -45,3 +45,17 @@ RUN apt-get install -y kpartx
 RUN apt-get update && apt-get install -y libssl-dev
 RUN apt-get update && apt-get install -y libgnutls28-dev uuid-dev
 RUN apt-get install -y zlib1g-dev
+
+# Haiku build dependencies.
+RUN apt install -y nasm
+RUN apt install -y autoconf
+RUN apt install -y automake
+RUN apt install -y texinfo
+RUN apt install -y gawk
+RUN apt install -y zip
+RUN apt install -y less
+RUN apt install -y libzstd-dev
+RUN apt install -y xorriso
+RUN apt install -y libtool
+RUN apt install -y gcc-multilib
+RUN apt install -y python3
