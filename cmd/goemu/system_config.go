@@ -45,6 +45,7 @@ type Netdev struct {
 
 type GPU struct {
 	ID     string `json:"id"`
+	Title  string `json:"title,omitempty"`
 	Width  int    `json:"width"`
 	Height int    `json:"height"`
 }
@@ -108,6 +109,8 @@ func ParseGPU(args string) (*GPU, error) {
 			return nil, fmt.Errorf("invalid gpu argument: %v", arg)
 		}
 		switch parts[0] {
+		case "title":
+			gpu.Title = parts[1]
 		case "id":
 			gpu.ID = parts[1]
 		case "width":

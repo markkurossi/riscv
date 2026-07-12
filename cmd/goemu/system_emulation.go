@@ -156,7 +156,7 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 			}
 			var err error
 			gpu, err = virtio.NewGPU(core, virtioROM, plic, virtioIRQ, mem,
-				gpudev.Width, gpudev.Height)
+				gpudev.Title, gpudev.Width, gpudev.Height)
 			if err != nil {
 				return err
 			}

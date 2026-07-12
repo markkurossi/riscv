@@ -65,6 +65,7 @@ const (
 
 type GPU struct {
 	MMIO
+	Title  string
 	Width  int
 	Height int
 
@@ -120,7 +121,7 @@ const (
 )
 
 func NewGPU(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
-	mem *memory.Memory, width, height int) (*GPU, error) {
+	mem *memory.Memory, title string, width, height int) (*GPU, error) {
 
 	logo, err := loadImage("../../docs/goemu-small.png")
 	if err != nil {
@@ -142,6 +143,7 @@ func NewGPU(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 			IRQ:      irq,
 			Mem:      mem,
 		},
+		Title:  title,
 		Width:  width,
 		Height: height,
 		pixels: image.NewRGBA(image.Rectangle{
@@ -172,8 +174,12 @@ func (vio *GPU) EventLoop() {
 		return
 	}
 
-	vio.window, err = glfw.CreateWindow(vio.Width, vio.Height, "GoEMU",
-		nil, nil)
+	title := "GoEMU"
+	if len(vio.Title) != 0 {
+		title += " \u2014 " + vio.Title
+	}
+
+	vio.window, err = glfw.CreateWindow(vio.Width, vio.Height, title, nil, nil)
 	if err != nil {
 		vio.Errorf("glfw.CreateWindow: %v", err)
 		return
@@ -618,7 +624,7 @@ func (vio *GPU) cmdResourceCreate2D(hdr *GPUCtrlHdr, hdrBuf []byte,
 	}
 	// XXX format
 
-	vio.Debugf("%v: resourceID=%v, format=%v, width=%v, height=%v",
+	vio.Infof("%v: resourceID=%v, format=%v, width=%v, height=%v",
 		hdr.Type, resource.ID, resource.Format, resource.Width,
 		resource.Height)
 	vio.resources[resource.ID] = resource
