@@ -1065,6 +1065,9 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FmaxD
 			}
 
+		case 0b0101100:
+			instr.Op = FsqrtS
+
 		case 0b0101101:
 			instr.Op = FsqrtD
 		case 0b1010000:

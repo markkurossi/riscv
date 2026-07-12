@@ -211,6 +211,20 @@ func (m *Mstatus) SetMXR(v bool) {
 	}
 }
 
+// TVM returns the Trap Virtual Memory flag.
+func (m Mstatus) TVM() bool {
+	return m&(1<<MsTVM) != 0
+}
+
+// SetTVM sets the Trap Virtual Memory flag.
+func (m *Mstatus) SetTVM(v bool) {
+	if v {
+		*m |= 1 << MsTVM
+	} else {
+		*m &^= 1 << MsTVM
+	}
+}
+
 // SD returns the combined dirty status flag.
 func (m Mstatus) SD() bool {
 	return m&(1<<MsSD) != 0

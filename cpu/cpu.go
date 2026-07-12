@@ -559,6 +559,9 @@ dispatch:
 			// nop
 
 		case isa.SfenceVMA:
+			if cpu.mstatus.TVM() {
+				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
+			}
 			cpu.MMU.FlushTLB()
 			cpu.codePagenum = 0
 			cpu.ReservationValid = false
@@ -1689,6 +1692,9 @@ func (cpu *CPU) floatingPointExtension(instr isa.Instr, raw uint32) error {
 	case isa.FnmaddD: // F: dirty
 		cpu.F[instr.Rd] = -(cpu.F[instr.Rs1] * cpu.F[instr.Rs2]) -
 			cpu.F[instr.Imm]
+
+	case isa.FsqrtS: // F: dirty
+		cpu.F[instr.Rd] = float64(float32(math.Sqrt(cpu.F[instr.Rs1])))
 
 	case isa.FsqrtD: // F: dirty
 		cpu.F[instr.Rd] = math.Sqrt(cpu.F[instr.Rs1])

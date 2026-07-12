@@ -43,6 +43,8 @@ func (csr CSR) Privilege() isa.PrivilegeMode {
 }
 
 const (
+	CsrFflags        = 0x001
+	CsrFrm           = 0x002
 	CsrFcsr          = 0x003
 	CsrVstart        = 0x008
 	CsrVxsat         = 0x009
@@ -504,12 +506,19 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 	var v uint64
 
 	switch csr {
-	case CsrFcsr:
+	case CsrFflags, CsrFrm, CsrFcsr:
 		if cpu.mstatus.FS() == isa.RegOff && checkFSRegOff {
 			return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
 				fmt.Errorf("read fcsr when FS is off"))
 		}
-		v = cpu.CSR[csr]
+		switch csr {
+		case CsrFflags:
+			v = cpu.CSR[csr] & 0b11111
+		case CsrFrm:
+			v = cpu.CSR[csr] >> 5 & 0b111
+		default:
+			v = cpu.CSR[csr]
+		}
 
 	case CsrMstatus:
 		v = uint64(cpu.mstatus)
@@ -561,6 +570,13 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 	case CsrSip:
 		mask := uint64(isa.IntSSIP | isa.IntSTIP | isa.IntSEIP)
 		v = cpu.CSR[CsrMip] & mask
+
+	case CsrSatp:
+		if cpu.mstatus.TVM() {
+			return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
+				fmt.Errorf("get satp with TVM set"))
+		}
+		v = cpu.CSR[csr]
 
 		// Vector extension.
 
@@ -625,12 +641,21 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 	// Handle read-only and functional CSRs here by ignoring update or
 	// by updating CPU state accordingly.
 	switch csr {
-	case CsrFcsr:
+	case CsrFflags, CsrFrm, CsrFcsr:
 		if cpu.mstatus.FS() == isa.RegOff && checkFSRegOff {
 			return cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
 				fmt.Errorf("write fcsr when FS is off"))
 		}
-		cpu.CSR[csr] = v
+		switch csr {
+		case CsrFflags:
+			cpu.CSR[csr] &= ^uint64(0b11111)
+			cpu.CSR[csr] |= v & 0b11111
+		case CsrFrm:
+			cpu.CSR[csr] &= ^uint64(0b11100000)
+			cpu.CSR[csr] |= (v & 0b111) << 5
+		default:
+			cpu.CSR[csr] = v
+		}
 
 	case CsrMstatus:
 		cpu.mstatus = cpu.mstatus&isa.MConstMask |
@@ -668,6 +693,10 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 		cpu.CSR[CsrMip] = (mip & ^mask) | (v & mask)
 
 	case CsrSatp:
+		if cpu.mstatus.TVM() {
+			return cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("set satp with TVM set"))
+		}
 		satp := mmu.Satp(v)
 		cpu.MMU.SetSatp(satp)
 		cpu.codePagenum = 0
