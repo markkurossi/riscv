@@ -30,6 +30,9 @@ type Blk struct {
 	fileInfo os.FileInfo
 	id       []byte
 
+	generation uint64
+	descCh     chan uint16
+
 	// Statistics.
 	stRead  uint64
 	stWrote uint64
@@ -53,10 +56,13 @@ func NewBlk(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 			IRQ:      irq,
 			Mem:      mem,
 		},
-		File: file,
+		File:   file,
+		descCh: make(chan uint16, queueNumMax),
 	}
 	blk.Init(1)
 	blk.MMIO.Handler = blk
+
+	go blk.worker(blk.descCh, blk.generation, blk.queues[0])
 
 	return blk
 }
@@ -68,6 +74,12 @@ func (blk *Blk) SetID(id string) {
 
 // Reset implements Handler.Reset.
 func (blk *Blk) Reset() error {
+	blk.generation++
+	close(blk.descCh)
+
+	blk.descCh = make(chan uint16, queueNumMax)
+	go blk.worker(blk.descCh, blk.generation, blk.queues[0])
+
 	return nil
 }
 
@@ -80,6 +92,37 @@ func (blk *Blk) DeviceStats() {
 // ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
 func (blk *Blk) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	blk.Debugf("chain: idx=%v", idx)
+	blk.descCh <- idx
+	return 0, nil
+}
+
+func (blk *Blk) worker(ch chan uint16, generation uint64, vq *Queue) {
+
+	for desc := range ch {
+		blk.Debugf("processsing descriptor %v", desc)
+
+		blk.M.Lock()
+		if generation != blk.generation {
+			blk.M.Unlock()
+			continue
+		}
+		tx, err := blk.processDesc(vq, desc)
+		if err != nil {
+			blk.Errorf("process failed: %v", err)
+		} else {
+			if generation != blk.generation {
+				blk.M.Unlock()
+				continue
+			}
+			blk.Debugf("completing descriptor: desc=%v, tx=%v", desc, tx)
+			blk.CompleteDescriptor(vq, desc, tx)
+			blk.Debugf("completed descriptor : desc=%v, tx=%v", desc, tx)
+		}
+		blk.M.Unlock()
+	}
+}
+
+func (blk *Blk) processDesc(vq *Queue, idx uint16) (uint32, error) {
 
 	req, err := vq.loadDesc(idx)
 	if err != nil {
@@ -96,6 +139,7 @@ func (blk *Blk) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	if err != nil {
 		return 0, err
 	}
+
 	blk.Debugf("req header : %v\n", req)
 	blk.Debugf(" - type    : %v\n", blkTypeString(t))
 	blk.Debugf(" - sector  : %v\n", sector)
@@ -126,7 +170,9 @@ func (blk *Blk) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 					opStatus = VIRTIO_BLK_S_IOERR
 					continue
 				}
+				blk.M.Unlock()
 				n, err := blk.File.ReadAt(buf, fileOffset)
+				blk.M.Lock()
 				if err != nil {
 					blk.Errorf("read failed from host file offset %d: %v",
 						fileOffset, err)
@@ -154,7 +200,9 @@ func (blk *Blk) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 						opStatus = VIRTIO_BLK_S_IOERR
 						continue
 					}
+					blk.M.Unlock()
 					n, err := blk.File.WriteAt(buf, fileOffset)
+					blk.M.Lock()
 					if err != nil {
 						blk.Errorf("write failed to host file offset %d: %v",
 							fileOffset, err)

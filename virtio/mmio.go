@@ -512,22 +512,23 @@ func (vio *MMIO) ProcessQueue(idx uint32) {
 			return
 		}
 		if transferred == 0 {
-			vio.Debugf("chain idx=%v processing deferred", descHeadIdx)
-			break
+			// Asynchronous processing, this entry is not completed.
+			vio.Debugf("chain idx=%v asynchronous processing", descHeadIdx)
+		} else {
+			// Descriptor completed synchronously.
+			elemAddr := vq.UsedPhys + 4 + (uint64(uint32(usedIdx)%vq.Num) * 8)
+			vio.writeGuestUint32(elemAddr, uint32(descHeadIdx))
+			vio.writeGuestUint32(elemAddr+4, transferred)
+
+			usedIdx++
+			processedAny = true
 		}
 
-		// Write back this completed entry into the Used Ring array
-		elemAddr := vq.UsedPhys + 4 + (uint64(uint32(usedIdx)%vq.Num) * 8)
-		vio.writeGuestUint32(elemAddr, uint32(descHeadIdx))
-		vio.writeGuestUint32(elemAddr+4, transferred)
-
-		usedIdx++
 		vq.lastAvailIdx++
-		processedAny = true
 	}
 
 	if processedAny {
-		// Flush the index batch change back to guest RAM.
+		// Flush the index batch change back to guest memory.
 		vio.writeGuestUint16(usedIdxAddr, usedIdx)
 
 		// Read the guest's Available Ring flags (offset 0 of
@@ -545,6 +546,50 @@ func (vio *MMIO) ProcessQueue(idx uint32) {
 			vio.interruptStatus |= 0x1
 			vio.Plic.SetInterruptRequest(vio.IRQ, true)
 		}
+	}
+}
+
+// CompleteDescriptor completes descriptor desc with transferred tx
+// bytes. The MMIO.M must be held when this is called.
+func (vio *MMIO) CompleteDescriptor(vq *Queue, desc uint16, tx uint32) {
+	// Get used ring index.
+	usedIdxAddr := vq.UsedPhys + 2
+	usedIdx, err := vio.readGuestUint16(usedIdxAddr)
+	if err != nil {
+		vio.Errorf("read guest memory: %v", err)
+		return
+	}
+
+	// Write completed descriptor to used ring.
+	elemAddr := vq.UsedPhys + 4 + (uint64(uint32(usedIdx)%vq.Num) * 8)
+	err = vio.writeGuestUint32(elemAddr, uint32(desc))
+	if err != nil {
+		vio.Errorf("write guest memory: %v", err)
+		return
+	}
+	err = vio.writeGuestUint32(elemAddr+4, tx)
+	if err != nil {
+		vio.Errorf("write guest memory: %v", err)
+		return
+	}
+
+	// Notify guest about this completed request.
+	usedIdx++
+	err = vio.writeGuestUint16(usedIdxAddr, usedIdx)
+	if err != nil {
+		vio.Errorf("write guest memory: %v", err)
+		return
+	}
+
+	// Check if guest has suppressed interrupts.
+	availFlags, err := vio.readGuestUint16(vq.AvailPhys)
+	if err != nil {
+		vio.Errorf("read guest memory: %v", err)
+		return
+	}
+	if availFlags&1 == 0 {
+		vio.interruptStatus |= 0x1
+		vio.Plic.SetInterruptRequest(vio.IRQ, true)
 	}
 }
 

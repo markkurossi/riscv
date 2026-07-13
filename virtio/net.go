@@ -156,12 +156,10 @@ type Net struct {
 	tun  *tun.Tunnel
 	dhcp *dhcp.Server
 
-	recvCh chan []byte
+	recvDescCh chan uint16
+	recvCh     chan []byte
 
-	tunReadCh  chan int
 	tunReadBuf []byte
-
-	receivedPacket []byte
 
 	// Statistics.
 	stSent uint64
@@ -207,10 +205,11 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 			IRQ:      irq,
 			Mem:      mem,
 		},
-		HostIP:  hostIP,
-		GuestIP: guestIP,
-		tun:     tunnel,
-		recvCh:  make(chan []byte),
+		HostIP:     hostIP,
+		GuestIP:    guestIP,
+		tun:        tunnel,
+		recvDescCh: make(chan uint16, queueNumMax),
+		recvCh:     make(chan []byte),
 	}
 	vio.Init(2)
 	vio.MMIO.Handler = vio
@@ -253,18 +252,65 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 func (vio *Net) receiver(vq *Queue) {
 	vio.Debugf("receiver started for vq-%v", vq.Index)
 	for {
+		// Get our receive descriptor.
+		desc := <-vio.recvDescCh
+		vio.Debugf("receiving to descriptor %v", desc)
+
 		packet := <-vio.recvCh
 		vio.Debugf("received packet of %v bytes", len(packet))
 
 		vio.M.Lock()
-		for vio.receivedPacket != nil {
-			vio.C.Wait()
+		tx, err := vio.storePacket(vq, desc, packet)
+		if err != nil {
+			vio.Errorf("store packet failed: %v", err)
+		} else {
+			vio.CompleteDescriptor(vq, desc, tx)
 		}
-		vio.receivedPacket = packet
-
-		vio.ProcessQueue(vq.Index)
 		vio.M.Unlock()
 	}
+}
+
+func (vio *Net) storePacket(vq *Queue, idx uint16, packet []byte) (
+	uint32, error) {
+
+	// Store data into descriptor chain.
+	var received uint32
+	for len(packet) > 0 {
+		desc, err := vq.loadDesc(idx)
+		if err != nil {
+			return 0, err
+		}
+		vio.Debugf("desc: %v", desc)
+
+		if desc.Flags&VIRTQ_DESC_F_WRITE == 0 {
+			return 0, fmt.Errorf("invalid receiveq%v flags: %x",
+				vq.Index, desc.Flags)
+		}
+
+		// Get next buffer.
+		buf, err := vio.guestData(desc.Addr, uint64(desc.Len))
+		if err != nil {
+			return 0, err
+		}
+		n := copy(buf, packet)
+		received += uint32(n)
+		packet = packet[n:]
+
+		// Check next chunk
+		for desc.Flags&VIRTQ_DESC_F_NEXT == 0 {
+			break
+		}
+		idx = desc.Next
+	}
+	vio.Debugf("vq%v: transferred %v bytes, %v tail bytes ignored",
+		vq.Index, received, len(packet))
+
+	if received > 12+14 {
+		// Count only IP bytes.
+		vio.stRcvd += uint64(received - 12 - 14)
+	}
+
+	return received, nil
 }
 
 func (vio *Net) tunReader() {
@@ -311,7 +357,8 @@ func (vio *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	vio.Debugf("vq%v: chain: idx=%v", vq.Index, idx)
 
 	if vq.Index%2 == 0 {
-		return vio.processReceiveQueue(vq, idx)
+		vio.recvDescCh <- idx
+		return 0, nil
 	}
 
 	// Transmit queue.
@@ -382,55 +429,6 @@ func (vio *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	}
 
 	return transferred, nil
-}
-
-func (vio *Net) processReceiveQueue(vq *Queue, idx uint16) (uint32, error) {
-	if vio.receivedPacket == nil {
-		// No input packet yet.
-		return 0, nil
-	}
-
-	// Store data into descriptor chain.
-	var received uint32
-	for len(vio.receivedPacket) > 0 {
-		desc, err := vq.loadDesc(idx)
-		if err != nil {
-			return 0, err
-		}
-		vio.Debugf("desc: %v", desc)
-
-		if desc.Flags&VIRTQ_DESC_F_WRITE == 0 {
-			return 0, fmt.Errorf("invalid receiveq%v flags: %x",
-				vq.Index, desc.Flags)
-		}
-
-		// Get next buffer.
-		buf, err := vio.guestData(desc.Addr, uint64(desc.Len))
-		if err != nil {
-			return 0, err
-		}
-		n := copy(buf, vio.receivedPacket)
-		received += uint32(n)
-		vio.receivedPacket = vio.receivedPacket[n:]
-
-		// Check next chunk
-		for desc.Flags&VIRTQ_DESC_F_NEXT == 0 {
-			break
-		}
-		idx = desc.Next
-	}
-	vio.Debugf("vq%v: transferred %v bytes, %v tail bytes ignored",
-		vq.Index, received, len(vio.receivedPacket))
-	vio.receivedPacket = nil
-
-	if received > 12+14 {
-		// Count only IP bytes.
-		vio.stRcvd += uint64(received - 12 - 14)
-	}
-
-	vio.C.Broadcast()
-
-	return received, nil
 }
 
 func (vio *Net) processSend(hdr *NetHdr, data []byte) error {
