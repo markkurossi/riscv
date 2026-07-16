@@ -62,45 +62,26 @@ operating systems, and the RISC-V privileged architecture.
   - [x] virtio-gpu
 - [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
 
-#### X11
+### MCP RISC-V
 
-``` shell
-$ LC_ALL=C startx xterm
-$ xdotool windowfocus 6291468
-```
+The project is divided into two tracks:
 
-``` shell
-    2000000 reps @   0.0047 msec (213000.0/sec): 1-pixel circle
+1. **CPU conformance**
+    - A clean, pure Go implementation of the RISC-V processor.
+    - Prioritize correctness, readability, and maintainability.
+    - Apply performance optimizations where they do not compromise
+      code quality.
+    - This CPU implementation serves as the reference implementation
+      and will later be reimplemented using MPC primitives to create a
+      virtual MPC RISC-V CPU.
 
-     900000 reps @   0.0061 msec (164000.0/sec): 10-pixel circle
-
-     400000 reps @   0.0175 msec ( 57200.0/sec): 100-pixel circle
-
-     100000 reps @   0.0705 msec ( 14200.0/sec): 500-pixel circle
-
-      40000 reps @   0.1498 msec (  6670.0/sec): 100-pixel dashed circle
-
-      30000 reps @   0.1822 msec (  5490.0/sec): 100-pixel double-dashed circle
-
-      80000 reps @   0.0687 msec ( 14600.0/sec): 10-pixel wide circle
-
-       7000 reps @   0.7193 msec (  1390.0/sec): 100-pixel wide circle
-
-       1000 reps @   5.4914 msec (   182.0/sec): 500-pixel wide circle
-
-       4000 reps @   1.3434 msec (   744.0/sec): 100-pixel wide dashed circle
-
-       4000 reps @   1.3426 msec (   745.0/sec): 100-pixel wide double-dashed circle
-
-     500000 reps @   0.0108 msec ( 92700.0/sec): 10-pixel partial circle
-
-     158400 reps @   0.0344 msec ( 29000.0/sec): 100-pixel partial circle
-
-^C^Z
-[1]+  Stopped                 x11perf -all -repeat 1
-```
-
-virtio-gpu: ERROR: execute descriptor chain: VIRTIO_GPU_CMD_UPDATE_CURSOR: not implemented yet
+2. **System emulation**
+    - Emulate the system surrounding the CPU, including memory,
+      interrupts, and devices.
+    - Use asynchronous device interfaces where appropriate.
+    - Optimize this layer for performance.
+    - In the MPC architecture, this layer remains outside the MPC
+      computation and interacts with the virtual MPC CPU.
 
 ### System emulation and supervisor mode
 
