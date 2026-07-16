@@ -15,18 +15,19 @@ import (
 
 const (
 	// Maximum number of interrupt sources supported.
-	MaxInterrupts = 32
+	PLICMaxInterrupts = 32
 
-	// Context 0 = M-Mode Hart 0, Context 1 = S-Mode Hart 0.
-	MaxContexts = 2
+	// The maximum number of contexts supported by the PLIC
+	// specification.
+	PLICMaxContexts = 15872
 
 	// Size of the PLIC memory map.
 	PLICSize = 0x400000
 )
 
-// PlicContext holds the registers dedicated to a specific privilege
+// PLICContext holds the registers dedicated to a specific privilege
 // context.
-type PlicContext struct {
+type PLICContext struct {
 	// Priority threshold register (e.g., 0x0c200000)
 	Threshold uint32
 
@@ -35,16 +36,18 @@ type PlicContext struct {
 }
 
 type PLIC struct {
-	Hart  isa.Hart
-	Start uint64
-	End   uint64
+	Harts         []isa.Hart
+	Start         uint64
+	End           uint64
+	MaxInterrupts uint32
 
-	m sync.Mutex
+	m           sync.Mutex
+	numContexts int
 
 	// 0x000000 to 0x000080: Priorities for each interrupt source
 	// Source 0 is reserved/unused (index 0). Index 1-32 map to
 	// sources 1-32.
-	priorities [MaxInterrupts + 1]uint32
+	priorities [PLICMaxInterrupts + 1]uint32
 
 	// 0x001000 to 0x001004: Pending bitmask (Read-Only to the guest).
 	pending uint32
@@ -53,10 +56,26 @@ type PLIC struct {
 	//
 	// Context 0 (M-mode) uses index 0, Context 1 (S-mode) uses index 1.
 	// Each context has 32 bits (1 word) to cover 32 interrupt sources.
-	enables [MaxContexts]uint32
+	enables []uint32
 
 	// 0x200000 onwards: Control states grouped cleanly per context.
-	contexts [MaxContexts]PlicContext
+	contexts []PLICContext
+}
+
+func NewPLIC(harts []isa.Hart, start uint64) *PLIC {
+	numContexts := len(harts) * 2
+	if numContexts > PLICMaxContexts {
+		panic("maximum number of contexts exceeded")
+	}
+	return &PLIC{
+		Harts:         harts,
+		Start:         start,
+		End:           start + PLICSize,
+		MaxInterrupts: PLICMaxInterrupts,
+		numContexts:   numContexts,
+		enables:       make([]uint32, numContexts),
+		contexts:      make([]PLICContext, numContexts),
+	}
 }
 
 func (plic *PLIC) Halt() error {
@@ -69,7 +88,7 @@ func (plic *PLIC) Contains(paddr uint64) bool {
 
 func (plic *PLIC) Load8(paddr uint64) (uint8, error) {
 	if paddr < plic.Start {
-		return 0, plic.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
+		return 0, plic.Harts[0].Trap(isa.CauseStorePageFault, paddr, nil)
 	}
 	log.Printf("PLIC: Load8(0x%x)", paddr)
 	return 0, nil
@@ -82,7 +101,7 @@ func (plic *PLIC) Load16(paddr uint64) (uint16, error) {
 
 func (plic *PLIC) Load32(paddr uint64) (uint32, error) {
 	if paddr < plic.Start {
-		return 0, plic.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
+		return 0, plic.Harts[0].Trap(isa.CauseLoadPageFault, paddr, nil)
 	}
 
 	plic.m.Lock()
@@ -98,17 +117,17 @@ func (plic *PLIC) Load32(paddr uint64) (uint32, error) {
 		return plic.pending, nil
 
 	case offset >= 0x002000 && offset <= 0x002084:
-		contextID := (offset - 0x2000) / 0x80
-		if contextID < MaxContexts {
+		contextID := int((offset - 0x2000) / 0x80)
+		if contextID < len(plic.enables) {
 			return plic.enables[contextID], nil
 		}
 
 	case offset >= 0x200000:
 		contextOffset := offset - 0x200000
-		contextID := uint32(contextOffset / 0x1000)
+		contextID := int(contextOffset / 0x1000)
 		regRegister := contextOffset % 0x1000
 
-		if contextID < MaxContexts {
+		if contextID < len(plic.contexts) {
 			if regRegister == 0x0 {
 				return plic.contexts[contextID].Threshold, nil
 			} else if regRegister == 0x4 {
@@ -128,7 +147,7 @@ func (plic *PLIC) Load64(paddr uint64) (uint64, error) {
 
 func (plic *PLIC) Store8(paddr uint64, v uint8) error {
 	if paddr < plic.Start {
-		return plic.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
+		return plic.Harts[0].Trap(isa.CauseStorePageFault, paddr, nil)
 	}
 	log.Printf("PLIC: 0x%x = 0x%x", paddr, v)
 	return nil
@@ -141,7 +160,7 @@ func (plic *PLIC) Store16(paddr uint64, v uint16) error {
 
 func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 	if paddr < plic.Start {
-		return plic.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
+		return plic.Harts[0].Trap(isa.CauseStorePageFault, paddr, nil)
 	}
 
 	plic.m.Lock()
@@ -153,7 +172,7 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 	// 1. Interrupt Source Priorities (0x000004 - 0x000080)
 	case offset >= 0x000004 && offset <= 0x000080:
 		sourceID := offset / 4
-		if sourceID <= MaxInterrupts {
+		if sourceID <= PLICMaxInterrupts {
 			// Only 3 bits of priority (0-7).
 			plic.priorities[sourceID] = uint32(val & 0x7)
 		}
@@ -163,7 +182,7 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 		// Stride is 0x80 bytes per context for enable bits
 		contextID := (offset - 0x2000) / 0x80
 		wordOffset := (offset - 0x2000) % 0x80
-		if contextID < MaxContexts && wordOffset == 0 {
+		if contextID < PLICMaxContexts && wordOffset == 0 {
 			plic.enables[contextID] = uint32(val)
 		}
 
@@ -171,10 +190,10 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 	case offset >= 0x200000:
 		// Stride is 0x1000 (4KB page alignment) per context target
 		contextOffset := offset - 0x200000
-		contextID := uint32(contextOffset / 0x1000)
+		contextID := int(contextOffset / 0x1000)
 		regRegister := contextOffset % 0x1000
 
-		if contextID < MaxContexts {
+		if contextID < plic.numContexts {
 			if regRegister == 0x0 { // Threshold Register
 				plic.contexts[contextID].Threshold = uint32(val & 0x7)
 			} else if regRegister == 0x4 { // Claim / Complete Register
@@ -207,13 +226,13 @@ func (plic *PLIC) SetInterruptRequest(irq uint32, set bool) {
 	plic.reevaluateInterrupts()
 }
 
-func (plic *PLIC) claimInterrupt(contextID uint32) uint32 {
+func (plic *PLIC) claimInterrupt(contextID int) uint32 {
 
 	var highestPriority uint32 = 0
 	var claimedSource uint32 = 0
 
 	// Walk through all configured interrupt sources.
-	for sourceID := uint32(1); sourceID <= MaxInterrupts; sourceID++ {
+	for sourceID := uint32(1); sourceID <= PLICMaxInterrupts; sourceID++ {
 		// Check if the source is enabled for this context AND is
 		// actively pending.
 		isPending := (plic.pending & (1 << sourceID)) != 0
@@ -242,8 +261,8 @@ func (plic *PLIC) claimInterrupt(contextID uint32) uint32 {
 	return claimedSource
 }
 
-func (plic *PLIC) completeInterrupt(contextID uint32, sourceID uint32) {
-	if sourceID == 0 || sourceID > MaxInterrupts {
+func (plic *PLIC) completeInterrupt(contextID int, sourceID uint32) {
+	if sourceID == 0 || sourceID > PLICMaxInterrupts {
 		return // Invalid source ID complete request
 	}
 
@@ -255,39 +274,31 @@ func (plic *PLIC) completeInterrupt(contextID uint32, sourceID uint32) {
 }
 
 func (plic *PLIC) reevaluateInterrupts() {
-	// 1. Re-evaluate M-Mode interrupts (Context 0)
-	mModeSignaled := false
-	for sourceID := uint32(1); sourceID <= MaxInterrupts; sourceID++ {
-		isPending := (plic.pending & (1 << sourceID)) != 0
-		isEnabled := (plic.enables[0] & (1 << sourceID)) != 0
-		if isPending && isEnabled &&
-			plic.priorities[sourceID] > plic.contexts[0].Threshold {
-			mModeSignaled = true
-			break
+	// Loop over all contexts.
+	for context := 0; context < plic.numContexts; context++ {
+		signaled := false
+		for sourceID := uint32(1); sourceID <= PLICMaxInterrupts; sourceID++ {
+			isPending := (plic.pending & (1 << sourceID)) != 0
+			isEnabled := (plic.enables[context] & (1 << sourceID)) != 0
+			if isPending && isEnabled &&
+				plic.priorities[sourceID] > plic.contexts[context].Threshold {
+				signaled = true
+				break
+			}
 		}
-	}
-	log.Printf("PLIC.reevaluateInterrupts: mModeSignaled=%v", mModeSignaled)
-	if mModeSignaled {
-		plic.Hart.SetInterrupt(isa.IntMEIP)
-	} else {
-		plic.Hart.ClearInterrupt(isa.IntMEIP)
-	}
-
-	// 2. Re-evaluate S-Mode interrupts (Context 1)
-	sModeSignaled := false
-	for sourceID := uint32(1); sourceID <= MaxInterrupts; sourceID++ {
-		isPending := (plic.pending & (1 << sourceID)) != 0
-		isEnabled := (plic.enables[1] & (1 << sourceID)) != 0
-		if isPending && isEnabled &&
-			plic.priorities[sourceID] > plic.contexts[1].Threshold {
-			sModeSignaled = true
-			break
+		hart := context / 2
+		var interrupt uint64
+		if context%2 == 0 {
+			interrupt = isa.IntMEIP
+		} else {
+			interrupt = isa.IntSEIP
 		}
-	}
-	log.Printf("PLIC.reevaluateInterrupts: sModeSignaled=%v", sModeSignaled)
-	if sModeSignaled {
-		plic.Hart.SetInterrupt(isa.IntSEIP)
-	} else {
-		plic.Hart.ClearInterrupt(isa.IntSEIP)
+		log.Printf("PLIC.reevaluateInterrupts: hart=%v, %v=%v",
+			hart, isa.IntString(interrupt), signaled)
+		if signaled {
+			plic.Harts[hart].SetInterrupt(interrupt)
+		} else {
+			plic.Harts[hart].ClearInterrupt(interrupt)
+		}
 	}
 }
