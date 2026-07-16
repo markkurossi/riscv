@@ -215,8 +215,8 @@ func (uart *UART) Run() {
 		if (uart.IER & 0x01) != 0 {
 			uart.isrPending |= 0x01 // Receiver data available
 			if uart.Plic != nil {
-				uart.Plic.Pending |= (1 << uart.IRQ)
-				uart.Plic.ReevaluateInterrupts()
+				uart.Plic.pending |= (1 << uart.IRQ)
+				uart.Plic.reevaluateInterrupts()
 			}
 		}
 		uart.inputAvail.Store(true)
@@ -265,8 +265,8 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 			uart.isrPending &^= 0x01 // Clear receiver interrupt flag
 
 			if uart.isrPending == 0 && uart.Plic != nil {
-				uart.Plic.Pending &^= (1 << uart.IRQ)
-				uart.Plic.ReevaluateInterrupts()
+				uart.Plic.pending &^= (1 << uart.IRQ)
+				uart.Plic.reevaluateInterrupts()
 			}
 		}
 		uart.m.Unlock()
@@ -296,8 +296,8 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 
 			// If no other conditions remain, lower the PLIC line
 			if uart.isrPending == 0 && uart.Plic != nil {
-				uart.Plic.Pending &^= (1 << uart.IRQ)
-				uart.Plic.ReevaluateInterrupts()
+				uart.Plic.pending &^= (1 << uart.IRQ)
+				uart.Plic.reevaluateInterrupts()
 			}
 			uart.Infof("IIR read: %08b: THR empty", iir)
 			return iir, nil
@@ -497,8 +497,7 @@ func (uart *UART) checkInterrupts() {
 		uart.isrPending |= 0x02
 
 		if uart.Plic != nil {
-			uart.Plic.Pending |= (1 << uart.IRQ)
-			uart.Plic.ReevaluateInterrupts()
+			uart.Plic.SetInterruptRequest(uart.IRQ, true)
 		}
 	}
 

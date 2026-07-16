@@ -8,6 +8,7 @@ package dev
 
 import (
 	"log"
+	"sync"
 
 	"github.com/markkurossi/riscv/isa"
 )
@@ -18,6 +19,9 @@ const (
 
 	// Context 0 = M-Mode Hart 0, Context 1 = S-Mode Hart 0.
 	MaxContexts = 2
+
+	// Size of the PLIC memory map.
+	PLICSize = 0x400000
 )
 
 // PlicContext holds the registers dedicated to a specific privilege
@@ -35,22 +39,24 @@ type PLIC struct {
 	Start uint64
 	End   uint64
 
+	m sync.Mutex
+
 	// 0x000000 to 0x000080: Priorities for each interrupt source
 	// Source 0 is reserved/unused (index 0). Index 1-32 map to
 	// sources 1-32.
-	Priorities [MaxInterrupts + 1]uint32
+	priorities [MaxInterrupts + 1]uint32
 
 	// 0x001000 to 0x001004: Pending bitmask (Read-Only to the guest).
-	Pending uint32
+	pending uint32
 
 	// 0x002000 to 0x002084: Enable bitmasks for each context.
 	//
 	// Context 0 (M-mode) uses index 0, Context 1 (S-mode) uses index 1.
 	// Each context has 32 bits (1 word) to cover 32 interrupt sources.
-	Enables [MaxContexts]uint32
+	enables [MaxContexts]uint32
 
 	// 0x200000 onwards: Control states grouped cleanly per context.
-	Contexts [MaxContexts]PlicContext
+	contexts [MaxContexts]PlicContext
 }
 
 func (plic *PLIC) Halt() error {
@@ -79,19 +85,22 @@ func (plic *PLIC) Load32(paddr uint64) (uint32, error) {
 		return 0, plic.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
 	}
 
+	plic.m.Lock()
+	defer plic.m.Unlock()
+
 	offset := paddr - plic.Start
 
 	switch {
 	case offset >= 0x000004 && offset <= 0x000080:
-		return plic.Priorities[offset/4], nil
+		return plic.priorities[offset/4], nil
 
 	case offset == 0x001000:
-		return plic.Pending, nil
+		return plic.pending, nil
 
 	case offset >= 0x002000 && offset <= 0x002084:
 		contextID := (offset - 0x2000) / 0x80
 		if contextID < MaxContexts {
-			return plic.Enables[contextID], nil
+			return plic.enables[contextID], nil
 		}
 
 	case offset >= 0x200000:
@@ -101,10 +110,10 @@ func (plic *PLIC) Load32(paddr uint64) (uint32, error) {
 
 		if contextID < MaxContexts {
 			if regRegister == 0x0 {
-				return plic.Contexts[contextID].Threshold, nil
+				return plic.contexts[contextID].Threshold, nil
 			} else if regRegister == 0x4 {
 				// Reading claim register evaluates pending IRQs and pulls high
-				return plic.ClaimInterrupt(contextID), nil
+				return plic.claimInterrupt(contextID), nil
 			}
 		}
 	}
@@ -135,6 +144,9 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 		return plic.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 	}
 
+	plic.m.Lock()
+	defer plic.m.Unlock()
+
 	offset := paddr - plic.Start
 
 	switch {
@@ -143,7 +155,7 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 		sourceID := offset / 4
 		if sourceID <= MaxInterrupts {
 			// Only 3 bits of priority (0-7).
-			plic.Priorities[sourceID] = uint32(val & 0x7)
+			plic.priorities[sourceID] = uint32(val & 0x7)
 		}
 
 	// 2. Interrupt Enables (0x002000 - 0x002084)
@@ -152,7 +164,7 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 		contextID := (offset - 0x2000) / 0x80
 		wordOffset := (offset - 0x2000) % 0x80
 		if contextID < MaxContexts && wordOffset == 0 {
-			plic.Enables[contextID] = uint32(val)
+			plic.enables[contextID] = uint32(val)
 		}
 
 	// 3. Priority Thresholds & Claim/Complete Blocks (0x200000 onwards)
@@ -164,12 +176,12 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 
 		if contextID < MaxContexts {
 			if regRegister == 0x0 { // Threshold Register
-				plic.Contexts[contextID].Threshold = uint32(val & 0x7)
+				plic.contexts[contextID].Threshold = uint32(val & 0x7)
 			} else if regRegister == 0x4 { // Claim / Complete Register
 
 				// Writing to claim means the guest OS finished
 				// handling an IRQ line.
-				plic.CompleteInterrupt(contextID, uint32(val))
+				plic.completeInterrupt(contextID, uint32(val))
 			}
 		}
 	}
@@ -183,16 +195,20 @@ func (plic *PLIC) Store64(paddr uint64, v uint64) error {
 }
 
 func (plic *PLIC) SetInterruptRequest(irq uint32, set bool) {
+	plic.m.Lock()
+	defer plic.m.Unlock()
+
 	bit := uint32(1) << irq
 	if set {
-		plic.Pending |= bit
+		plic.pending |= bit
 	} else {
-		plic.Pending &^= bit
+		plic.pending &^= bit
 	}
-	plic.ReevaluateInterrupts()
+	plic.reevaluateInterrupts()
 }
 
-func (plic *PLIC) ClaimInterrupt(contextID uint32) uint32 {
+func (plic *PLIC) claimInterrupt(contextID uint32) uint32 {
+
 	var highestPriority uint32 = 0
 	var claimedSource uint32 = 0
 
@@ -200,14 +216,14 @@ func (plic *PLIC) ClaimInterrupt(contextID uint32) uint32 {
 	for sourceID := uint32(1); sourceID <= MaxInterrupts; sourceID++ {
 		// Check if the source is enabled for this context AND is
 		// actively pending.
-		isPending := (plic.Pending & (1 << sourceID)) != 0
-		isEnabled := (plic.Enables[contextID] & (1 << sourceID)) != 0
+		isPending := (plic.pending & (1 << sourceID)) != 0
+		isEnabled := (plic.enables[contextID] & (1 << sourceID)) != 0
 
 		if isPending && isEnabled {
-			priority := plic.Priorities[sourceID]
+			priority := plic.priorities[sourceID]
 			// Only consider it if it strictly exceeds the context's
 			// current threshold.
-			if priority > plic.Contexts[contextID].Threshold {
+			if priority > plic.contexts[contextID].Threshold {
 				if priority > highestPriority {
 					highestPriority = priority
 					claimedSource = sourceID
@@ -219,14 +235,14 @@ func (plic *PLIC) ClaimInterrupt(contextID uint32) uint32 {
 	if claimedSource != 0 {
 		// Hardware handshake: clear the pending state atomically upon
 		// claiming.
-		plic.Pending &^= (1 << claimedSource)
-		plic.ReevaluateInterrupts()
+		plic.pending &^= (1 << claimedSource)
+		plic.reevaluateInterrupts()
 	}
 
 	return claimedSource
 }
 
-func (plic *PLIC) CompleteInterrupt(contextID uint32, sourceID uint32) {
+func (plic *PLIC) completeInterrupt(contextID uint32, sourceID uint32) {
 	if sourceID == 0 || sourceID > MaxInterrupts {
 		return // Invalid source ID complete request
 	}
@@ -235,20 +251,22 @@ func (plic *PLIC) CompleteInterrupt(contextID uint32, sourceID uint32) {
 	// PLIC gateway routing.  Now that the handler loop is completely
 	// clear, we re-evaluate if any other enabled interrupts are
 	// sitting in the pipeline waiting for their turn.
-	plic.ReevaluateInterrupts()
+	plic.reevaluateInterrupts()
 }
 
-func (plic *PLIC) ReevaluateInterrupts() {
+func (plic *PLIC) reevaluateInterrupts() {
 	// 1. Re-evaluate M-Mode interrupts (Context 0)
 	mModeSignaled := false
 	for sourceID := uint32(1); sourceID <= MaxInterrupts; sourceID++ {
-		isPending := (plic.Pending & (1 << sourceID)) != 0
-		isEnabled := (plic.Enables[0] & (1 << sourceID)) != 0
-		if isPending && isEnabled && plic.Priorities[sourceID] > plic.Contexts[0].Threshold {
+		isPending := (plic.pending & (1 << sourceID)) != 0
+		isEnabled := (plic.enables[0] & (1 << sourceID)) != 0
+		if isPending && isEnabled &&
+			plic.priorities[sourceID] > plic.contexts[0].Threshold {
 			mModeSignaled = true
 			break
 		}
 	}
+	log.Printf("PLIC.reevaluateInterrupts: mModeSignaled=%v", mModeSignaled)
 	if mModeSignaled {
 		plic.Hart.SetInterrupt(isa.IntMEIP)
 	} else {
@@ -258,13 +276,15 @@ func (plic *PLIC) ReevaluateInterrupts() {
 	// 2. Re-evaluate S-Mode interrupts (Context 1)
 	sModeSignaled := false
 	for sourceID := uint32(1); sourceID <= MaxInterrupts; sourceID++ {
-		isPending := (plic.Pending & (1 << sourceID)) != 0
-		isEnabled := (plic.Enables[1] & (1 << sourceID)) != 0
-		if isPending && isEnabled && plic.Priorities[sourceID] > plic.Contexts[1].Threshold {
+		isPending := (plic.pending & (1 << sourceID)) != 0
+		isEnabled := (plic.enables[1] & (1 << sourceID)) != 0
+		if isPending && isEnabled &&
+			plic.priorities[sourceID] > plic.contexts[1].Threshold {
 			sModeSignaled = true
 			break
 		}
 	}
+	log.Printf("PLIC.reevaluateInterrupts: sModeSignaled=%v", sModeSignaled)
 	if sModeSignaled {
 		plic.Hart.SetInterrupt(isa.IntSEIP)
 	} else {

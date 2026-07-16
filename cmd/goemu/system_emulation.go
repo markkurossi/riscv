@@ -47,7 +47,6 @@ const (
 	CLINTSize = 0x10000
 
 	PLICBase = 0x0c000000
-	PLICSize = 0x400000
 )
 
 func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
@@ -63,7 +62,7 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 	plic := &dev.PLIC{
 		Hart:  core,
 		Start: PLICBase,
-		End:   PLICBase + PLICSize,
+		End:   PLICBase + dev.PLICSize,
 	}
 
 	uart := dev.NewUART(core, UARTBase, UARTSize, plic, UARTIRQ,
@@ -528,8 +527,8 @@ func makeDTB(initrdSize uint64, mem *memory.Memory,
 		uint32(PLICBase >> 32),
 		uint32(PLICBase),
 
-		uint32(PLICSize >> 32),
-		uint32(PLICSize),
+		uint32(dev.PLICSize >> 32),
+		uint32(dev.PLICSize),
 	}
 
 	fdt.PropTabU32("reg", &tab[0], 4)
@@ -544,13 +543,14 @@ func makeDTB(initrdSize uint64, mem *memory.Memory,
 	fdt.PropU32("phandle", 2)
 
 	// interrupts-extended:
-	//
-	// 11 = machine external interrupt
-	//  9 = supervisor external interrupt
+	//   		 1 = cpu0's phandle
+	//  		11 = machine external interrupt
+	//   		 9 = supervisor external interrupt
+	//	0xffffffff = not connected
 	//
 	tab = [8]uint32{
-		1, 0xffffffff, // hart 0 M-mode context (use 0xffffffff = not connected)
-		1, 9, // hart 0 S-mode supervisor external interrupt
+		1, 11,
+		1, 9,
 	}
 
 	fdt.PropTabU32("interrupts-extended", &tab[0], 4)
