@@ -114,9 +114,9 @@ func (blk *Blk) worker(ch chan uint16, generation uint64, vq *Queue) {
 				blk.M.Unlock()
 				continue
 			}
-			blk.Debugf("completing descriptor: desc=%v, tx=%v", desc, tx)
+			blk.Errorf("completing descriptor: desc=%v, tx=%v", desc, tx)
 			blk.CompleteDescriptor(vq, desc, tx)
-			blk.Debugf("completed descriptor : desc=%v, tx=%v", desc, tx)
+			blk.Errorf("completed descriptor : desc=%v, tx=%v", desc, tx)
 		}
 		blk.M.Unlock()
 	}

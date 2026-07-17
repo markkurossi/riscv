@@ -276,13 +276,13 @@ func (plic *PLIC) completeInterrupt(contextID int, sourceID uint32) {
 func (plic *PLIC) reevaluateInterrupts() {
 	// Loop over all contexts.
 	for context := 0; context < plic.numContexts; context++ {
-		signaled := false
+		var signaled uint32
 		for sourceID := uint32(1); sourceID <= PLICMaxInterrupts; sourceID++ {
 			isPending := (plic.pending & (1 << sourceID)) != 0
 			isEnabled := (plic.enables[context] & (1 << sourceID)) != 0
 			if isPending && isEnabled &&
 				plic.priorities[sourceID] > plic.contexts[context].Threshold {
-				signaled = true
+				signaled = sourceID
 				break
 			}
 		}
@@ -295,9 +295,11 @@ func (plic *PLIC) reevaluateInterrupts() {
 		}
 		log.Printf("PLIC.reevaluateInterrupts: hart=%v, %v=%v",
 			hart, isa.IntString(interrupt), signaled)
-		if signaled {
+		if signaled > 0 {
 			plic.Harts[hart].SetInterrupt(interrupt)
 		} else {
+			// XXX should we clear if CPU has not claimed it? Or is
+			// the claiming the only way how this get zeroed?
 			plic.Harts[hart].ClearInterrupt(interrupt)
 		}
 	}

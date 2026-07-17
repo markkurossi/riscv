@@ -520,9 +520,15 @@ dispatch:
 			}()
 
 			// Wait for interrupt.
+			waited := false
 			cpu.m.Lock()
 			for cpu.CSR[CsrMip]&cpu.CSR[CsrMie] == 0 && !cpu.wfiTimeout {
+				waited = true
 				cpu.c.Wait()
+			}
+			if waited {
+				log.Printf("wfi: delay=%v,\tmip=%v\ttimeout=%v",
+					delayns, cpu.CSR[CsrMip], cpu.wfiTimeout)
 			}
 			if cpu.wfiTimeout {
 				cpu.Time += delay
@@ -2068,8 +2074,8 @@ func (cpu *CPU) ClearInterrupt(mask uint64) {
 func (cpu *CPU) SetInterrupt(mask uint64) {
 	cpu.m.Lock()
 	cpu.CSR[CsrMip] |= mask
-	cpu.m.Unlock()
 	cpu.c.Broadcast()
+	cpu.m.Unlock()
 }
 
 func (cpu *CPU) FuncName(pc uint64) (*SymEntry, uint64) {
