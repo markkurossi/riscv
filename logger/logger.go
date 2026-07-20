@@ -17,7 +17,8 @@ type Level int
 
 // Logging levels.
 const (
-	Error Level = iota
+	All Level = iota
+	Error
 	Info
 	Verbose
 	Debug
@@ -40,6 +41,9 @@ type Logger interface {
 
 	// Errorf logs an error message.
 	Errorf(format string, args ...interface{})
+
+	// Logf logs a log message.
+	Logf(format string, args ...interface{})
 }
 
 var (
@@ -54,7 +58,11 @@ type Log struct {
 
 func (l *Log) logf(level, format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
-	log.Printf("%s: %s: %s", l.Name, level, msg)
+	if len(level) > 0 {
+		log.Printf("%s: %s: %s", l.Name, level, msg)
+	} else {
+		log.Printf("%s: %s", l.Name, msg)
+	}
 }
 
 // Tracef implements Logger.Tracef.
@@ -91,5 +99,13 @@ func (l *Log) Infof(format string, args ...interface{}) {
 
 // Errorf implements Logger.Errorf.
 func (l *Log) Errorf(format string, args ...interface{}) {
+	if l.Level < Error {
+		return
+	}
 	l.logf("ERROR", format, args...)
+}
+
+// Logf implements Logger.Logf.
+func (l *Log) Logf(format string, args ...interface{}) {
+	l.logf("", format, args...)
 }
