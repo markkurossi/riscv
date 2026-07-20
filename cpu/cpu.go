@@ -16,6 +16,7 @@ import (
 	"math/bits"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/markkurossi/riscv/isa"
@@ -44,7 +45,7 @@ type CPU struct {
 	mode     isa.PrivilegeMode
 	shutdown bool
 
-	CSR     [4096]uint64
+	CSR     [4096]atomic.Uint64
 	mstatus isa.Mstatus
 
 	PC uint64
@@ -191,25 +192,22 @@ dispatch:
 		// Check interrupts every 64 instructions or if any interrupts
 		// are pending. The loop below will not trigger interrupts if
 		// they are pending but not enabled.
-		// XXX consider moving CsrMip and CsrMie to local variables.
 		if cpu.Instret&0x3f == 0 { // || cpu.CSR[CsrMip] != 0 {
 			// Sync time to wall clock.
 			now := cpu.syncTime()
-
-			mip := cpu.CSR[CsrMip]
-			stimecmp := cpu.CSR[CsrStimecmp]
+			stimecmp := cpu.CSR[CsrStimecmp].Load()
 
 			// Check timer interrupts.
 			if now >= stimecmp {
-				mip |= isa.IntSTIP
+				cpu.CSR[CsrMip].Or(isa.IntSTIP)
 			}
-			cpu.CSR[CsrMip] = mip
 
-			mie := cpu.CSR[CsrMie]
+			mip := cpu.CSR[CsrMip].Load()
+			mie := cpu.CSR[CsrMie].Load()
 			pending := mip & mie
 
 			if pending != 0 {
-				mideleg := cpu.CSR[CsrMideleg]
+				mideleg := cpu.CSR[CsrMideleg].Load()
 				currentMode := cpu.Mode()
 
 				// Check each pending interrupt, highest priority first
@@ -451,7 +449,7 @@ dispatch:
 			cpu.mstatus.SetSPIE(true)
 			cpu.SetMode(cpu.mstatus.SPP())
 			cpu.mstatus.SetSPP(isa.ModeU)
-			cpu.PC = cpu.CSR[CsrSepc]
+			cpu.PC = cpu.CSR[CsrSepc].Load()
 			cpu.ReservationValid = false
 			continue
 
@@ -465,7 +463,7 @@ dispatch:
 			cpu.mstatus.SetMPIE(true)
 			cpu.SetMode(cpu.mstatus.MPP())
 			cpu.mstatus.SetMPP(isa.ModeU)
-			cpu.PC = cpu.CSR[CsrMepc]
+			cpu.PC = cpu.CSR[CsrMepc].Load()
 			cpu.ReservationValid = false
 			continue
 
@@ -499,7 +497,7 @@ dispatch:
 		case isa.Wfi:
 			// Calculate delay to the next stimecmp interrupt.
 
-			stimecmp := cpu.CSR[CsrStimecmp]
+			stimecmp := cpu.CSR[CsrStimecmp].Load()
 			now := cpu.syncTime()
 
 			if stimecmp == 0xffffffffffffffff || now >= stimecmp {
@@ -520,15 +518,10 @@ dispatch:
 			}()
 
 			// Wait for interrupt.
-			waited := false
 			cpu.m.Lock()
-			for cpu.CSR[CsrMip]&cpu.CSR[CsrMie] == 0 && !cpu.wfiTimeout {
-				waited = true
+			for cpu.CSR[CsrMip].Load()&cpu.CSR[CsrMie].Load() == 0 &&
+				!cpu.wfiTimeout {
 				cpu.c.Wait()
-			}
-			if waited {
-				log.Printf("wfi: delay=%v,\tmip=%v\ttimeout=%v",
-					delayns, cpu.CSR[CsrMip], cpu.wfiTimeout)
 			}
 			if cpu.wfiTimeout {
 				cpu.Time += delay
@@ -536,8 +529,8 @@ dispatch:
 			cpu.m.Unlock()
 
 			// Check timer interrupts.
-			if cpu.syncTime() >= cpu.CSR[CsrStimecmp] {
-				cpu.CSR[CsrMip] |= isa.IntSTIP
+			if cpu.syncTime() >= cpu.CSR[CsrStimecmp].Load() {
+				cpu.CSR[CsrMip].Or(isa.IntSTIP)
 			}
 
 		case isa.Fence:
@@ -867,19 +860,6 @@ dispatch:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] ^ uint64(int64(instr.Imm))
 
 			// Control and Status Registers (CSRs).
-		case isa.Csrrs:
-			csr := CSR(instr.Imm)
-			t, err := cpu.GetCSR(csr)
-			if err != nil {
-				return err
-			}
-			if instr.Rs1 != isa.Zero {
-				err = cpu.SetCSRX(csr, t|cpu.X[instr.Rs1], raw, instr)
-				if err != nil {
-					return err
-				}
-			}
-			cpu.X[instr.Rd] = t
 
 		case isa.Csrrc:
 			csr := CSR(instr.Imm)
@@ -904,6 +884,20 @@ dispatch:
 			// If zimm is zero, csrrsi is read-only.
 			if instr.Rs1 != isa.Zero {
 				err = cpu.SetCSRX(csr, t & ^uint64(instr.Rs1), raw, instr)
+				if err != nil {
+					return err
+				}
+			}
+			cpu.X[instr.Rd] = t
+
+		case isa.Csrrs:
+			csr := CSR(instr.Imm)
+			t, err := cpu.GetCSR(csr)
+			if err != nil {
+				return err
+			}
+			if instr.Rs1 != isa.Zero {
+				err = cpu.SetCSRX(csr, t|cpu.X[instr.Rs1], raw, instr)
 				if err != nil {
 					return err
 				}
@@ -2066,16 +2060,12 @@ func fclassS(fVal float32) uint32 {
 }
 
 func (cpu *CPU) ClearInterrupt(mask uint64) {
-	cpu.m.Lock()
-	cpu.CSR[CsrMip] &^= mask
-	cpu.m.Unlock()
+	cpu.CSR[CsrMip].And(^mask)
 }
 
 func (cpu *CPU) SetInterrupt(mask uint64) {
-	cpu.m.Lock()
-	cpu.CSR[CsrMip] |= mask
+	cpu.CSR[CsrMip].Or(mask)
 	cpu.c.Broadcast()
-	cpu.m.Unlock()
 }
 
 func (cpu *CPU) FuncName(pc uint64) (*SymEntry, uint64) {
