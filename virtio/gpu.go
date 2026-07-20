@@ -153,6 +153,8 @@ func NewGPU(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		resources: make(map[uint32]*GPUResource),
 		logo:      logo,
 	}
+	plic.IRQs[irq] = "gpu"
+
 	vio.Init(2)
 	vio.MMIO.Handler = vio
 

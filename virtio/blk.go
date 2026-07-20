@@ -59,6 +59,8 @@ func NewBlk(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		File:   file,
 		descCh: make(chan uint16, queueNumMax),
 	}
+	plic.IRQs[irq] = "blk"
+
 	blk.Init(1)
 	blk.MMIO.Handler = blk
 
@@ -114,9 +116,7 @@ func (blk *Blk) worker(ch chan uint16, generation uint64, vq *Queue) {
 				blk.M.Unlock()
 				continue
 			}
-			blk.Errorf("completing descriptor: desc=%v, tx=%v", desc, tx)
 			blk.CompleteDescriptor(vq, desc, tx)
-			blk.Errorf("completed descriptor : desc=%v, tx=%v", desc, tx)
 		}
 		blk.M.Unlock()
 	}

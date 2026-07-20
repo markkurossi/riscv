@@ -66,6 +66,7 @@ func NewInput(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		Width:  width,
 		Height: height,
 	}
+	plic.IRQs[irq] = "input"
 
 	vio.Init(2)
 	vio.MMIO.Handler = vio

@@ -211,6 +211,8 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		recvDescCh: make(chan uint16, queueNumMax),
 		recvCh:     make(chan []byte),
 	}
+	plic.IRQs[irq] = "net"
+
 	vio.Init(2)
 	vio.MMIO.Handler = vio
 

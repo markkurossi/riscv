@@ -587,12 +587,10 @@ func (vio *MMIO) CompleteDescriptor(vq *Queue, desc uint16, tx uint32) {
 		vio.Errorf("read guest memory: %v", err)
 		return
 	}
+
 	if availFlags&1 == 0 {
-		vio.Errorf("notifying PLIC: irq=%v", vio.IRQ)
 		vio.interruptStatus |= 0x1
 		vio.Plic.SetInterruptRequest(vio.IRQ, true)
-	} else {
-		vio.Errorf("interrupts disabled: irq=%v", vio.IRQ)
 	}
 }
 

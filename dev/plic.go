@@ -7,6 +7,7 @@
 package dev
 
 import (
+	"fmt"
 	"log"
 	"sync"
 
@@ -15,7 +16,7 @@ import (
 
 const (
 	// Maximum number of interrupt sources supported.
-	PLICMaxInterrupts = 32
+	PLICMaxInterrupts = 63
 
 	// The maximum number of contexts supported by the PLIC
 	// specification.
@@ -32,7 +33,16 @@ type PLICContext struct {
 	Threshold uint32
 
 	// Claim/Complete register  (e.g., 0x0c200004)
-	Claim uint32
+	// XXX unused
+	ClaimXXX uint32
+}
+
+// Gateway converts interrupts signals from source to pending
+// interrupts at PLIC core.
+type Gateway struct {
+	priority uint32
+	asserted bool
+	inflight bool
 }
 
 type PLIC struct {
@@ -40,23 +50,22 @@ type PLIC struct {
 	Start         uint64
 	End           uint64
 	MaxInterrupts uint32
+	IRQs          map[uint32]string
 
 	m           sync.Mutex
 	numContexts int
 
-	// 0x000000 to 0x000080: Priorities for each interrupt source
-	// Source 0 is reserved/unused (index 0). Index 1-32 map to
-	// sources 1-32.
-	priorities [PLICMaxInterrupts + 1]uint32
+	// Interrupt gateways for each interrupt source. Gateway 0 is
+	// reserved/unused. The priority field is mapped to offsets
+	// 0x000000 to 0x000080 of the PLIC memory.
+	gateways [PLICMaxInterrupts + 1]Gateway
 
 	// 0x001000 to 0x001004: Pending bitmask (Read-Only to the guest).
-	pending uint32
+	pending uint64
 
-	// 0x002000 to 0x002084: Enable bitmasks for each context.
-	//
-	// Context 0 (M-mode) uses index 0, Context 1 (S-mode) uses index 1.
-	// Each context has 32 bits (1 word) to cover 32 interrupt sources.
-	enables []uint32
+	// 0x002000 to 0x002084: Enable bitmasks for each context.  Each
+	// context has 64 bits to cover 63 interrupt sources.
+	enables []uint64
 
 	// 0x200000 onwards: Control states grouped cleanly per context.
 	contexts []PLICContext
@@ -72,8 +81,9 @@ func NewPLIC(harts []isa.Hart, start uint64) *PLIC {
 		Start:         start,
 		End:           start + PLICSize,
 		MaxInterrupts: PLICMaxInterrupts,
+		IRQs:          make(map[uint32]string),
 		numContexts:   numContexts,
-		enables:       make([]uint32, numContexts),
+		enables:       make([]uint64, numContexts),
 		contexts:      make([]PLICContext, numContexts),
 	}
 }
@@ -110,16 +120,24 @@ func (plic *PLIC) Load32(paddr uint64) (uint32, error) {
 	offset := paddr - plic.Start
 
 	switch {
-	case offset >= 0x000004 && offset <= 0x000080:
-		return plic.priorities[offset/4], nil
+	case offset >= 0x000000 && offset <= 0x000080:
+		return plic.gateways[offset/4].priority, nil
 
 	case offset == 0x001000:
-		return plic.pending, nil
+		return uint32(plic.pending), nil
+
+	case offset == 0x001004:
+		return uint32(plic.pending >> 32), nil
 
 	case offset >= 0x002000 && offset <= 0x002084:
 		contextID := int((offset - 0x2000) / 0x80)
 		if contextID < len(plic.enables) {
-			return plic.enables[contextID], nil
+			word := int((offset - 0x2000) % 0x80)
+			if word == 0 {
+				return uint32(plic.enables[contextID]), nil
+			} else {
+				return uint32(plic.enables[contextID] >> 32), nil
+			}
 		}
 
 	case offset >= 0x200000:
@@ -169,21 +187,45 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 	offset := paddr - plic.Start
 
 	switch {
-	// 1. Interrupt Source Priorities (0x000004 - 0x000080)
-	case offset >= 0x000004 && offset <= 0x000080:
+	// 1. Interrupt Source Priorities (0x000000 - 0x000080)
+	case offset >= 0x000000 && offset <= 0x000080:
 		sourceID := offset / 4
 		if sourceID <= PLICMaxInterrupts {
 			// Only 3 bits of priority (0-7).
-			plic.priorities[sourceID] = uint32(val & 0x7)
+			plic.gateways[sourceID].priority = uint32(val & 0x7)
 		}
 
 	// 2. Interrupt Enables (0x002000 - 0x002084)
 	case offset >= 0x002000 && offset <= 0x002084:
 		// Stride is 0x80 bytes per context for enable bits
-		contextID := (offset - 0x2000) / 0x80
-		wordOffset := (offset - 0x2000) % 0x80
-		if contextID < PLICMaxContexts && wordOffset == 0 {
-			plic.enables[contextID] = uint32(val)
+		contextID := int((offset - 0x2000) / 0x80)
+		if contextID < len(plic.enables) {
+			word := (offset - 0x2000) % 0x80
+			old := plic.enables[contextID]
+			if word == 0 {
+				plic.enables[contextID] = old&0xffffffff00000000 | uint64(val)
+			} else {
+				plic.enables[contextID] = old&0xffffffff | uint64(val)<<32
+			}
+
+			var changed string
+
+			for i := 0; i < 64; i++ {
+				bit := uint64(1) << i
+				os := old & bit
+				ns := plic.enables[contextID] & bit
+				if os != ns {
+					if len(changed) > 0 {
+						changed += ", "
+					}
+					if ns != 0 {
+						changed += "+"
+					} else {
+						changed += "-"
+					}
+					changed += plic.IRQs[uint32(i)]
+				}
+			}
 		}
 
 	// 3. Priority Thresholds & Claim/Complete Blocks (0x200000 onwards)
@@ -217,12 +259,13 @@ func (plic *PLIC) SetInterruptRequest(irq uint32, set bool) {
 	plic.m.Lock()
 	defer plic.m.Unlock()
 
-	bit := uint32(1) << irq
-	if set {
-		plic.pending |= bit
-	} else {
-		plic.pending &^= bit
+	old := plic.gateways[irq].asserted
+	plic.gateways[irq].asserted = set
+
+	if !old && set && !plic.gateways[irq].inflight {
+		plic.pending |= 1 << irq
 	}
+
 	plic.reevaluateInterrupts()
 }
 
@@ -233,13 +276,13 @@ func (plic *PLIC) claimInterrupt(contextID int) uint32 {
 
 	// Walk through all configured interrupt sources.
 	for sourceID := uint32(1); sourceID <= PLICMaxInterrupts; sourceID++ {
-		// Check if the source is enabled for this context AND is
+		// Check if the source is enabled for this context and is
 		// actively pending.
 		isPending := (plic.pending & (1 << sourceID)) != 0
 		isEnabled := (plic.enables[contextID] & (1 << sourceID)) != 0
 
 		if isPending && isEnabled {
-			priority := plic.priorities[sourceID]
+			priority := plic.gateways[sourceID].priority
 			// Only consider it if it strictly exceeds the context's
 			// current threshold.
 			if priority > plic.contexts[contextID].Threshold {
@@ -255,6 +298,7 @@ func (plic *PLIC) claimInterrupt(contextID int) uint32 {
 		// Hardware handshake: clear the pending state atomically upon
 		// claiming.
 		plic.pending &^= (1 << claimedSource)
+		plic.gateways[claimedSource].inflight = true
 		plic.reevaluateInterrupts()
 	}
 
@@ -263,13 +307,17 @@ func (plic *PLIC) claimInterrupt(contextID int) uint32 {
 
 func (plic *PLIC) completeInterrupt(contextID int, sourceID uint32) {
 	if sourceID == 0 || sourceID > PLICMaxInterrupts {
-		return // Invalid source ID complete request
+		return
+	}
+	if !plic.gateways[sourceID].inflight {
+		return
 	}
 
-	// In physical silicon, this unmasks the target line inside the
-	// PLIC gateway routing.  Now that the handler loop is completely
-	// clear, we re-evaluate if any other enabled interrupts are
-	// sitting in the pipeline waiting for their turn.
+	plic.gateways[sourceID].inflight = false
+	if plic.gateways[sourceID].asserted {
+		plic.pending |= 1 << sourceID
+	}
+
 	plic.reevaluateInterrupts()
 }
 
@@ -280,8 +328,10 @@ func (plic *PLIC) reevaluateInterrupts() {
 		for sourceID := uint32(1); sourceID <= PLICMaxInterrupts; sourceID++ {
 			isPending := (plic.pending & (1 << sourceID)) != 0
 			isEnabled := (plic.enables[context] & (1 << sourceID)) != 0
+
 			if isPending && isEnabled &&
-				plic.priorities[sourceID] > plic.contexts[context].Threshold {
+				plic.gateways[sourceID].priority >
+					plic.contexts[context].Threshold {
 				signaled = sourceID
 				break
 			}
@@ -293,14 +343,14 @@ func (plic *PLIC) reevaluateInterrupts() {
 		} else {
 			interrupt = isa.IntSEIP
 		}
-		log.Printf("PLIC.reevaluateInterrupts: hart=%v, %v=%v",
-			hart, isa.IntString(interrupt), signaled)
 		if signaled > 0 {
 			plic.Harts[hart].SetInterrupt(interrupt)
 		} else {
-			// XXX should we clear if CPU has not claimed it? Or is
-			// the claiming the only way how this get zeroed?
 			plic.Harts[hart].ClearInterrupt(interrupt)
 		}
 	}
+}
+
+func (plic *PLIC) irq(irq uint32) string {
+	return fmt.Sprintf("%v[%v]", irq, plic.IRQs[irq])
 }
