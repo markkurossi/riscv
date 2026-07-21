@@ -279,7 +279,7 @@ dispatch:
 			}
 			size = 4
 
-			idx := (raw >> 2) & 0xfff
+			idx := (cpu.PC >> 2) & 0xfff
 			if cpu.decodeCache[idx].Raw == raw {
 				instr = cpu.decodeCache[idx].Instr
 			} else {
@@ -752,7 +752,6 @@ dispatch:
 					cpu.X[instr.Rs2])
 			} else {
 				// Slow path fallback.
-				tlb.Clear()
 				if err := cpu.MMU.Store64(addr, cpu.X[instr.Rs2]); err != nil {
 					return err
 				}
