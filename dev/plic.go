@@ -15,27 +15,17 @@ import (
 )
 
 const (
-	// Maximum number of interrupt sources supported.
+	// PLICMaxInterrupts defines the maximum number of interrupt
+	// sources supported.
 	PLICMaxInterrupts = 63
 
-	// The maximum number of contexts supported by the PLIC
-	// specification.
+	// PLICMaxContexts defines the maximum number of contexts
+	// supported by the PLIC specification.
 	PLICMaxContexts = 15872
 
-	// Size of the PLIC memory map.
+	// PLICSize define sthe the PLIC memory map size.
 	PLICSize = 0x400000
 )
-
-// PLICContext holds the registers dedicated to a specific privilege
-// context.
-type PLICContext struct {
-	// Priority threshold register (e.g., 0x0c200000)
-	Threshold uint32
-
-	// Claim/Complete register  (e.g., 0x0c200004)
-	// XXX unused
-	ClaimXXX uint32
-}
 
 // Gateway converts interrupts signals from source to pending
 // interrupts at PLIC core.
@@ -45,6 +35,8 @@ type Gateway struct {
 	inflight bool
 }
 
+// PLIC implements the RISC-V Platform-Level Interrupt Controller
+// Specification.
 type PLIC struct {
 	Harts         []isa.Hart
 	Start         uint64
@@ -67,10 +59,11 @@ type PLIC struct {
 	// context has 64 bits to cover 63 interrupt sources.
 	enables []uint64
 
-	// 0x200000 onwards: Control states grouped cleanly per context.
-	contexts []PLICContext
+	// 0x200000 onwards: Control states per context.
+	thresholds []uint32
 }
 
+// NewPLIC creates a new PLIC for the hart.
 func NewPLIC(harts []isa.Hart, start uint64) *PLIC {
 	numContexts := len(harts) * 2
 	if numContexts > PLICMaxContexts {
@@ -84,14 +77,16 @@ func NewPLIC(harts []isa.Hart, start uint64) *PLIC {
 		IRQs:          make(map[uint32]string),
 		numContexts:   numContexts,
 		enables:       make([]uint64, numContexts),
-		contexts:      make([]PLICContext, numContexts),
+		thresholds:    make([]uint32, numContexts),
 	}
 }
 
+// Halt implements MMIO.Halt.
 func (plic *PLIC) Halt() error {
 	return nil
 }
 
+// Contains implements MMIO.Contains.
 func (plic *PLIC) Contains(paddr uint64) bool {
 	return paddr >= plic.Start && paddr < plic.End
 }
@@ -145,9 +140,9 @@ func (plic *PLIC) Load32(paddr uint64) (uint32, error) {
 		contextID := int(contextOffset / 0x1000)
 		regRegister := contextOffset % 0x1000
 
-		if contextID < len(plic.contexts) {
+		if contextID < len(plic.thresholds) {
 			if regRegister == 0x0 {
-				return plic.contexts[contextID].Threshold, nil
+				return plic.thresholds[contextID], nil
 			} else if regRegister == 0x4 {
 				// Reading claim register evaluates pending IRQs and pulls high
 				return plic.claimInterrupt(contextID), nil
@@ -237,9 +232,8 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 
 		if contextID < plic.numContexts {
 			if regRegister == 0x0 { // Threshold Register
-				plic.contexts[contextID].Threshold = uint32(val & 0x7)
+				plic.thresholds[contextID] = uint32(val & 0x7)
 			} else if regRegister == 0x4 { // Claim / Complete Register
-
 				// Writing to claim means the guest OS finished
 				// handling an IRQ line.
 				plic.completeInterrupt(contextID, uint32(val))
@@ -285,7 +279,7 @@ func (plic *PLIC) claimInterrupt(contextID int) uint32 {
 			priority := plic.gateways[sourceID].priority
 			// Only consider it if it strictly exceeds the context's
 			// current threshold.
-			if priority > plic.contexts[contextID].Threshold {
+			if priority > plic.thresholds[contextID] {
 				if priority > highestPriority {
 					highestPriority = priority
 					claimedSource = sourceID
@@ -330,8 +324,7 @@ func (plic *PLIC) reevaluateInterrupts() {
 			isEnabled := (plic.enables[context] & (1 << sourceID)) != 0
 
 			if isPending && isEnabled &&
-				plic.gateways[sourceID].priority >
-					plic.contexts[context].Threshold {
+				plic.gateways[sourceID].priority > plic.thresholds[context] {
 				signaled = sourceID
 				break
 			}
