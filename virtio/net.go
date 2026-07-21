@@ -159,6 +159,8 @@ type Net struct {
 	recvDescCh chan uint16
 	recvCh     chan []byte
 
+	sendDescCh chan uint16
+
 	tunReadBuf []byte
 
 	// Statistics.
@@ -210,6 +212,7 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		tun:        tunnel,
 		recvDescCh: make(chan uint16, queueNumMax),
 		recvCh:     make(chan []byte),
+		sendDescCh: make(chan uint16, queueNumMax),
 	}
 	plic.IRQs[irq] = "net"
 
@@ -246,13 +249,46 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	vio.Infof("host  : %v %v", vio.HostMAC, hostIP)
 
 	go vio.receiver(vio.queues[0])
+	go vio.sender(vio.queues[1])
 	go vio.tunReader()
 
 	return vio, nil
 }
 
+// Reset implements Handler.Reset.
+func (vio *Net) Reset() error {
+	return nil
+}
+
+// DeviceStats implements Handler.DeviceStats
+func (vio *Net) DeviceStats() {
+	fmt.Printf("%v: sent    : %v\n", vio.Name, FileSize(vio.stSent))
+	fmt.Printf("%v: rcvd    : %v\n", vio.Name, FileSize(vio.stRcvd))
+}
+
+var netRegs = map[uint64]string{
+	0x100: "MAC[0]",
+	0x101: "MAC[1]",
+	0x102: "MAC[2]",
+	0x103: "MAC[3]",
+	0x104: "MAC[4]",
+	0x105: "MAC[5]",
+}
+
+// ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
+func (vio *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
+	vio.Debugf("vq%v: chain: idx=%v", vq.Index, idx)
+
+	if vq.Index%2 == 0 {
+		vio.recvDescCh <- idx
+	} else {
+		vio.sendDescCh <- idx
+	}
+	return 0, nil
+}
+
 func (vio *Net) receiver(vq *Queue) {
-	vio.Debugf("receiver started for vq-%v", vq.Index)
+	vio.Debugf("receiver started for vq%v", vq.Index)
 	for {
 		// Get our receive descriptor.
 		desc := <-vio.recvDescCh
@@ -261,13 +297,14 @@ func (vio *Net) receiver(vq *Queue) {
 		packet := <-vio.recvCh
 		vio.Debugf("received packet of %v bytes", len(packet))
 
-		vio.M.Lock()
 		tx, err := vio.storePacket(vq, desc, packet)
 		if err != nil {
+			// Log error but complete the descriptor to avoid
+			// descriptor leaks.
 			vio.Errorf("store packet failed: %v", err)
-		} else {
-			vio.CompleteDescriptor(vq, desc, tx)
 		}
+		vio.M.Lock()
+		vio.CompleteDescriptor(vq, desc, tx)
 		vio.M.Unlock()
 	}
 }
@@ -334,34 +371,21 @@ func (vio *Net) tunReader() {
 	}
 }
 
-// Reset implements Handler.Reset.
-func (vio *Net) Reset() error {
-	return nil
-}
-
-// DeviceStats implements Handler.DeviceStats
-func (vio *Net) DeviceStats() {
-	fmt.Printf("%v: sent    : %v\n", vio.Name, FileSize(vio.stSent))
-	fmt.Printf("%v: rcvd    : %v\n", vio.Name, FileSize(vio.stRcvd))
-}
-
-var netRegs = map[uint64]string{
-	0x100: "MAC[0]",
-	0x101: "MAC[1]",
-	0x102: "MAC[2]",
-	0x103: "MAC[3]",
-	0x104: "MAC[4]",
-	0x105: "MAC[5]",
-}
-
-// ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
-func (vio *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
-	vio.Debugf("vq%v: chain: idx=%v", vq.Index, idx)
-
-	if vq.Index%2 == 0 {
-		vio.recvDescCh <- idx
-		return 0, nil
+func (vio *Net) sender(vq *Queue) {
+	vio.Debugf("sender started for vq%v", vq.Index)
+	for desc := range vio.sendDescCh {
+		tx, err := vio.send(vq, desc)
+		if err != nil {
+			vio.Errorf("send failed: %v", err)
+		}
+		vio.M.Lock()
+		vio.CompleteDescriptor(vq, desc, tx)
+		vio.M.Unlock()
 	}
+}
+
+func (vio *Net) send(vq *Queue, idx uint16) (uint32, error) {
+	// To lock or not to lock?
 
 	// Transmit queue.
 
