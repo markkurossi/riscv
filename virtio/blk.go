@@ -11,6 +11,7 @@ package virtio
 import (
 	"fmt"
 	"os"
+	"sync/atomic"
 
 	"github.com/markkurossi/riscv/dev"
 	"github.com/markkurossi/riscv/isa"
@@ -30,7 +31,7 @@ type Blk struct {
 	fileInfo os.FileInfo
 	id       []byte
 
-	generation uint64
+	generation atomic.Uint64
 	descCh     chan uint16
 
 	// Statistics.
@@ -64,7 +65,7 @@ func NewBlk(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	blk.Init(1)
 	blk.MMIO.Handler = blk
 
-	go blk.worker(blk.descCh, blk.generation, blk.queues[0])
+	go blk.worker(blk.descCh, blk.generation.Load(), blk.queues[0])
 
 	return blk
 }
@@ -76,11 +77,11 @@ func (blk *Blk) SetID(id string) {
 
 // Reset implements Handler.Reset.
 func (blk *Blk) Reset() error {
-	blk.generation++
+	blk.generation.Add(1)
 	close(blk.descCh)
 
 	blk.descCh = make(chan uint16, queueNumMax)
-	go blk.worker(blk.descCh, blk.generation, blk.queues[0])
+	go blk.worker(blk.descCh, blk.generation.Load(), blk.queues[0])
 
 	return nil
 }
@@ -103,21 +104,19 @@ func (blk *Blk) worker(ch chan uint16, generation uint64, vq *Queue) {
 	for desc := range ch {
 		blk.Debugf("processsing descriptor %v", desc)
 
-		blk.M.Lock()
-		if generation != blk.generation {
-			blk.M.Unlock()
+		if generation != blk.generation.Load() {
 			continue
 		}
 		tx, err := blk.processDesc(vq, desc)
 		if err != nil {
 			blk.Errorf("process failed: %v", err)
-		} else {
-			if generation != blk.generation {
-				blk.M.Unlock()
-				continue
-			}
-			blk.CompleteDescriptor(vq, desc, tx)
 		}
+		if generation != blk.generation.Load() {
+			continue
+		}
+
+		blk.M.Lock()
+		blk.CompleteDescriptor(vq, desc, tx)
 		blk.M.Unlock()
 	}
 }
@@ -170,9 +169,7 @@ func (blk *Blk) processDesc(vq *Queue, idx uint16) (uint32, error) {
 					opStatus = VIRTIO_BLK_S_IOERR
 					continue
 				}
-				blk.M.Unlock()
 				n, err := blk.File.ReadAt(buf, fileOffset)
-				blk.M.Lock()
 				if err != nil {
 					blk.Errorf("read failed from host file offset %d: %v",
 						fileOffset, err)
@@ -200,9 +197,7 @@ func (blk *Blk) processDesc(vq *Queue, idx uint16) (uint32, error) {
 						opStatus = VIRTIO_BLK_S_IOERR
 						continue
 					}
-					blk.M.Unlock()
 					n, err := blk.File.WriteAt(buf, fileOffset)
-					blk.M.Lock()
 					if err != nil {
 						blk.Errorf("write failed to host file offset %d: %v",
 							fileOffset, err)
