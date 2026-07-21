@@ -91,19 +91,20 @@ func (plic *PLIC) Contains(paddr uint64) bool {
 	return paddr >= plic.Start && paddr < plic.End
 }
 
+// Load8 implements MMIO.Load8.
 func (plic *PLIC) Load8(paddr uint64) (uint8, error) {
 	if paddr < plic.Start {
 		return 0, plic.Harts[0].Trap(isa.CauseStorePageFault, paddr, nil)
 	}
-	log.Printf("PLIC: Load8(0x%x)", paddr)
-	return 0, nil
+	return 0, fmt.Errorf("PLIC: Load8(0x%x)", paddr)
 }
 
+// Load16 implements MMIO.Load16.
 func (plic *PLIC) Load16(paddr uint64) (uint16, error) {
-	log.Printf("PLIC: Load16(0x%x)", paddr)
-	return 0, nil
+	return 0, fmt.Errorf("PLIC: Load16(0x%x)", paddr)
 }
 
+// Load32 implements MMIO.Load32.
 func (plic *PLIC) Load32(paddr uint64) (uint32, error) {
 	if paddr < plic.Start {
 		return 0, plic.Harts[0].Trap(isa.CauseLoadPageFault, paddr, nil)
@@ -127,10 +128,10 @@ func (plic *PLIC) Load32(paddr uint64) (uint32, error) {
 	case offset >= 0x002000 && offset <= 0x002084:
 		contextID := int((offset - 0x2000) / 0x80)
 		if contextID < len(plic.enables) {
-			word := int((offset - 0x2000) % 0x80)
-			if word == 0 {
+			switch (offset - 0x2000) % 0x80 {
+			case 0:
 				return uint32(plic.enables[contextID]), nil
-			} else {
+			case 4:
 				return uint32(plic.enables[contextID] >> 32), nil
 			}
 		}
@@ -144,7 +145,7 @@ func (plic *PLIC) Load32(paddr uint64) (uint32, error) {
 			if regRegister == 0x0 {
 				return plic.thresholds[contextID], nil
 			} else if regRegister == 0x4 {
-				// Reading claim register evaluates pending IRQs and pulls high
+				// Reading claim register evaluates pending IRQs.
 				return plic.claimInterrupt(contextID), nil
 			}
 		}
@@ -153,24 +154,25 @@ func (plic *PLIC) Load32(paddr uint64) (uint32, error) {
 	return 0, nil
 }
 
+// Load64 implements MMIO.Load64.
 func (plic *PLIC) Load64(paddr uint64) (uint64, error) {
-	log.Printf("PLIC: Load64(0x%x)", paddr)
-	return 0, nil
+	return 0, fmt.Errorf("PLIC: Load64(0x%x)", paddr)
 }
 
+// Store8 implements MMIO.Store8.
 func (plic *PLIC) Store8(paddr uint64, v uint8) error {
 	if paddr < plic.Start {
 		return plic.Harts[0].Trap(isa.CauseStorePageFault, paddr, nil)
 	}
-	log.Printf("PLIC: 0x%x = 0x%x", paddr, v)
-	return nil
+	return fmt.Errorf("PLIC: 0x%x = 0x%x", paddr, v)
 }
 
+// Store16 implements MMIO.Store16.
 func (plic *PLIC) Store16(paddr uint64, v uint16) error {
-	log.Printf("PLIC: 0x%x = 0x%02x", paddr, v)
-	return nil
+	return fmt.Errorf("PLIC: 0x%x = 0x%02x", paddr, v)
 }
 
+// Store32 implements MMIO.Store32.
 func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 	if paddr < plic.Start {
 		return plic.Harts[0].Trap(isa.CauseStorePageFault, paddr, nil)
@@ -182,7 +184,7 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 	offset := paddr - plic.Start
 
 	switch {
-	// 1. Interrupt Source Priorities (0x000000 - 0x000080)
+	// 1. Interrupt Source Priorities (0x000000 - 0x000080).
 	case offset >= 0x000000 && offset <= 0x000080:
 		sourceID := offset / 4
 		if sourceID <= PLICMaxInterrupts {
@@ -190,40 +192,41 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 			plic.gateways[sourceID].priority = uint32(val & 0x7)
 		}
 
-	// 2. Interrupt Enables (0x002000 - 0x002084)
+	// 2. Interrupt Enables (0x002000 - 0x002084).
 	case offset >= 0x002000 && offset <= 0x002084:
 		// Stride is 0x80 bytes per context for enable bits
 		contextID := int((offset - 0x2000) / 0x80)
 		if contextID < len(plic.enables) {
-			word := (offset - 0x2000) % 0x80
 			old := plic.enables[contextID]
-			if word == 0 {
+			switch (offset - 0x2000) % 0x80 {
+			case 0:
 				plic.enables[contextID] = old&0xffffffff00000000 | uint64(val)
-			} else {
+			case 4:
 				plic.enables[contextID] = old&0xffffffff | uint64(val)<<32
 			}
-
-			var changed string
-
-			for i := 0; i < 64; i++ {
-				bit := uint64(1) << i
-				os := old & bit
-				ns := plic.enables[contextID] & bit
-				if os != ns {
-					if len(changed) > 0 {
-						changed += ", "
+			if false {
+				var changed string
+				for i := 0; i < 64; i++ {
+					bit := uint64(1) << i
+					os := old & bit
+					ns := plic.enables[contextID] & bit
+					if os != ns {
+						if len(changed) > 0 {
+							changed += ", "
+						}
+						if ns != 0 {
+							changed += "+"
+						} else {
+							changed += "-"
+						}
+						changed += plic.IRQs[uint32(i)]
 					}
-					if ns != 0 {
-						changed += "+"
-					} else {
-						changed += "-"
-					}
-					changed += plic.IRQs[uint32(i)]
 				}
+				log.Printf("PLIC: enables: %v", changed)
 			}
 		}
 
-	// 3. Priority Thresholds & Claim/Complete Blocks (0x200000 onwards)
+	// 3. Priority Thresholds & Claim/Complete Blocks (0x200000 onwards).
 	case offset >= 0x200000:
 		// Stride is 0x1000 (4KB page alignment) per context target
 		contextOffset := offset - 0x200000
@@ -244,11 +247,13 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 	return nil
 }
 
+// Store64 implements MMIO.Store64.
 func (plic *PLIC) Store64(paddr uint64, v uint64) error {
-	log.Printf("PLIC: 0x%x = 0x%08x", paddr, v)
-	return nil
+	return fmt.Errorf("PLIC: 0x%x = 0x%08x", paddr, v)
 }
 
+// SetInterruptRequest sets the interrupt request for IRQ according to
+// set.
 func (plic *PLIC) SetInterruptRequest(irq uint32, set bool) {
 	plic.m.Lock()
 	defer plic.m.Unlock()

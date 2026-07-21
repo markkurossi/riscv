@@ -8,6 +8,7 @@
 package logger
 
 import (
+	"errors"
 	"fmt"
 	"log"
 )
@@ -39,8 +40,9 @@ type Logger interface {
 	// Infof logs an info message.
 	Infof(format string, args ...interface{})
 
-	// Errorf logs an error message.
-	Errorf(format string, args ...interface{})
+	// Errorf logs an error message and returns the formatted error
+	// message as an error.
+	Errorf(format string, args ...interface{}) error
 
 	// Logf logs a log message.
 	Logf(format string, args ...interface{})
@@ -98,11 +100,16 @@ func (l *Log) Infof(format string, args ...interface{}) {
 }
 
 // Errorf implements Logger.Errorf.
-func (l *Log) Errorf(format string, args ...interface{}) {
+func (l *Log) Errorf(format string, args ...interface{}) error {
+	msg := fmt.Sprintf(format, args...)
+	err := errors.New(msg)
+
 	if l.Level < Error {
-		return
+		return err
 	}
-	l.logf("ERROR", format, args...)
+	l.logf("ERROR", "%s", msg)
+
+	return err
 }
 
 // Logf implements Logger.Logf.
