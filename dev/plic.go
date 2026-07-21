@@ -164,12 +164,12 @@ func (plic *PLIC) Store8(paddr uint64, v uint8) error {
 	if paddr < plic.Start {
 		return plic.Harts[0].Trap(isa.CauseStorePageFault, paddr, nil)
 	}
-	return fmt.Errorf("PLIC: 0x%x = 0x%x", paddr, v)
+	return fmt.Errorf("PLIC: Store8(0x%x, 0x%x)", paddr, v)
 }
 
 // Store16 implements MMIO.Store16.
 func (plic *PLIC) Store16(paddr uint64, v uint16) error {
-	return fmt.Errorf("PLIC: 0x%x = 0x%02x", paddr, v)
+	return fmt.Errorf("PLIC: Store16(0x%x, 0x%02x)", paddr, v)
 }
 
 // Store32 implements MMIO.Store32.
@@ -184,7 +184,7 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 	offset := paddr - plic.Start
 
 	switch {
-	// 1. Interrupt Source Priorities (0x000000 - 0x000080).
+	// Interrupt Source Priorities (0x000000 - 0x000080).
 	case offset >= 0x000000 && offset <= 0x000080:
 		sourceID := offset / 4
 		if sourceID <= PLICMaxInterrupts {
@@ -192,9 +192,9 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 			plic.gateways[sourceID].priority = uint32(val & 0x7)
 		}
 
-	// 2. Interrupt Enables (0x002000 - 0x002084).
+	// Interrupt Enables (0x002000 - 0x002084).
 	case offset >= 0x002000 && offset <= 0x002084:
-		// Stride is 0x80 bytes per context for enable bits
+		// Stride is 0x80 bytes per context for enable bits.
 		contextID := int((offset - 0x2000) / 0x80)
 		if contextID < len(plic.enables) {
 			old := plic.enables[contextID]
@@ -226,19 +226,22 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 			}
 		}
 
-	// 3. Priority Thresholds & Claim/Complete Blocks (0x200000 onwards).
+	// Priority Thresholds & Claim/Complete Blocks (0x200000 onwards).
 	case offset >= 0x200000:
-		// Stride is 0x1000 (4KB page alignment) per context target
+		// Stride is 0x1000 (4KB page alignment) per context target.
 		contextOffset := offset - 0x200000
 		contextID := int(contextOffset / 0x1000)
 		regRegister := contextOffset % 0x1000
 
 		if contextID < plic.numContexts {
-			if regRegister == 0x0 { // Threshold Register
+			switch regRegister {
+			case 0x0:
+				// Threshold Register.
 				plic.thresholds[contextID] = uint32(val & 0x7)
-			} else if regRegister == 0x4 { // Claim / Complete Register
-				// Writing to claim means the guest OS finished
-				// handling an IRQ line.
+
+			case 0x4:
+				// Claim / Complete Register. Writing to claim means
+				// the guest OS finished handling an IRQ line.
 				plic.completeInterrupt(contextID, uint32(val))
 			}
 		}
@@ -249,7 +252,7 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 
 // Store64 implements MMIO.Store64.
 func (plic *PLIC) Store64(paddr uint64, v uint64) error {
-	return fmt.Errorf("PLIC: 0x%x = 0x%08x", paddr, v)
+	return fmt.Errorf("PLIC: Store64(0x%x, 0x%08x)", paddr, v)
 }
 
 // SetInterruptRequest sets the interrupt request for IRQ according to
@@ -321,7 +324,6 @@ func (plic *PLIC) completeInterrupt(contextID int, sourceID uint32) {
 }
 
 func (plic *PLIC) reevaluateInterrupts() {
-	// Loop over all contexts.
 	for context := 0; context < plic.numContexts; context++ {
 		var signaled uint32
 		for sourceID := uint32(1); sourceID <= PLICMaxInterrupts; sourceID++ {
