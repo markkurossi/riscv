@@ -97,9 +97,9 @@ const (
 	CsrMhartid       = 0xf14
 	CsrScountinhibit = 0xfb0
 
-	CsrGoemuDebug      = 0x7c0
-	CsrGoemuTime       = 0x7c1
-	CsrGoemuCPUProfile = 0x7c2
+	CsrGoemuDebug      = 0x800
+	CsrGoemuTime       = 0x801
+	CsrGoemuCPUProfile = 0x802
 )
 
 var csrs = map[int]string{
@@ -496,12 +496,8 @@ func csrName(csr int) string {
 }
 
 func (cpu *CPU) CSRLoad(csr CSR, raw uint32, instr isa.Instr) (uint64, error) {
-	return 0, fmt.Errorf("CSRLoad not implemented yet")
-}
-
-func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 	if cpu.Mode() < csr.Privilege() {
-		return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
+		return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 			fmt.Errorf("GetCSR(%v), mode=%v", csr, cpu.Mode()))
 	}
 	// Handle read-only CSRs here by returning the fixed or computed
@@ -725,26 +721,26 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 
 	case CsrGoemuCPUProfile:
 		if v == 0 {
-			cpu.csr7c2Refcount--
-			if cpu.csr7c2Refcount <= 0 {
+			cpu.csr802Refcount--
+			if cpu.csr802Refcount <= 0 {
 				pprof.StopCPUProfile()
-				cpu.csr7c2File.Sync()
+				cpu.csr802File.Sync()
 			}
 		} else {
-			if cpu.csr7c2Refcount == 0 {
+			if cpu.csr802Refcount == 0 {
 				var err error
-				if cpu.csr7c2File == nil {
-					cpu.csr7c2File, err = os.Create(cpu.CSR7c2Filename)
+				if cpu.csr802File == nil {
+					cpu.csr802File, err = os.Create(cpu.CSR802Filename)
 					if err != nil {
 						return err
 					}
 				}
-				err = pprof.StartCPUProfile(cpu.csr7c2File)
+				err = pprof.StartCPUProfile(cpu.csr802File)
 				if err != nil {
 					return err
 				}
 			}
-			cpu.csr7c2Refcount++
+			cpu.csr802Refcount++
 		}
 
 	default:

@@ -78,9 +78,9 @@ type CPU struct {
 	TrapHandler TrapHandler
 	Symtab      Symtab
 
-	CSR7c2Filename string
-	csr7c2File     *os.File
-	csr7c2Refcount int
+	CSR802Filename string
+	csr802File     *os.File
+	csr802Refcount int
 
 	lastDescOp  isa.Op
 	DebugTrace  bool
@@ -863,7 +863,7 @@ dispatch:
 
 		case isa.Csrrc:
 			csr := CSR(instr.Imm)
-			t, err := cpu.GetCSR(csr)
+			t, err := cpu.CSRLoad(csr, raw, instr)
 			if err != nil {
 				return err
 			}
@@ -877,7 +877,7 @@ dispatch:
 
 		case isa.Csrrci:
 			csr := CSR(instr.Imm)
-			t, err := cpu.GetCSR(csr)
+			t, err := cpu.CSRLoad(csr, raw, instr)
 			if err != nil {
 				return err
 			}
@@ -892,7 +892,7 @@ dispatch:
 
 		case isa.Csrrs:
 			csr := CSR(instr.Imm)
-			t, err := cpu.GetCSR(csr)
+			t, err := cpu.CSRLoad(csr, raw, instr)
 			if err != nil {
 				return err
 			}
@@ -906,7 +906,7 @@ dispatch:
 
 		case isa.Csrrsi:
 			csr := CSR(instr.Imm)
-			t, err := cpu.GetCSR(csr)
+			t, err := cpu.CSRLoad(csr, raw, instr)
 			if err != nil {
 				return err
 			}
@@ -921,21 +921,21 @@ dispatch:
 
 		case isa.Csrrw:
 			csr := CSR(instr.Imm)
-			oldCSR, err := cpu.GetCSR(csr) // 1. Capture old CSR value
+			oldCSR, err := cpu.CSRLoad(csr, raw, instr)
 			if err != nil {
 				return err
 			}
-			valToSet := cpu.X[instr.Rs1] // 2. Capture value from GPR
+			valToSet := cpu.X[instr.Rs1]
 
-			err = cpu.SetCSRX(csr, valToSet, raw, instr) // 3. Update CSR
+			err = cpu.SetCSRX(csr, valToSet, raw, instr)
 			if err != nil {
 				return err
 			}
-			cpu.X[instr.Rd] = oldCSR // 4. Update GPR with old CSR
+			cpu.X[instr.Rd] = oldCSR
 
 		case isa.Csrrwi:
 			csr := CSR(instr.Imm)
-			oldCSR, err := cpu.GetCSR(csr) // 1. Capture old CSR value
+			oldCSR, err := cpu.CSRLoad(csr, raw, instr)
 			if err != nil {
 				return err
 			}

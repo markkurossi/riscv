@@ -57,7 +57,7 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 
 	hart := cpu.New(mem)
 	hart.Trace = params.CPUtrace
-	hart.CSR7c2Filename = params.CSR7c2
+	hart.CSR802Filename = params.CSR802
 
 	plic := dev.NewPLIC([]isa.Hart{hart}, PLICBase)
 
