@@ -73,26 +73,18 @@ type GPU struct {
 	lastX         int
 	lastY         int
 
-	renderM     sync.Mutex
-	pending     bool
-	pendingDone bool
-	window      *glfw.Window
-	pixels      *image.RGBA
-	frameDirty  bool
-	source      *GPUResource
+	renderM    sync.Mutex
+	window     *glfw.Window
+	pixels     *image.RGBA
+	frameDirty bool
+	source     *GPUResource
 
-	transferC chan transferReq
+	gpuCh    chan uint16
+	cursorCh chan uint16
 
 	resources map[uint32]*GPUResource
 	logo      image.Image
 	events    [2]int
-}
-
-type transferReq struct {
-	index    uint32
-	rect     GPURect
-	offset   uint64
-	resource *GPUResource
 }
 
 type GPUResource struct {
@@ -149,7 +141,8 @@ func NewGPU(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		pixels: image.NewRGBA(image.Rectangle{
 			Max: image.Point{width, height},
 		}),
-		transferC: make(chan transferReq, 1),
+		gpuCh:     make(chan uint16, queueNumMax),
+		cursorCh:  make(chan uint16, queueNumMax),
 		resources: make(map[uint32]*GPUResource),
 		logo:      logo,
 	}
@@ -159,7 +152,8 @@ func NewGPU(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	vio.MMIO.Handler = vio
 
 	vio.Infof("screen: %v\u00d7%v", vio.Width, vio.Height)
-	go vio.converter()
+	go vio.handler(vio.gpuCh, vio.queues[0])
+	go vio.handler(vio.cursorCh, vio.queues[1])
 
 	return vio, nil
 }
@@ -317,10 +311,28 @@ func (vio *GPU) DeviceStats() {
 // ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
 func (vio *GPU) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	vio.Debugf("vq%v: chain: idx=%v", vq.Index, idx)
-
-	if vq.Index == 0 && vio.pending {
-		return 0, nil
+	switch vq.Index {
+	case 0:
+		vio.gpuCh <- idx
+	case 1:
+		vio.cursorCh <- idx
 	}
+	return 0, nil
+}
+
+func (vio *GPU) handler(ch chan uint16, vq *Queue) {
+	for desc := range ch {
+		tx, err := vio.processDesc(vq, desc)
+		if err != nil {
+			vio.Errorf("process failed: %v", err)
+		}
+		vio.M.Lock()
+		vio.CompleteDescriptor(vq, desc, tx)
+		vio.M.Unlock()
+	}
+}
+
+func (vio *GPU) processDesc(vq *Queue, idx uint16) (uint32, error) {
 	vio.events[vq.Index]++
 
 	desc, err := vq.loadDesc(idx)
@@ -721,12 +733,6 @@ func (vio *GPU) cmdTransferToHost2D(vq *Queue, hdr *GPUCtrlHdr, hdrBuf []byte,
 	if len(hdrBuf) < 56 {
 		return 0, fmt.Errorf("%v: truncated request", hdr.Type)
 	}
-	if vio.pendingDone {
-		vio.pendingDone = false
-		vio.Debugf("completing pending cmdTransferToHost2D")
-		hdr.Response(VIRTIO_GPU_RESP_OK_NODATA, bufs[0][0:])
-		return 24, nil
-	}
 
 	rect := GPURect{
 		X:      vioBO.Uint32(hdrBuf[24:]),
@@ -745,58 +751,42 @@ func (vio *GPU) cmdTransferToHost2D(vq *Queue, hdr *GPUCtrlHdr, hdrBuf []byte,
 		return 0, fmt.Errorf("unknown resource %v", resourceID)
 	}
 	vio.Debugf("queuing transferReq...")
-	vio.transferC <- transferReq{
-		index:    vq.Index,
-		rect:     rect,
-		offset:   offset,
-		resource: resource,
-	}
-	vio.pending = true
-	vio.Debugf("queuing transferReq done")
-	return 0, nil
+	vio.converter(rect, offset, resource)
+
+	hdr.Response(VIRTIO_GPU_RESP_OK_NODATA, bufs[0][0:])
+	return 24, nil
 }
 
-func (vio *GPU) converter() {
-	for {
-		req := <-vio.transferC
-		vio.Debugf("converter: rect: %v", req.rect)
-		vio.renderM.Lock()
+func (vio *GPU) converter(rect GPURect, offset uint64, resource *GPUResource) {
+	vio.Debugf("converter: rect: %v", rect)
+	vio.renderM.Lock()
 
-		var pageIndex, pageStart uint64
+	var pageIndex, pageStart uint64
 
-		stride := req.resource.Width * 4
-		for localY := uint32(0); localY < req.rect.Height; localY++ {
-			currentY := req.rect.Y + localY
+	stride := resource.Width * 4
+	for localY := uint32(0); localY < rect.Height; localY++ {
+		currentY := rect.Y + localY
 
-			srcOfs := req.offset + uint64(currentY*stride+req.rect.X*4)
-			dstOfs := uint64(currentY*stride + req.rect.X*4)
-			count := uint64(req.rect.Width * 4)
+		srcOfs := offset + uint64(currentY*stride+rect.X*4)
+		dstOfs := uint64(currentY*stride + rect.X*4)
+		count := uint64(rect.Width * 4)
 
-			for i := uint64(0); i < count; i += 4 {
-				page := req.resource.Pages[pageIndex]
+		for i := uint64(0); i < count; i += 4 {
+			page := resource.Pages[pageIndex]
 
-				for pageStart+uint64(len(page)) <= srcOfs {
-					pageStart += uint64(len(page))
-					pageIndex++
-				}
-				pageOfs := srcOfs - pageStart
-
-				vio.pixels.Pix[dstOfs+i+0] = page[pageOfs+i+2]
-				vio.pixels.Pix[dstOfs+i+1] = page[pageOfs+i+1]
-				vio.pixels.Pix[dstOfs+i+2] = page[pageOfs+i+0]
-				vio.pixels.Pix[dstOfs+i+3] = 0xff
+			for pageStart+uint64(len(page)) <= srcOfs {
+				pageStart += uint64(len(page))
+				pageIndex++
 			}
-		}
-		vio.renderM.Unlock()
+			pageOfs := srcOfs - pageStart
 
-		vio.M.Lock()
-		vio.pending = false
-		vio.pendingDone = true
-		vio.Debugf("converter: ProcessQueue(%v)...", req.index)
-		vio.ProcessQueue(req.index)
-		vio.Debugf("converter: ProcessQueue(%v) done", req.index)
-		vio.M.Unlock()
+			vio.pixels.Pix[dstOfs+i+0] = page[pageOfs+i+2]
+			vio.pixels.Pix[dstOfs+i+1] = page[pageOfs+i+1]
+			vio.pixels.Pix[dstOfs+i+2] = page[pageOfs+i+0]
+			vio.pixels.Pix[dstOfs+i+3] = 0xff
+		}
 	}
+	vio.renderM.Unlock()
 }
 
 func (vio *GPU) cmdResourceFlush(hdr *GPUCtrlHdr, hdrBuf []byte,
