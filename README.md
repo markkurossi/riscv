@@ -1,7 +1,7 @@
 # RISC-V in Go
 
 <p align="center">
-  <img src="docs/goemu-small.png" width="320">
+  <img src="resources/goemu-small.png" width="320">
 </p>
 
 <p align="center">
@@ -283,6 +283,7 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 | Ld/Sd TLB fastpath     |  0.603 |  6.327 | 1m10.533s | 101.49 |    0.195 |
 | Optimized Instr struct |  0.385 |  4.022 | 0m44.167s | 159.65 |    0.124 |
 | Interrupts             |  0.416 |  4.321 | 0m49.085s | 148.61 |    0.134 |
+| unsafe.Pointer()       |  0.375 |  3.797 | 0m42.078s | 169.12 |    0.117 |
 
 ## Userspace Emulation - MMU Refactoring
 
@@ -507,6 +508,9 @@ Guest:
 ```
 
 # Ubuntu
+
+Check how to disable systemd. It is using +35% CPU if host network is
+down.
 
 ## Grow Image
 
