@@ -192,7 +192,7 @@ dispatch:
 		// Check interrupts every 64 instructions or if any interrupts
 		// are pending. The loop below will not trigger interrupts if
 		// they are pending but not enabled.
-		if cpu.Instret&0x3f == 0 { // || cpu.CSR[CsrMip] != 0 {
+		if cpu.Instret&0x3f == 0 {
 			// Sync time to wall clock.
 			now := cpu.syncTime()
 			stimecmp := cpu.CSR[CsrStimecmp].Load()
@@ -1342,7 +1342,7 @@ dispatch:
 
 		case isa.Vsetvli:
 			if cpu.mstatus.VS() == isa.RegOff {
-				return cpu.Trap(isa.CauseIllegalInstr, 0, nil)
+				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
 			}
 			vtype := isa.VType(instr.Imm)
 			cpu.vpu.VType = vtype
@@ -1361,7 +1361,7 @@ dispatch:
 
 		case isa.Vsetivli:
 			if cpu.mstatus.VS() == isa.RegOff {
-				return cpu.Trap(isa.CauseIllegalInstr, 0, nil)
+				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
 			}
 			vtype := isa.VType(instr.Imm)
 			cpu.vpu.VType = vtype
@@ -1386,7 +1386,7 @@ dispatch:
 
 		case isa.VmvVX:
 			if cpu.mstatus.VS() == isa.RegOff {
-				return cpu.Trap(isa.CauseIllegalInstr, 0, nil)
+				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
 			}
 			vl := cpu.vpu.VL
 			sew := cpu.vpu.VType.VSEW()
@@ -1422,7 +1422,7 @@ dispatch:
 
 		case isa.VmvVI:
 			if cpu.mstatus.VS() == isa.RegOff {
-				return cpu.Trap(isa.CauseIllegalInstr, 0, nil)
+				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
 			}
 			vl := cpu.vpu.VL
 			sew := cpu.vpu.VType.VSEW()
@@ -1458,7 +1458,7 @@ dispatch:
 
 		case isa.Vle8V:
 			if cpu.mstatus.VS() == isa.RegOff {
-				return cpu.Trap(isa.CauseIllegalInstr, 0, nil)
+				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
 			}
 			vm := instr.Imm & 0b1
 			mop := instr.Imm >> 1 & 0b111
@@ -1487,7 +1487,7 @@ dispatch:
 
 		case isa.Vse8V:
 			if cpu.mstatus.VS() == isa.RegOff {
-				return cpu.Trap(isa.CauseIllegalInstr, 0, nil)
+				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
 			}
 			vm := instr.Imm & 0b1
 			mop := instr.Imm >> 1 & 0b111
@@ -1520,7 +1520,7 @@ dispatch:
 
 		case isa.Vse64V:
 			if cpu.mstatus.VS() == isa.RegOff {
-				return cpu.Trap(isa.CauseIllegalInstr, 0, nil)
+				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
 			}
 			vm := instr.Imm & 0b1
 			mop := instr.Imm >> 1 & 0b111

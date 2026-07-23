@@ -508,7 +508,7 @@ func (cpu *CPU) CSRLoad(csr CSR, raw uint32, instr isa.Instr) (uint64, error) {
 	switch csr {
 	case CsrFflags, CsrFrm, CsrFcsr:
 		if cpu.mstatus.FS() == isa.RegOff && checkFSRegOff {
-			return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
+			return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 				fmt.Errorf("read fcsr when FS is off"))
 		}
 		v := cpu.CSR[csr].Load()
@@ -572,7 +572,7 @@ func (cpu *CPU) CSRLoad(csr CSR, raw uint32, instr isa.Instr) (uint64, error) {
 
 	case CsrSatp:
 		if cpu.mstatus.TVM() {
-			return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
+			return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 				fmt.Errorf("get satp with TVM set"))
 		}
 		v = cpu.CSR[csr].Load()
@@ -629,11 +629,11 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 	}
 
 	if cpu.Mode() < csr.Privilege() && false {
-		return cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
+		return cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 			fmt.Errorf("SetCSR(%v)=%v, mode=%v", csr, v, cpu.Mode()))
 	}
 	if csr.ReadOnly() {
-		return cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
+		return cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 			fmt.Errorf("SetCSR(%v)=%v: read-only", csr, v))
 	}
 
@@ -642,7 +642,7 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 	switch csr {
 	case CsrFflags, CsrFrm, CsrFcsr:
 		if cpu.mstatus.FS() == isa.RegOff && checkFSRegOff {
-			return cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
+			return cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 				fmt.Errorf("write fcsr when FS is off"))
 		}
 		switch csr {
