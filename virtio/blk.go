@@ -11,7 +11,7 @@ package virtio
 import (
 	"fmt"
 	"os"
-	"sync/atomic"
+	"sync"
 
 	"github.com/markkurossi/riscv/dev"
 	"github.com/markkurossi/riscv/isa"
@@ -31,8 +31,8 @@ type Blk struct {
 	fileInfo os.FileInfo
 	id       []byte
 
-	generation atomic.Uint64
-	descCh     chan uint16
+	descCh   chan uint16
+	workerWG sync.WaitGroup
 
 	// Statistics.
 	stRead  uint64
@@ -57,15 +57,14 @@ func NewBlk(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 			IRQ:      irq,
 			Mem:      mem,
 		},
-		File:   file,
-		descCh: make(chan uint16, queueNumMax),
+		File: file,
 	}
 	plic.IRQs[irq] = "blk"
 
 	blk.Init(1)
 	blk.MMIO.Handler = blk
 
-	go blk.worker(blk.descCh, blk.generation.Load(), blk.queues[0])
+	blk.startWorker()
 
 	return blk
 }
@@ -77,11 +76,12 @@ func (blk *Blk) SetID(id string) {
 
 // Reset implements Handler.Reset.
 func (blk *Blk) Reset() error {
-	blk.generation.Add(1)
+	// Wait for current requests to complete.
 	close(blk.descCh)
+	blk.workerWG.Wait()
 
-	blk.descCh = make(chan uint16, queueNumMax)
-	go blk.worker(blk.descCh, blk.generation.Load(), blk.queues[0])
+	// Start a new worker.
+	blk.startWorker()
 
 	return nil
 }
@@ -94,31 +94,31 @@ func (blk *Blk) DeviceStats() {
 
 // ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
 func (blk *Blk) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
-	blk.Debugf("chain: idx=%v", idx)
+	blk.Debugf("chain: lastAvailIdx=%v, desc=%v", vq.lastAvailIdx, idx)
 	blk.descCh <- idx
 	return 0, nil
 }
 
-func (blk *Blk) worker(ch chan uint16, generation uint64, vq *Queue) {
+func (blk *Blk) startWorker() {
+	blk.descCh = make(chan uint16, queueNumMax)
+	blk.workerWG.Add(1)
+	go blk.worker(blk.descCh, blk.queues[0])
+}
 
+func (blk *Blk) worker(ch chan uint16, vq *Queue) {
 	for desc := range ch {
 		blk.Debugf("processsing descriptor %v", desc)
 
-		if generation != blk.generation.Load() {
-			continue
-		}
 		tx, err := blk.processDesc(vq, desc)
 		if err != nil {
 			blk.Errorf("process failed: %v", err)
-		}
-		if generation != blk.generation.Load() {
-			continue
 		}
 
 		blk.M.Lock()
 		blk.CompleteDescriptor(vq, desc, tx)
 		blk.M.Unlock()
 	}
+	blk.workerWG.Done()
 }
 
 func (blk *Blk) processDesc(vq *Queue, idx uint16) (uint32, error) {

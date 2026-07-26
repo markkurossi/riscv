@@ -321,6 +321,11 @@ func (vio *MMIO) Store32(paddr uint64, v uint32) error {
 	case 0x070: // Status
 		if v == 0 {
 			// Guest requested a device reset
+
+			if err := vio.Handler.Reset(); err != nil {
+				return err
+			}
+
 			vio.deviceFeaturesSel = 0
 			vio.driverFeaturesSel = 0
 			vio.driverFeatures[0] = 0
@@ -337,7 +342,7 @@ func (vio *MMIO) Store32(paddr uint64, v uint32) error {
 				vio.queues[idx].lastAvailIdx = 0
 			}
 
-			return vio.Handler.Reset()
+			return nil
 		}
 
 		// Standard status update protocol sequence
