@@ -188,8 +188,7 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 	case offset >= 0x000000 && offset <= 0x000080:
 		sourceID := offset / 4
 		if sourceID <= PLICMaxInterrupts {
-			// Only 3 bits of priority (0-7).
-			plic.gateways[sourceID].priority = uint32(val & 0x7)
+			plic.gateways[sourceID].priority = val
 		}
 
 	// Interrupt Enables (0x002000 - 0x002084).
@@ -237,7 +236,8 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 			switch regRegister {
 			case 0x0:
 				// Threshold Register.
-				plic.thresholds[contextID] = uint32(val & 0x7)
+				plic.thresholds[contextID] = val
+				plic.reevaluateInterrupts()
 
 			case 0x4:
 				// Claim / Complete Register. Writing to claim means
