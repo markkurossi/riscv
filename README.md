@@ -31,6 +31,7 @@ OpenSBI &#8594; U-Boot &#8594; EFI &#8594; GRUB &#8594; Ubuntu Linux
   - Ubuntu 24.04
   - NetBSD 11.99
   - FreeBSD 15.1
+  - OpenBSD 7.9
 - Linux syscall emulation mode
 - Device emulation:
   - NS16550A UART
