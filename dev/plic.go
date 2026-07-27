@@ -255,6 +255,17 @@ func (plic *PLIC) Store64(paddr uint64, v uint64) error {
 	return fmt.Errorf("PLIC: Store64(0x%x, 0x%08x)", paddr, v)
 }
 
+// Reset resets the irq state.
+func (plic *PLIC) Reset(irq uint32) {
+	plic.m.Lock()
+	defer plic.m.Unlock()
+
+	plic.gateways[irq].asserted = false
+	plic.gateways[irq].inflight = false
+
+	plic.pending &^= (1 << irq)
+}
+
 // SetInterruptRequest sets the interrupt request for IRQ according to
 // set.
 func (plic *PLIC) SetInterruptRequest(irq uint32, set bool) {

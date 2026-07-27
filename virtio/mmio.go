@@ -326,6 +326,7 @@ func (vio *MMIO) Store32(paddr uint64, v uint32) error {
 			if err := vio.Handler.Reset(); err != nil {
 				return err
 			}
+			vio.Plic.Reset(vio.IRQ)
 
 			vio.deviceFeaturesSel = 0
 			vio.driverFeaturesSel = 0
