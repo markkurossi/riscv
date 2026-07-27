@@ -18,6 +18,14 @@
       "domainname": "goemu.ephemelier.com"
     }
   ],
+  "gpus": [
+    {
+      "id":     "gpu",
+      "title":  "FreeBSD 15.1",
+      "width":  1024,
+      "height": 768
+    }
+  ],
   "devices": [
     {
       "type":  "virtio-blk-device",

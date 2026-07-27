@@ -23,6 +23,14 @@
       "domainname": "goemu.ephemelier.com"
     }
   ],
+  "gpus": [
+    {
+      "id":     "gpu",
+      "title":  "OpenBSD 7.9",
+      "width":  1024,
+      "height": 768
+    }
+  ],
   "devices": [
     {
       "type":  "virtio-blk-device",
