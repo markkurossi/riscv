@@ -11,6 +11,7 @@ package virtio
 import (
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/markkurossi/riscv/dev"
 	"github.com/markkurossi/riscv/isa"
@@ -29,6 +30,9 @@ type Blk struct {
 	Readonly bool
 	fileInfo os.FileInfo
 	id       []byte
+
+	descCh   chan uint16
+	workerWG sync.WaitGroup
 
 	// Statistics.
 	stRead  uint64
@@ -55,8 +59,12 @@ func NewBlk(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		},
 		File: file,
 	}
+	plic.IRQs[irq] = "blk"
+
 	blk.Init(1)
 	blk.MMIO.Handler = blk
+
+	blk.startWorker()
 
 	return blk
 }
@@ -66,8 +74,19 @@ func (blk *Blk) SetID(id string) {
 	blk.id = append(blk.id, 0)
 }
 
+// Ready implements Handler.Ready.
+func (blk *Blk) Ready() {
+}
+
 // Reset implements Handler.Reset.
 func (blk *Blk) Reset() error {
+	// Wait for current requests to complete.
+	close(blk.descCh)
+	blk.workerWG.Wait()
+
+	// Start a new worker.
+	blk.startWorker()
+
 	return nil
 }
 
@@ -79,7 +98,34 @@ func (blk *Blk) DeviceStats() {
 
 // ExecuteDescriptorChain implements Handler.ExecuteDescriptorChain.
 func (blk *Blk) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
-	blk.Debugf("chain: idx=%v", idx)
+	blk.Debugf("chain: lastAvailIdx=%v, desc=%v", vq.lastAvailIdx, idx)
+	blk.descCh <- idx
+	return 0, nil
+}
+
+func (blk *Blk) startWorker() {
+	blk.descCh = make(chan uint16, queueNumMax)
+	blk.workerWG.Add(1)
+	go blk.worker(blk.descCh, blk.queues[0])
+}
+
+func (blk *Blk) worker(ch chan uint16, vq *Queue) {
+	for desc := range ch {
+		blk.Debugf("processsing descriptor %v", desc)
+
+		tx, err := blk.processDesc(vq, desc)
+		if err != nil {
+			blk.Errorf("process failed: %v", err)
+		}
+
+		blk.M.Lock()
+		blk.CompleteDescriptor(vq, desc, tx)
+		blk.M.Unlock()
+	}
+	blk.workerWG.Done()
+}
+
+func (blk *Blk) processDesc(vq *Queue, idx uint16) (uint32, error) {
 
 	req, err := vq.loadDesc(idx)
 	if err != nil {
@@ -96,6 +142,7 @@ func (blk *Blk) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	if err != nil {
 		return 0, err
 	}
+
 	blk.Debugf("req header : %v\n", req)
 	blk.Debugf(" - type    : %v\n", blkTypeString(t))
 	blk.Debugf(" - sector  : %v\n", sector)

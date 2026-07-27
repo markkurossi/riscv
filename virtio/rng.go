@@ -46,11 +46,16 @@ func NewRng(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 			Mem:      mem,
 		},
 	}
+	plic.IRQs[irq] = "rng"
 
 	rng.Init(1)
 	rng.MMIO.Handler = rng
 
 	return rng
+}
+
+// Ready implements Handler.Ready.
+func (rng *Rng) Ready() {
 }
 
 // Reset implements Handler.Reset.

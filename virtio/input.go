@@ -35,7 +35,8 @@ type Input struct {
 	subsel uint8
 	size   uint8
 
-	events []*InputEvent
+	recvCh  chan uint16
+	eventCh chan *InputEvent
 
 	stats [2]int
 }
@@ -63,9 +64,12 @@ func NewInput(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 			IRQ:      irq,
 			Mem:      mem,
 		},
-		Width:  width,
-		Height: height,
+		Width:   width,
+		Height:  height,
+		recvCh:  make(chan uint16, queueNumMax),
+		eventCh: make(chan *InputEvent, queueNumMax),
 	}
+	plic.IRQs[irq] = "input"
 
 	vio.Init(2)
 	vio.MMIO.Handler = vio
@@ -86,7 +90,13 @@ func NewInput(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	vio.absY = make([]byte, 20)
 	vioBO.PutUint32(vio.absY[4:], uint32(vio.Height-1))
 
+	go vio.receiver(vio.queues[0])
+
 	return vio
+}
+
+// Ready implements Handler.Ready.
+func (vio *Input) Ready() {
 }
 
 // Reset implements Handler.Reset.
@@ -106,57 +116,76 @@ func (vio *Input) ExecuteDescriptorChain(vq *Queue, idx uint16) (
 	vio.Debugf("vq%v: chain: idx=%v", vq.Index, idx)
 
 	vio.stats[vq.Index]++
+	if vq.Index == 0 {
+		vio.recvCh <- idx
+		return 0, nil
+	}
+
 	desc, err := vq.loadDesc(idx)
 	if err != nil {
 		return 0, err
 	}
 	vio.Debugf("desc: %v", desc)
 
-	switch vq.Index {
-	case 0: // eventq
-		if len(vio.events) == 0 {
-			return 0, nil
-		}
-		ev := vio.events[0]
-		vio.events = vio.events[1:]
-		if desc.Len < 8 || desc.Flags&VIRTQ_DESC_F_WRITE == 0 {
-			return 0, fmt.Errorf("invalid eventq desc: %v", desc)
-		}
+	// Status queue.
+	var transmitted uint32
+	for {
 		buf, err := vio.guestData(desc.Addr, uint64(desc.Len))
 		if err != nil {
 			return 0, err
 		}
-		vioBO.PutUint16(buf[0:], ev.Type)
-		vioBO.PutUint16(buf[2:], ev.Code)
-		vioBO.PutUint32(buf[4:], ev.Value)
+		vio.Infof("statusq:\n%s", hex.Dump(buf))
+		transmitted += desc.Len
 
-		vio.Debugf("vq%v: wrote 1 event [%vB], %v events left in input queue",
-			vq.Index, desc.Len, len(vio.events))
-
-		return desc.Len, nil
-
-	case 1: // statusq
-		var transmitted uint32
-		for {
-			buf, err := vio.guestData(desc.Addr, uint64(desc.Len))
-			if err != nil {
-				return 0, err
-			}
-			vio.Infof("statusq:\n%s", hex.Dump(buf))
-			transmitted += desc.Len
-
-			if desc.Flags&VIRTQ_DESC_F_NEXT == 0 {
-				break
-			}
-			desc, err = vq.loadDesc(desc.Next)
-			if err != nil {
-				return 0, err
-			}
+		if desc.Flags&VIRTQ_DESC_F_NEXT == 0 {
+			break
 		}
-		return transmitted, nil
+		desc, err = vq.loadDesc(desc.Next)
+		if err != nil {
+			return 0, err
+		}
 	}
+	return transmitted, nil
+}
 
-	return 0, nil
+func (vio *Input) receiver(vq *Queue) {
+	for desc := range vio.recvCh {
+
+		ev := <-vio.eventCh
+
+		tx, err := vio.storeEvent(vq, desc, ev)
+		if err != nil {
+			vio.Errorf("store event failed: %v", err)
+		}
+		vio.M.Lock()
+		vio.CompleteDescriptor(vq, desc, tx)
+		vio.M.Unlock()
+	}
+}
+
+func (vio *Input) storeEvent(vq *Queue, idx uint16, ev *InputEvent) (
+	uint32, error) {
+
+	desc, err := vq.loadDesc(idx)
+	if err != nil {
+		return 0, err
+	}
+	vio.Debugf("desc: %v", desc)
+
+	if desc.Len < 8 || desc.Flags&VIRTQ_DESC_F_WRITE == 0 {
+		return 0, fmt.Errorf("invalid eventq desc: %v", desc)
+	}
+	buf, err := vio.guestData(desc.Addr, uint64(desc.Len))
+	if err != nil {
+		return 0, err
+	}
+	vioBO.PutUint16(buf[0:], ev.Type)
+	vioBO.PutUint16(buf[2:], ev.Code)
+	vioBO.PutUint32(buf[4:], ev.Value)
+
+	vio.Debugf("vq%v: wrote 1 event [%vB]", vq.Index, desc.Len)
+
+	return desc.Len, nil
 }
 
 var inputRegs = map[uint64]string{
@@ -364,11 +393,11 @@ func (vio *Input) keyEvent(code uint16, value uint32) {
 }
 
 func (vio *Input) addEvent(typ, code uint16, value uint32) {
-	vio.events = append(vio.events, &InputEvent{
+	vio.eventCh <- &InputEvent{
 		Type:  typ,
 		Code:  code,
 		Value: value,
-	})
+	}
 }
 
 // KeyEventValue represents the state action of a key event.

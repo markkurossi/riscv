@@ -1,29 +1,40 @@
 {
   "bios":    "opensbi/fw_jump.bin",
   "kernel":  "u-boot-2026.04/u-boot.bin",
-  "_kernel":  "netbsd/netbsd",
-  "_append":  "console=com0 root=sd0a",
-  "append":  "root=dk1",
+  "append":  "-v",
   "drives": [
     {
       "id":     "hd0",
       "format": "raw",
-      "file":   "netbsd/riscv64.img"
+      "file":   "openbsd/install79.img"
+    },
+    {
+      "id":     "hd1",
+      "format": "raw",
+      "file":   "openbsd/disk.img"
     }
   ],
   "netdevs": [
     {
       "id":         "eth0",
-      "ip":         "192.168.42.3",
+      "ip":         "192.168.42.4",
       "gw":         "192.168.42.254",
-      "hostname":   "netbsd",
+      "hostname":   "openbsd",
       "domainname": "goemu.ephemelier.com"
+    }
+  ],
+  "gpus": [
+    {
+      "id":     "gpu",
+      "title":  "OpenBSD 7.9",
+      "width":  1024,
+      "height": 768
     }
   ],
   "devices": [
     {
       "type":  "virtio-blk-device",
-      "drive": "hd0"
+      "drive": "hd1"
     },
     {
       "type":   "virtio-net-device",

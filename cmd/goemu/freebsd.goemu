@@ -15,7 +15,15 @@
       "ip":         "192.168.42.1",
       "gw":         "192.168.42.254",
       "hostname":   "freebsd",
-      "domainname": "goemu.markkurossi.com"
+      "domainname": "goemu.ephemelier.com"
+    }
+  ],
+  "gpus": [
+    {
+      "id":     "gpu",
+      "title":  "FreeBSD 15.1",
+      "width":  1024,
+      "height": 768
     }
   ],
   "devices": [

@@ -1,18 +1,18 @@
 # RISC-V in Go
 
 <p align="center">
-  <img src="docs/goemu-small.png" width="320">
+  <img src="resources/goemu-small.png" width="320">
 </p>
 
 <p align="center">
 RV64GC RISC-V emulator written in Go capable of booting Linux, NetBSD,
-and FreeBSD through OpenSBI, U-Boot, EFI, and GRUB, with SV39 virtual
-memory and VirtIO devices.
+FreeBSD, and OpenBSD through OpenSBI, U-Boot, EFI, and GRUB, with SV39
+virtual memory and VirtIO devices.
 </p>
 
 <p align="center">
 OpenSBI &#8594; BuildRoot Linux<br>
-OpenSBI &#8594; U-Boot &#8594; EFI &#8594; {NetBSD,FreeBSD}<br>
+OpenSBI &#8594; U-Boot &#8594; EFI &#8594; {NetBSD,FreeBSD,OpenBSD}<br>
 OpenSBI &#8594; U-Boot &#8594; EFI &#8594; GRUB &#8594; Ubuntu Linux
 </p>
 
@@ -31,6 +31,7 @@ OpenSBI &#8594; U-Boot &#8594; EFI &#8594; GRUB &#8594; Ubuntu Linux
   - Ubuntu 24.04
   - NetBSD 11.99
   - FreeBSD 15.1
+  - OpenBSD 7.9
 - Linux syscall emulation mode
 - Device emulation:
   - NS16550A UART
@@ -62,45 +63,26 @@ operating systems, and the RISC-V privileged architecture.
   - [x] virtio-gpu
 - [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
 
-#### X11
+### MCP RISC-V
 
-``` shell
-$ LC_ALL=C startx xterm
-$ xdotool windowfocus 6291468
-```
+The project is divided into two tracks:
 
-``` shell
-    2000000 reps @   0.0047 msec (213000.0/sec): 1-pixel circle
+1. **CPU conformance**
+    - A clean, pure Go implementation of the RISC-V processor.
+    - Prioritize correctness, readability, and maintainability.
+    - Apply performance optimizations where they do not compromise
+      code quality.
+    - This CPU implementation serves as the reference implementation
+      and will later be reimplemented using MPC primitives to create a
+      virtual MPC RISC-V CPU.
 
-     900000 reps @   0.0061 msec (164000.0/sec): 10-pixel circle
-
-     400000 reps @   0.0175 msec ( 57200.0/sec): 100-pixel circle
-
-     100000 reps @   0.0705 msec ( 14200.0/sec): 500-pixel circle
-
-      40000 reps @   0.1498 msec (  6670.0/sec): 100-pixel dashed circle
-
-      30000 reps @   0.1822 msec (  5490.0/sec): 100-pixel double-dashed circle
-
-      80000 reps @   0.0687 msec ( 14600.0/sec): 10-pixel wide circle
-
-       7000 reps @   0.7193 msec (  1390.0/sec): 100-pixel wide circle
-
-       1000 reps @   5.4914 msec (   182.0/sec): 500-pixel wide circle
-
-       4000 reps @   1.3434 msec (   744.0/sec): 100-pixel wide dashed circle
-
-       4000 reps @   1.3426 msec (   745.0/sec): 100-pixel wide double-dashed circle
-
-     500000 reps @   0.0108 msec ( 92700.0/sec): 10-pixel partial circle
-
-     158400 reps @   0.0344 msec ( 29000.0/sec): 100-pixel partial circle
-
-^C^Z
-[1]+  Stopped                 x11perf -all -repeat 1
-```
-
-virtio-gpu: ERROR: execute descriptor chain: VIRTIO_GPU_CMD_UPDATE_CURSOR: not implemented yet
+2. **System emulation**
+    - Emulate the system surrounding the CPU, including memory,
+      interrupts, and devices.
+    - Use asynchronous device interfaces where appropriate.
+    - Optimize this layer for performance.
+    - In the MPC architecture, this layer remains outside the MPC
+      computation and interacts with the virtual MPC CPU.
 
 ### System emulation and supervisor mode
 
@@ -289,19 +271,25 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 
 ## Benchmark history
 
-| Optimization           | fib 30 | fib 35 |    fib 40 |   MIPS | Relative |
-|:-----------------------|-------:|-------:|----------:|-------:|---------:|
-| Base                   |  2.969 | 32.510 |           |  19.75 |    1.000 |
-| GC-less decode         |  1.803 | 19.726 |           |  32.55 |    0.607 |
-| PTE access checks      |  1.763 | 19.128 |           |  33.57 |    0.588 |
-| MMU Map fastpath       |  1.709 | 18.507 |           |  34.70 |    0.569 |
-| DecodeCFast            |  1.280 | 13.848 | 2m33.240s |  45.78 |    0.426 |
-| Cached code page       |  0.977 | 10.582 | 1m57.654s |  60.68 |    0.325 |
-| Concrete memory        |  0.915 |  9.835 | 1m48.920s |  65.29 |    0.303 |
-| 32-bit decode cache    |  0.684 |  7.327 | 1m20.509s |  87.64 |    0.225 |
-| Ld/Sd TLB fastpath     |  0.603 |  6.327 | 1m10.533s | 101.49 |    0.195 |
-| Optimized Instr struct |  0.385 |  4.022 | 0m44.167s | 159.65 |    0.124 |
-| Interrupts             |  0.416 |  4.321 | 0m49.085s | 148.61 |    0.134 |
+| Optimization           | fib 30 | fib 35 |    fib 40 |   MIPS | Speedup |
+|:-----------------------|-------:|-------:|----------:|-------:|--------:|
+| Base                   |  2.969 | 32.510 |           |  19.75 |   1.00x |
+| GC-less decode         |  1.803 | 19.726 |           |  32.55 |   1.65x |
+| PTE access checks      |  1.763 | 19.128 |           |  33.57 |   1.70x |
+| MMU Map fastpath       |  1.709 | 18.507 |           |  34.70 |   1.76x |
+| DecodeCFast            |  1.280 | 13.848 | 2m33.240s |  45.78 |   2.35x |
+| Cached code page       |  0.977 | 10.582 | 1m57.654s |  60.68 |   3.07x |
+| Concrete memory        |  0.915 |  9.835 | 1m48.920s |  65.29 |   3.31x |
+| 32-bit decode cache    |  0.684 |  7.327 | 1m20.509s |  87.64 |   4.44x |
+| Ld/Sd TLB fastpath     |  0.603 |  6.327 | 1m10.533s | 101.49 |   5.14x |
+| Optimized Instr struct |  0.385 |  4.022 | 0m44.167s | 159.65 |   8.08x |
+| Interrupts             |  0.416 |  4.321 | 0m49.085s | 148.61 |   7.52x |
+| unsafe.Pointer et al.¹ |  0.363 |  3.668 | 0m40.373s | 175.06 |   8.86x |
+| unsafe.Add             |  0.358 |  3.582 | 0m39.659s | 179.27 |   9.08x |
+
+1. contains several optimizations:
+  - instr decode cache by `pc>>2` instread of `raw>>`
+  - unsafe.Pointer PC load and uint64 `sd` and `ld`
 
 ## Userspace Emulation - MMU Refactoring
 
@@ -526,6 +514,9 @@ Guest:
 ```
 
 # Ubuntu
+
+Check how to disable systemd. It is using +35% CPU if host network is
+down.
 
 ## Grow Image
 

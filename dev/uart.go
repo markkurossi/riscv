@@ -189,6 +189,9 @@ func NewUART(hart isa.Hart, start, size uint64, plic *PLIC, irq uint32,
 		// A real 16550A also typically initializes LCR/MCR safely.
 		LCR: 0x03, // 8 bits, no parity, 1 stop bit
 	}
+
+	plic.IRQs[irq] = "UART"
+
 	return uart
 }
 
@@ -214,10 +217,7 @@ func (uart *UART) Run() {
 		uart.input = append(uart.input, buf[:n]...)
 		if (uart.IER & 0x01) != 0 {
 			uart.isrPending |= 0x01 // Receiver data available
-			if uart.Plic != nil {
-				uart.Plic.Pending |= (1 << uart.IRQ)
-				uart.Plic.ReevaluateInterrupts()
-			}
+			uart.Plic.SetInterruptRequest(uart.IRQ, true)
 		}
 		uart.inputAvail.Store(true)
 		uart.m.Unlock()
@@ -263,10 +263,8 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 		if len(uart.input) == 0 {
 			uart.inputAvail.Store(false)
 			uart.isrPending &^= 0x01 // Clear receiver interrupt flag
-
-			if uart.isrPending == 0 && uart.Plic != nil {
-				uart.Plic.Pending &^= (1 << uart.IRQ)
-				uart.Plic.ReevaluateInterrupts()
+			if uart.isrPending == 0 {
+				uart.Plic.SetInterruptRequest(uart.IRQ, false)
 			}
 		}
 		uart.m.Unlock()
@@ -295,9 +293,8 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 			uart.isrPending &^= 0x02
 
 			// If no other conditions remain, lower the PLIC line
-			if uart.isrPending == 0 && uart.Plic != nil {
-				uart.Plic.Pending &^= (1 << uart.IRQ)
-				uart.Plic.ReevaluateInterrupts()
+			if uart.isrPending == 0 {
+				uart.Plic.SetInterruptRequest(uart.IRQ, false)
 			}
 			uart.Infof("IIR read: %08b: THR empty", iir)
 			return iir, nil
@@ -495,11 +492,6 @@ func (uart *UART) checkInterrupts() {
 	if (uart.IER & 0x02) != 0 {
 		// Mark THRE interrupt active internally
 		uart.isrPending |= 0x02
-
-		if uart.Plic != nil {
-			uart.Plic.Pending |= (1 << uart.IRQ)
-			uart.Plic.ReevaluateInterrupts()
-		}
+		uart.Plic.SetInterruptRequest(uart.IRQ, true)
 	}
-
 }

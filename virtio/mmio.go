@@ -29,8 +29,8 @@ const (
 	Version  = 0x2
 	VendorID = 0x476f4d55 // "GoMU"
 
-	FeatureAnyLayout = 1 << 28
-	FeatureVersion1  = 1 << 31
+	VIRTIO_F_INDIRECT_DESC = 28
+	VIRTIO_F_VERSION_1     = 32
 
 	queueNumMax = 512
 )
@@ -149,6 +149,7 @@ func (vio *MMIO) DriverOK() bool {
 }
 
 type Handler interface {
+	Ready()
 	Reset() error
 	DeviceStats()
 	ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error)
@@ -321,6 +322,12 @@ func (vio *MMIO) Store32(paddr uint64, v uint32) error {
 	case 0x070: // Status
 		if v == 0 {
 			// Guest requested a device reset
+
+			if err := vio.Handler.Reset(); err != nil {
+				return err
+			}
+			vio.Plic.Reset(vio.IRQ)
+
 			vio.deviceFeaturesSel = 0
 			vio.driverFeaturesSel = 0
 			vio.driverFeatures[0] = 0
@@ -337,13 +344,13 @@ func (vio *MMIO) Store32(paddr uint64, v uint32) error {
 				vio.queues[idx].lastAvailIdx = 0
 			}
 
-			return vio.Handler.Reset()
+			return nil
 		}
 
 		// Standard status update protocol sequence
 		vio.status |= v
 
-		if v&8 != 0 { // VIRTIO_CONFIG_S_FEATURES_OK (8)
+		if v&FEATURES_OK != 0 {
 			// Validate that the driver acknowledged
 			// VIRTIO_F_VERSION_1 (bit 32 -> page 1, bit 0)
 			if (vio.driverFeatures[1] & 1) == 0 {
@@ -351,6 +358,9 @@ func (vio *MMIO) Store32(paddr uint64, v uint32) error {
 				// bit to signal failure
 				vio.status &= ^uint32(8)
 			}
+		}
+		if v&DRIVER_OK != 0 {
+			vio.Handler.Ready()
 		}
 
 		// Buffer Base Address Registers (rv64 writes lower then upper halves)
@@ -512,22 +522,23 @@ func (vio *MMIO) ProcessQueue(idx uint32) {
 			return
 		}
 		if transferred == 0 {
-			vio.Debugf("chain idx=%v processing deferred", descHeadIdx)
-			break
+			// Asynchronous processing, this entry is not completed.
+			vio.Debugf("chain idx=%v asynchronous processing", descHeadIdx)
+		} else {
+			// Descriptor completed synchronously.
+			elemAddr := vq.UsedPhys + 4 + (uint64(uint32(usedIdx)%vq.Num) * 8)
+			vio.writeGuestUint32(elemAddr, uint32(descHeadIdx))
+			vio.writeGuestUint32(elemAddr+4, transferred)
+
+			usedIdx++
+			processedAny = true
 		}
 
-		// Write back this completed entry into the Used Ring array
-		elemAddr := vq.UsedPhys + 4 + (uint64(uint32(usedIdx)%vq.Num) * 8)
-		vio.writeGuestUint32(elemAddr, uint32(descHeadIdx))
-		vio.writeGuestUint32(elemAddr+4, transferred)
-
-		usedIdx++
 		vq.lastAvailIdx++
-		processedAny = true
 	}
 
 	if processedAny {
-		// Flush the index batch change back to guest RAM.
+		// Flush the index batch change back to guest memory.
 		vio.writeGuestUint16(usedIdxAddr, usedIdx)
 
 		// Read the guest's Available Ring flags (offset 0 of
@@ -545,6 +556,51 @@ func (vio *MMIO) ProcessQueue(idx uint32) {
 			vio.interruptStatus |= 0x1
 			vio.Plic.SetInterruptRequest(vio.IRQ, true)
 		}
+	}
+}
+
+// CompleteDescriptor completes descriptor desc with transferred tx
+// bytes. The MMIO.M must be held when this is called.
+func (vio *MMIO) CompleteDescriptor(vq *Queue, desc uint16, tx uint32) {
+	// Get used ring index.
+	usedIdxAddr := vq.UsedPhys + 2
+	usedIdx, err := vio.readGuestUint16(usedIdxAddr)
+	if err != nil {
+		vio.Errorf("read guest memory: %v", err)
+		return
+	}
+
+	// Write completed descriptor to used ring.
+	elemAddr := vq.UsedPhys + 4 + (uint64(uint32(usedIdx)%vq.Num) * 8)
+	err = vio.writeGuestUint32(elemAddr, uint32(desc))
+	if err != nil {
+		vio.Errorf("write guest memory: %v", err)
+		return
+	}
+	err = vio.writeGuestUint32(elemAddr+4, tx)
+	if err != nil {
+		vio.Errorf("write guest memory: %v", err)
+		return
+	}
+
+	// Notify guest about this completed request.
+	usedIdx++
+	err = vio.writeGuestUint16(usedIdxAddr, usedIdx)
+	if err != nil {
+		vio.Errorf("write guest memory: %v", err)
+		return
+	}
+
+	// Check if guest has suppressed interrupts.
+	availFlags, err := vio.readGuestUint16(vq.AvailPhys)
+	if err != nil {
+		vio.Errorf("read guest memory: %v", err)
+		return
+	}
+
+	if availFlags&1 == 0 {
+		vio.interruptStatus |= 0x1
+		vio.Plic.SetInterruptRequest(vio.IRQ, true)
 	}
 }
 

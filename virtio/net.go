@@ -156,12 +156,14 @@ type Net struct {
 	tun  *tun.Tunnel
 	dhcp *dhcp.Server
 
-	recvCh chan []byte
+	recvDescCh chan uint16
+	recvCh     chan []byte
 
-	tunReadCh  chan int
+	sendDescCh chan uint16
+
 	tunReadBuf []byte
 
-	receivedPacket []byte
+	hdrLen int
 
 	// Statistics.
 	stSent uint64
@@ -207,11 +209,15 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 			IRQ:      irq,
 			Mem:      mem,
 		},
-		HostIP:  hostIP,
-		GuestIP: guestIP,
-		tun:     tunnel,
-		recvCh:  make(chan []byte),
+		HostIP:     hostIP,
+		GuestIP:    guestIP,
+		tun:        tunnel,
+		recvDescCh: make(chan uint16, queueNumMax),
+		recvCh:     make(chan []byte),
+		sendDescCh: make(chan uint16, queueNumMax),
 	}
+	plic.IRQs[irq] = "net"
+
 	vio.Init(2)
 	vio.MMIO.Handler = vio
 
@@ -245,45 +251,25 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	vio.Infof("host  : %v %v", vio.HostMAC, hostIP)
 
 	go vio.receiver(vio.queues[0])
+	go vio.sender(vio.queues[1])
 	go vio.tunReader()
 
 	return vio, nil
 }
 
-func (vio *Net) receiver(vq *Queue) {
-	vio.Debugf("receiver started for vq-%v", vq.Index)
-	for {
-		packet := <-vio.recvCh
-		vio.Debugf("received packet of %v bytes", len(packet))
-
-		vio.M.Lock()
-		for vio.receivedPacket != nil {
-			vio.C.Wait()
+// Ready implements Handler.Ready.
+func (vio *Net) Ready() {
+	// Check legacy driver.
+	vio.hdrLen = 12
+	if vio.driverFeatures[1]&1 == 0 {
+		// Legacy version. 12-byte header only with VIRTIO_NET_F_MRG_RXBUF.
+		if vio.driverFeatures[0]&(1<<VIRTIO_NET_F_MRG_RXBUF) == 0 {
+			vio.hdrLen = 10
+		} else {
+			vio.Debugf("VIRTIO_NET_F_MRG_RXBUF")
 		}
-		vio.receivedPacket = packet
-
-		vio.ProcessQueue(vq.Index)
-		vio.M.Unlock()
 	}
-}
-
-func (vio *Net) tunReader() {
-	ip := make([]byte, 1600)
-	for {
-		n, err := vio.tun.Read(ip)
-		if err != nil {
-			vio.Errorf("tun.Read: %v", err)
-			continue
-		}
-		// XXX Check what packet this is.
-
-		network.DebugIP(vio, ip[:n])
-
-		buf := make([]byte, 12+14+n)
-		network.MakeEthernet(buf[12:], vio.GuestMAC, vio.HostMAC, 0x0800)
-		copy(buf[12+14:], ip[:n])
-		vio.recvCh <- buf
-	}
+	vio.Debugf("hdrLen=%v", vio.hdrLen)
 }
 
 // Reset implements Handler.Reset.
@@ -311,8 +297,113 @@ func (vio *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	vio.Debugf("vq%v: chain: idx=%v", vq.Index, idx)
 
 	if vq.Index%2 == 0 {
-		return vio.processReceiveQueue(vq, idx)
+		vio.recvDescCh <- idx
+	} else {
+		vio.sendDescCh <- idx
 	}
+	return 0, nil
+}
+
+func (vio *Net) receiver(vq *Queue) {
+	vio.Debugf("receiver started for vq%v", vq.Index)
+	for {
+		// Get our receive descriptor.
+		desc := <-vio.recvDescCh
+		vio.Debugf("receiving to descriptor %v", desc)
+
+		packet := <-vio.recvCh
+		vio.Debugf("received packet of %v bytes", len(packet))
+
+		tx, err := vio.storePacket(vq, desc, packet)
+		if err != nil {
+			// Log error but complete the descriptor to avoid
+			// descriptor leaks.
+			vio.Errorf("store packet failed: %v", err)
+		}
+		vio.M.Lock()
+		vio.CompleteDescriptor(vq, desc, tx)
+		vio.M.Unlock()
+	}
+}
+
+func (vio *Net) storePacket(vq *Queue, idx uint16, packet []byte) (
+	uint32, error) {
+
+	// Store data into descriptor chain.
+	var received uint32
+	for len(packet) > 0 {
+		desc, err := vq.loadDesc(idx)
+		if err != nil {
+			return 0, err
+		}
+		vio.Debugf("desc: %v", desc)
+
+		if desc.Flags&VIRTQ_DESC_F_WRITE == 0 {
+			return 0, fmt.Errorf("invalid receiveq%v flags: %x",
+				vq.Index, desc.Flags)
+		}
+
+		// Get next buffer.
+		buf, err := vio.guestData(desc.Addr, uint64(desc.Len))
+		if err != nil {
+			return 0, err
+		}
+		n := copy(buf, packet)
+		received += uint32(n)
+		packet = packet[n:]
+
+		// Check next chunk
+		for desc.Flags&VIRTQ_DESC_F_NEXT == 0 {
+			break
+		}
+		idx = desc.Next
+	}
+	vio.Debugf("vq%v: transferred %v bytes, %v tail bytes ignored",
+		vq.Index, received, len(packet))
+
+	if received > uint32(vio.hdrLen+14) {
+		// Count only IP bytes.
+		vio.stRcvd += uint64(received - uint32(vio.hdrLen-14))
+	}
+
+	return received, nil
+}
+
+func (vio *Net) tunReader() {
+	ip := make([]byte, 1600)
+	for {
+		n, err := vio.tun.Read(ip)
+		if err != nil {
+			vio.Errorf("tun.Read: %v", err)
+			continue
+		}
+		// XXX Check what packet this is.
+
+		network.DebugIP(vio, ip[:n])
+
+		buf := make([]byte, vio.hdrLen+14+n)
+		network.MakeEthernet(buf[vio.hdrLen:], vio.GuestMAC, vio.HostMAC,
+			0x0800)
+		copy(buf[vio.hdrLen+14:], ip[:n])
+		vio.recvCh <- buf
+	}
+}
+
+func (vio *Net) sender(vq *Queue) {
+	vio.Debugf("sender started for vq%v", vq.Index)
+	for desc := range vio.sendDescCh {
+		tx, err := vio.send(vq, desc)
+		if err != nil {
+			vio.Errorf("send failed: %v", err)
+		}
+		vio.M.Lock()
+		vio.CompleteDescriptor(vq, desc, tx)
+		vio.M.Unlock()
+	}
+}
+
+func (vio *Net) send(vq *Queue, idx uint16) (uint32, error) {
+	// To lock or not to lock?
 
 	// Transmit queue.
 
@@ -331,9 +422,9 @@ func (vio *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	var hdr *NetHdr
 	var payload []byte
 
-	if desc.Len < 12 {
+	if desc.Len < uint32(vio.hdrLen) {
 		return 0, fmt.Errorf("truncated request: len=%v", desc.Len)
-	} else if desc.Len == 12 {
+	} else if desc.Len <= 12 {
 		// First descriptor is the header.
 		chunk, err := vio.guestData(desc.Addr, uint64(desc.Len))
 		if err != nil {
@@ -343,7 +434,7 @@ func (vio *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 		if err != nil {
 			return 0, err
 		}
-		transferred = 12
+		transferred = desc.Len
 	} else {
 		// Header and payload start in the first descriptor.
 		chunk, err := vio.guestData(desc.Addr, uint64(desc.Len))
@@ -354,7 +445,7 @@ func (vio *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 		if err != nil {
 			return 0, err
 		}
-		payload = chunk[12:]
+		payload = chunk[vio.hdrLen:]
 		transferred = desc.Len
 	}
 	// Check if payload is sent in multiple chunks.
@@ -382,55 +473,6 @@ func (vio *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 	}
 
 	return transferred, nil
-}
-
-func (vio *Net) processReceiveQueue(vq *Queue, idx uint16) (uint32, error) {
-	if vio.receivedPacket == nil {
-		// No input packet yet.
-		return 0, nil
-	}
-
-	// Store data into descriptor chain.
-	var received uint32
-	for len(vio.receivedPacket) > 0 {
-		desc, err := vq.loadDesc(idx)
-		if err != nil {
-			return 0, err
-		}
-		vio.Debugf("desc: %v", desc)
-
-		if desc.Flags&VIRTQ_DESC_F_WRITE == 0 {
-			return 0, fmt.Errorf("invalid receiveq%v flags: %x",
-				vq.Index, desc.Flags)
-		}
-
-		// Get next buffer.
-		buf, err := vio.guestData(desc.Addr, uint64(desc.Len))
-		if err != nil {
-			return 0, err
-		}
-		n := copy(buf, vio.receivedPacket)
-		received += uint32(n)
-		vio.receivedPacket = vio.receivedPacket[n:]
-
-		// Check next chunk
-		for desc.Flags&VIRTQ_DESC_F_NEXT == 0 {
-			break
-		}
-		idx = desc.Next
-	}
-	vio.Debugf("vq%v: transferred %v bytes, %v tail bytes ignored",
-		vq.Index, received, len(vio.receivedPacket))
-	vio.receivedPacket = nil
-
-	if received > 12+14 {
-		// Count only IP bytes.
-		vio.stRcvd += uint64(received - 12 - 14)
-	}
-
-	vio.C.Broadcast()
-
-	return received, nil
 }
 
 func (vio *Net) processSend(hdr *NetHdr, data []byte) error {
@@ -470,9 +512,10 @@ func (vio *Net) processSend(hdr *NetHdr, data []byte) error {
 			vio.Debugf("ARP  who-has %v tell %v", arp.TPA, arp.SPA)
 			if arp.TPA.Equal(vio.HostIP) {
 				// Respond to ARP requests.
-				resp := make([]byte, 12+14+28)
-				network.MakeEthernet(resp[12:], arp.SHA, vio.HostMAC, frameType)
-				network.MakeARP(resp[12+14:], 2, vio.HostMAC, arp.TPA,
+				resp := make([]byte, vio.hdrLen+14+28)
+				network.MakeEthernet(resp[vio.hdrLen:], arp.SHA, vio.HostMAC,
+					frameType)
+				network.MakeARP(resp[vio.hdrLen+14:], 2, vio.HostMAC, arp.TPA,
 					arp.SHA, arp.SPA)
 
 				vio.recvCh <- resp
@@ -564,13 +607,13 @@ func (vio *Net) respondIPv4(packet []byte) bool {
 			vio.Debugf("DHCP response: %v", resp)
 			rdata := resp.Encode()
 
-			data := make([]byte, 12+14+20+8+len(rdata))
+			data := make([]byte, vio.hdrLen+14+20+8+len(rdata))
 
-			network.MakeEthernet(data[12:],
+			network.MakeEthernet(data[vio.hdrLen:],
 				dstMAC, vio.HostMAC, network.EthernetIPv4)
 
 			// IP.
-			ip := 12 + 14
+			ip := vio.hdrLen + 14
 			data[ip+0] = 0x45
 			data[ip+1] = 0x10
 			network.BO.PutUint16(data[ip+2:], uint16(20+8+len(rdata)))
@@ -684,8 +727,12 @@ func (hdr *NetHdr) String() string {
 }
 
 func (vio *Net) decodeHeader(data []byte) (*NetHdr, error) {
-	if len(data) < 12 {
+	if len(data) < 10 {
 		return nil, fmt.Errorf("invalid transmit packet: len=%v", len(data))
+	}
+	var numbuffers uint16
+	if len(data) >= 12 {
+		numbuffers = vioBO.Uint16(data[10:])
 	}
 
 	return &NetHdr{
@@ -695,6 +742,6 @@ func (vio *Net) decodeHeader(data []byte) (*NetHdr, error) {
 		GSOSize:    vioBO.Uint16(data[4:]),
 		CSUMStart:  vioBO.Uint16(data[6:]),
 		CSUMOffset: vioBO.Uint16(data[8:]),
-		NumBuffers: vioBO.Uint16(data[10:]),
+		NumBuffers: numbuffers,
 	}, nil
 }

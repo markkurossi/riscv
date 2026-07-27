@@ -16,7 +16,7 @@
 #ifdef __riscv
 /*
  * Read a RISC-V CSR into an unsigned long variable.
- * Usage: unsigned long val = riscv_read_csr(0x7c2);
+ * Usage: unsigned long val = riscv_read_csr(0x802);
  */
 #define riscv_read_csr(csr) ({                                  \
     unsigned long __v;                                          \
@@ -26,7 +26,7 @@
 
 /*
  * Write an unsigned long value to a RISC-V CSR.
- * Usage: riscv_write_csr(0x7c2, v);
+ * Usage: riscv_write_csr(0x802, v);
  */
 #define riscv_write_csr(csr, val)                               \
 do {                                                            \
@@ -34,7 +34,7 @@ do {                                                            \
   __asm__ __volatile__ ("csrw " #csr ", %0" : : "r" (__v));     \
  } while (0)
 
-#define time_ns() riscv_read_csr(0x7c1)
+#define time_ns() riscv_read_csr(0x801)
 
 #else  /* not __riscv */
 #define riscv_read_csr(csr) 0
@@ -89,7 +89,7 @@ main(int argc, char *argv[])
     }
 
   if (cpu_profile)
-    riscv_write_csr(0x7c2, 1);
+    riscv_write_csr(0x802, 1);
 
   start = time_ns();
   cycle = riscv_read_csr(cycle);
@@ -109,7 +109,7 @@ main(int argc, char *argv[])
   end = time_ns();
 
   if (cpu_profile)
-    riscv_write_csr(0x7c2, 0);
+    riscv_write_csr(0x802, 0);
 
   elapsed = ((double) end - (double) start) * 1e-9;
 

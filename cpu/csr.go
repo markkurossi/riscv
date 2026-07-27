@@ -97,9 +97,9 @@ const (
 	CsrMhartid       = 0xf14
 	CsrScountinhibit = 0xfb0
 
-	CsrGoemuDebug      = 0x7c0
-	CsrGoemuTime       = 0x7c1
-	CsrGoemuCPUProfile = 0x7c2
+	CsrGoemuDebug      = 0x800
+	CsrGoemuTime       = 0x801
+	CsrGoemuCPUProfile = 0x802
 )
 
 var csrs = map[int]string{
@@ -495,9 +495,9 @@ func csrName(csr int) string {
 	return fmt.Sprintf("%03x", csr)
 }
 
-func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
+func (cpu *CPU) CSRLoad(csr CSR, raw uint32, instr isa.Instr) (uint64, error) {
 	if cpu.Mode() < csr.Privilege() {
-		return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
+		return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 			fmt.Errorf("GetCSR(%v), mode=%v", csr, cpu.Mode()))
 	}
 	// Handle read-only CSRs here by returning the fixed or computed
@@ -508,23 +508,22 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 	switch csr {
 	case CsrFflags, CsrFrm, CsrFcsr:
 		if cpu.mstatus.FS() == isa.RegOff && checkFSRegOff {
-			return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
+			return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 				fmt.Errorf("read fcsr when FS is off"))
 		}
+		v := cpu.CSR[csr].Load()
 		switch csr {
 		case CsrFflags:
-			v = cpu.CSR[csr] & 0b11111
+			v &= 0b11111
 		case CsrFrm:
-			v = cpu.CSR[csr] >> 5 & 0b111
-		default:
-			v = cpu.CSR[csr]
+			v = v >> 5 & 0b111
 		}
 
 	case CsrMstatus:
 		v = uint64(cpu.mstatus)
 
 	case CsrMisa:
-		v = cpu.CSR[csr]
+		v = cpu.CSR[csr].Load()
 		v |= isa.MisaMXL |
 			isa.MisaA | // A (Atomic)
 			isa.MisaC | // C (Compressed)
@@ -565,18 +564,18 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 
 	case CsrSie:
 		mask := uint64(isa.IntSSIP | isa.IntSTIP | isa.IntSEIP)
-		v = cpu.CSR[CsrMie] & mask
+		v = cpu.CSR[CsrMie].Load() & mask
 
 	case CsrSip:
 		mask := uint64(isa.IntSSIP | isa.IntSTIP | isa.IntSEIP)
-		v = cpu.CSR[CsrMip] & mask
+		v = cpu.CSR[CsrMip].Load() & mask
 
 	case CsrSatp:
 		if cpu.mstatus.TVM() {
-			return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
+			return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 				fmt.Errorf("get satp with TVM set"))
 		}
-		v = cpu.CSR[csr]
+		v = cpu.CSR[csr].Load()
 
 		// Vector extension.
 
@@ -609,7 +608,7 @@ func (cpu *CPU) GetCSR(csr CSR) (uint64, error) {
 		if csr >= 0xb03 && csr <= 0xb1f {
 			// Mhpmcounters
 		} else {
-			v = cpu.CSR[csr]
+			v = cpu.CSR[csr].Load()
 		}
 	}
 
@@ -630,11 +629,11 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 	}
 
 	if cpu.Mode() < csr.Privilege() && false {
-		return cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
+		return cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 			fmt.Errorf("SetCSR(%v)=%v, mode=%v", csr, v, cpu.Mode()))
 	}
 	if csr.ReadOnly() {
-		return cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
+		return cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 			fmt.Errorf("SetCSR(%v)=%v: read-only", csr, v))
 	}
 
@@ -643,18 +642,24 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 	switch csr {
 	case CsrFflags, CsrFrm, CsrFcsr:
 		if cpu.mstatus.FS() == isa.RegOff && checkFSRegOff {
-			return cpu.Trap(isa.CauseIllegalInstr, uint64(csr),
+			return cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 				fmt.Errorf("write fcsr when FS is off"))
 		}
 		switch csr {
 		case CsrFflags:
-			cpu.CSR[csr] &= ^uint64(0b11111)
-			cpu.CSR[csr] |= v & 0b11111
+			n := cpu.CSR[csr].Load()
+			n &= ^uint64(0b11111)
+			n |= v & 0b11111
+			cpu.CSR[csr].Store(n)
+
 		case CsrFrm:
-			cpu.CSR[csr] &= ^uint64(0b11100000)
-			cpu.CSR[csr] |= (v & 0b111) << 5
+			n := cpu.CSR[csr].Load()
+			n &= ^uint64(0b11100000)
+			n |= (v & 0b111) << 5
+			cpu.CSR[csr].Store(n)
+
 		default:
-			cpu.CSR[csr] = v
+			cpu.CSR[csr].Store(v)
 		}
 
 	case CsrMstatus:
@@ -663,10 +668,10 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 		cpu.updateMstatusSD()
 
 	case CsrMisa:
-		cpu.CSR[csr] = v
+		cpu.CSR[csr].Store(v)
 
 	case CsrMie, CsrMip:
-		cpu.CSR[csr] = v
+		cpu.CSR[csr].Store(v)
 
 	case CsrSstatus:
 		cpu.mstatus = (cpu.mstatus & ^isa.SstatusMask) |
@@ -674,23 +679,23 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 		cpu.updateMstatusSD()
 
 	case CsrStimecmp:
-		cpu.CSR[csr] = v
+		cpu.CSR[csr].Store(v)
 		if cpu.syncTime() < v {
 			// Next timer interrupt in the future, clear interrupts.
-			cpu.CSR[CsrMip] &^= isa.IntSTIP
+			cpu.CSR[CsrMip].And(^uint64(isa.IntSTIP))
 		}
 
 	case CsrSie:
 		// sie is a masked view of mie — only S-mode bits
 		mask := uint64(isa.IntSSIP | isa.IntSTIP | isa.IntSEIP)
-		mie := cpu.CSR[CsrMie]
-		cpu.CSR[CsrMie] = (mie & ^mask) | (v & mask)
+		mie := cpu.CSR[CsrMie].Load()
+		cpu.CSR[CsrMie].Store((mie & ^mask) | (v & mask))
 
 	case CsrSip:
 		// sip is a masked view of mip — only S-mode bits.
 		mask := uint64(isa.IntSSIP | isa.IntSTIP | isa.IntSEIP)
-		mip := cpu.CSR[CsrMip]
-		cpu.CSR[CsrMip] = (mip & ^mask) | (v & mask)
+		mip := cpu.CSR[CsrMip].Load()
+		cpu.CSR[CsrMip].Store((mip & ^mask) | (v & mask))
 
 	case CsrSatp:
 		if cpu.mstatus.TVM() {
@@ -703,7 +708,7 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 		cpu.codePage = nil
 
 		// Save Satp to CSR so that it can be queried.
-		cpu.CSR[csr] = v
+		cpu.CSR[csr].Store(v)
 
 		if cpu.Trace {
 			cpu.traceFunc(cpu.PC)
@@ -712,34 +717,34 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 
 	case CsrGoemuDebug:
 		cpu.DebugTrace = v&0b1 != 0
-		cpu.CSR[csr] = v
+		cpu.CSR[csr].Store(v)
 
 	case CsrGoemuCPUProfile:
 		if v == 0 {
-			cpu.csr7c2Refcount--
-			if cpu.csr7c2Refcount <= 0 {
+			cpu.csr802Refcount--
+			if cpu.csr802Refcount <= 0 {
 				pprof.StopCPUProfile()
-				cpu.csr7c2File.Sync()
+				cpu.csr802File.Sync()
 			}
 		} else {
-			if cpu.csr7c2Refcount == 0 {
+			if cpu.csr802Refcount == 0 {
 				var err error
-				if cpu.csr7c2File == nil {
-					cpu.csr7c2File, err = os.Create(cpu.CSR7c2Filename)
+				if cpu.csr802File == nil {
+					cpu.csr802File, err = os.Create(cpu.CSR802Filename)
 					if err != nil {
 						return err
 					}
 				}
-				err = pprof.StartCPUProfile(cpu.csr7c2File)
+				err = pprof.StartCPUProfile(cpu.csr802File)
 				if err != nil {
 					return err
 				}
 			}
-			cpu.csr7c2Refcount++
+			cpu.csr802Refcount++
 		}
 
 	default:
-		cpu.CSR[csr] = v
+		cpu.CSR[csr].Store(v)
 	}
 
 	return nil

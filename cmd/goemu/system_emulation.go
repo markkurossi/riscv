@@ -47,7 +47,6 @@ const (
 	CLINTSize = 0x10000
 
 	PLICBase = 0x0c000000
-	PLICSize = 0x400000
 )
 
 func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
@@ -56,32 +55,28 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 	var ramSize uint64 = 0x20000000
 	mem := memory.New(memory.RAMBase, ramSize)
 
-	core := cpu.New(mem)
-	core.Trace = params.CPUtrace
-	core.CSR7c2Filename = params.CSR7c2
+	hart := cpu.New(mem)
+	hart.Trace = params.CPUtrace
+	hart.CSR802Filename = params.CSR802
 
-	plic := &dev.PLIC{
-		Hart:  core,
-		Start: PLICBase,
-		End:   PLICBase + PLICSize,
-	}
+	plic := dev.NewPLIC([]isa.Hart{hart}, PLICBase)
 
-	uart := dev.NewUART(core, UARTBase, UARTSize, plic, UARTIRQ,
+	uart := dev.NewUART(hart, UARTBase, UARTSize, plic, UARTIRQ,
 		params.Color, params.Cooked)
 
 	mmio := &MMIO{
-		Hart: core,
+		Hart: hart,
 		Segments: []mmu.MMIO{
 			plic,
 			uart,
-			dev.NewSyscon(core, SysconBase, SysconSize),
+			dev.NewSyscon(hart, SysconBase, SysconSize),
 			&dev.GoldfishRTC{
-				Hart:  core,
+				Hart:  hart,
 				Start: RTCBase,
 				End:   RTCBase + RTCSize,
 			},
 			&dev.CLINT{
-				Hart:  core,
+				Hart:  hart,
 				Start: CLINTBase,
 				End:   CLINTBase + CLINTSize,
 			},
@@ -95,7 +90,7 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 	var virtioIRQ uint32 = VirtioIRQBase
 
 	// Entropy Source / RNG.
-	rng := virtio.NewRng(core, virtioROM, plic, virtioIRQ, mem)
+	rng := virtio.NewRng(hart, virtioROM, plic, virtioIRQ, mem)
 	mmio.Segments = append(mmio.Segments, rng)
 	virtioROM = rng.End
 	virtioIRQ++
@@ -124,7 +119,7 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 				return err
 			}
 
-			blk := virtio.NewBlk(core, virtioROM, plic, virtioIRQ, mem, fs)
+			blk := virtio.NewBlk(hart, virtioROM, plic, virtioIRQ, mem, fs)
 			mmio.Segments = append(mmio.Segments, blk)
 
 			deviceID := dev.ID
@@ -141,7 +136,7 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 			if netdev == nil {
 				return fmt.Errorf("unknown netdev: %v", dev.Netdev)
 			}
-			net, err := virtio.NewNet(core, virtioROM, plic, virtioIRQ, mem,
+			net, err := virtio.NewNet(hart, virtioROM, plic, virtioIRQ, mem,
 				netdev.IP, netdev.GW, netdev.Hostname, netdev.Domainname)
 			if err != nil {
 				return err
@@ -155,7 +150,7 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 				return fmt.Errorf("unknown GPU: %v", dev.GPU)
 			}
 			var err error
-			gpu, err = virtio.NewGPU(core, virtioROM, plic, virtioIRQ, mem,
+			gpu, err = virtio.NewGPU(hart, virtioROM, plic, virtioIRQ, mem,
 				gpudev.Title, gpudev.Width, gpudev.Height)
 			if err != nil {
 				return err
@@ -174,7 +169,7 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 
 	// If gpu is configured, add its input devices.
 	if gpu != nil {
-		input := virtio.NewInput(core, virtioROM, plic, virtioIRQ, mem,
+		input := virtio.NewInput(hart, virtioROM, plic, virtioIRQ, mem,
 			gpu.Width, gpu.Height)
 		mmio.Segments = append(mmio.Segments, input)
 		gpu.InputListener = input
@@ -191,7 +186,7 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 		if err != nil {
 			return fmt.Errorf("failed to open disk file %v: %v", arg, err)
 		}
-		blk := virtio.NewBlk(core, virtioROM, plic, virtioIRQ, mem, fs)
+		blk := virtio.NewBlk(hart, virtioROM, plic, virtioIRQ, mem, fs)
 		mmio.Segments = append(mmio.Segments, blk)
 		blk.SetID(fmt.Sprintf("arg-disk-%d", idx))
 
@@ -201,15 +196,15 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 		virtioDevices = append(virtioDevices, vio)
 	}
 
-	core.MMU.MMIO = mmio
+	hart.MMU.MMIO = mmio
 
-	core.SetMode(isa.ModeM)
+	hart.SetMode(isa.ModeM)
 	if len(cfg.Symbols) > 0 {
 		sm, err := cpu.LoadSystemMap(cfg.Symbols)
 		if err != nil {
 			return err
 		}
-		core.Symtab = sm
+		hart.Symtab = sm
 	}
 
 	var data []byte
@@ -227,7 +222,7 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 	}
 
 	if len(cfg.Kernel) > 0 {
-		htifDev, entry, err = loadKernel(core, mem, cfg.Kernel)
+		htifDev, entry, err = loadKernel(hart, mem, cfg.Kernel)
 		if err != nil {
 			return fmt.Errorf("failed to read kernel: %w", err)
 		}
@@ -238,7 +233,7 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 			if htifDev == nil {
 				return fmt.Errorf("no HTIF device")
 			}
-			core.MMU.Overlay = htifDev
+			hart.MMU.Overlay = htifDev
 		}
 	}
 
@@ -252,27 +247,27 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 		copy(mem.RAM[mem.Offset(OfsInitrd):], data)
 	}
 
-	dtb := makeDTB(initrdSize, mem, virtioDevices, cfg)
+	dtb := makeDTB(initrdSize, mem, plic, virtioDevices, cfg)
 	copy(mem.RAM[mem.Offset(OfsDTB):], dtb)
 
-	core.X[isa.A0] = 0
-	core.X[isa.A1] = OfsDTB
-	core.PC = entrypoint
+	hart.X[isa.A0] = 0
+	hart.X[isa.A1] = OfsDTB
+	hart.PC = entrypoint
 
 	go uart.Run()
 
 	if gpu != nil {
-		go core.Run()
+		go hart.Run()
 		gpu.EventLoop()
 	} else {
-		err = core.Run()
+		err = hart.Run()
 		if err != nil {
 			return err
 		}
 	}
 	fmt.Printf("CPU: instret: %v, runtime: %v, MIPS: %.2f\n",
-		core.Instret, core.Runtime,
-		float64(core.Instret/1000000.0)/float64(core.Runtime/time.Second))
+		hart.Instret, hart.Runtime,
+		float64(hart.Instret/1000000.0)/float64(hart.Runtime/time.Second))
 	for _, vio := range virtioDevices {
 		vio.Stats()
 	}
@@ -364,7 +359,7 @@ func loadKernel(hart *cpu.CPU, mem *memory.Memory, file string) (
 	return htif, f.Entry, nil
 }
 
-func makeDTB(initrdSize uint64, mem *memory.Memory,
+func makeDTB(initrdSize uint64, mem *memory.Memory, plic *dev.PLIC,
 	virtioDevices []*virtio.MMIO, cfg *SystemConfig) []byte {
 
 	// Initialize FDT buffer
@@ -520,16 +515,17 @@ func makeDTB(initrdSize uint64, mem *memory.Memory,
 	// PLIC
 	// ---------------------------------------------------------------------
 
-	fdt.BeginNodeNum("plic", PLICBase)
+	fdt.BeginNodeNum("plic", plic.Start)
 
 	fdt.PropStr("compatible", "sifive,plic-1.0.0")
 
+	plicSize := plic.End - plic.Start
 	tab = [8]uint32{
-		uint32(PLICBase >> 32),
-		uint32(PLICBase),
+		uint32(plic.Start >> 32),
+		uint32(plic.Start),
 
-		uint32(PLICSize >> 32),
-		uint32(PLICSize),
+		uint32(plicSize >> 32),
+		uint32(plicSize),
 	}
 
 	fdt.PropTabU32("reg", &tab[0], 4)
@@ -538,19 +534,20 @@ func makeDTB(initrdSize uint64, mem *memory.Memory,
 	fdt.Prop("interrupt-controller", nil, 0)
 
 	// Number of interrupt sources supported. This is defined in PLIC.
-	fdt.PropU32("riscv,ndev", dev.MaxInterrupts)
+	fdt.PropU32("riscv,ndev", plic.MaxInterrupts)
 
 	// PLIC phandle
 	fdt.PropU32("phandle", 2)
 
 	// interrupts-extended:
-	//
-	// 11 = machine external interrupt
-	//  9 = supervisor external interrupt
+	//   		 1 = cpu0's phandle
+	//  		11 = machine external interrupt
+	//   		 9 = supervisor external interrupt
+	//	0xffffffff = not connected
 	//
 	tab = [8]uint32{
-		1, 0xffffffff, // hart 0 M-mode context (use 0xffffffff = not connected)
-		1, 9, // hart 0 S-mode supervisor external interrupt
+		1, 11,
+		1, 9,
 	}
 
 	fdt.PropTabU32("interrupts-extended", &tab[0], 4)

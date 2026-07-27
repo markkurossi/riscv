@@ -8,6 +8,7 @@
 package logger
 
 import (
+	"errors"
 	"fmt"
 	"log"
 )
@@ -17,7 +18,8 @@ type Level int
 
 // Logging levels.
 const (
-	Error Level = iota
+	All Level = iota
+	Error
 	Info
 	Verbose
 	Debug
@@ -38,8 +40,12 @@ type Logger interface {
 	// Infof logs an info message.
 	Infof(format string, args ...interface{})
 
-	// Errorf logs an error message.
-	Errorf(format string, args ...interface{})
+	// Errorf logs an error message and returns the formatted error
+	// message as an error.
+	Errorf(format string, args ...interface{}) error
+
+	// Logf logs a log message.
+	Logf(format string, args ...interface{})
 }
 
 var (
@@ -54,7 +60,11 @@ type Log struct {
 
 func (l *Log) logf(level, format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
-	log.Printf("%s: %s: %s", l.Name, level, msg)
+	if len(level) > 0 {
+		log.Printf("%s: %s: %s", l.Name, level, msg)
+	} else {
+		log.Printf("%s: %s", l.Name, msg)
+	}
 }
 
 // Tracef implements Logger.Tracef.
@@ -90,6 +100,19 @@ func (l *Log) Infof(format string, args ...interface{}) {
 }
 
 // Errorf implements Logger.Errorf.
-func (l *Log) Errorf(format string, args ...interface{}) {
-	l.logf("ERROR", format, args...)
+func (l *Log) Errorf(format string, args ...interface{}) error {
+	msg := fmt.Sprintf(format, args...)
+	err := errors.New(msg)
+
+	if l.Level < Error {
+		return err
+	}
+	l.logf("ERROR", "%s", msg)
+
+	return err
+}
+
+// Logf implements Logger.Logf.
+func (l *Log) Logf(format string, args ...interface{}) {
+	l.logf("", format, args...)
 }
