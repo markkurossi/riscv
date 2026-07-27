@@ -29,8 +29,8 @@ const (
 	Version  = 0x2
 	VendorID = 0x476f4d55 // "GoMU"
 
-	FeatureAnyLayout = 1 << 28
-	FeatureVersion1  = 1 << 31
+	VIRTIO_F_INDIRECT_DESC = 28
+	VIRTIO_F_VERSION_1     = 32
 
 	queueNumMax = 512
 )
@@ -149,6 +149,7 @@ func (vio *MMIO) DriverOK() bool {
 }
 
 type Handler interface {
+	Ready()
 	Reset() error
 	DeviceStats()
 	ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error)
@@ -348,7 +349,7 @@ func (vio *MMIO) Store32(paddr uint64, v uint32) error {
 		// Standard status update protocol sequence
 		vio.status |= v
 
-		if v&8 != 0 { // VIRTIO_CONFIG_S_FEATURES_OK (8)
+		if v&FEATURES_OK != 0 {
 			// Validate that the driver acknowledged
 			// VIRTIO_F_VERSION_1 (bit 32 -> page 1, bit 0)
 			if (vio.driverFeatures[1] & 1) == 0 {
@@ -356,6 +357,9 @@ func (vio *MMIO) Store32(paddr uint64, v uint32) error {
 				// bit to signal failure
 				vio.status &= ^uint32(8)
 			}
+		}
+		if v&DRIVER_OK != 0 {
+			vio.Handler.Ready()
 		}
 
 		// Buffer Base Address Registers (rv64 writes lower then upper halves)

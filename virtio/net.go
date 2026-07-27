@@ -163,6 +163,8 @@ type Net struct {
 
 	tunReadBuf []byte
 
+	hdrLen int
+
 	// Statistics.
 	stSent uint64
 	stRcvd uint64
@@ -255,6 +257,21 @@ func NewNet(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	return vio, nil
 }
 
+// Ready implements Handler.Ready.
+func (vio *Net) Ready() {
+	// Check legacy driver.
+	vio.hdrLen = 12
+	if vio.driverFeatures[1]&1 == 0 {
+		// Legacy version. 12-byte header only with VIRTIO_NET_F_MRG_RXBUF.
+		if vio.driverFeatures[0]&(1<<VIRTIO_NET_F_MRG_RXBUF) == 0 {
+			vio.hdrLen = 10
+		} else {
+			vio.Debugf("VIRTIO_NET_F_MRG_RXBUF")
+		}
+	}
+	vio.Debugf("hdrLen=%v", vio.hdrLen)
+}
+
 // Reset implements Handler.Reset.
 func (vio *Net) Reset() error {
 	return nil
@@ -344,9 +361,9 @@ func (vio *Net) storePacket(vq *Queue, idx uint16, packet []byte) (
 	vio.Debugf("vq%v: transferred %v bytes, %v tail bytes ignored",
 		vq.Index, received, len(packet))
 
-	if received > 12+14 {
+	if received > uint32(vio.hdrLen+14) {
 		// Count only IP bytes.
-		vio.stRcvd += uint64(received - 12 - 14)
+		vio.stRcvd += uint64(received - uint32(vio.hdrLen-14))
 	}
 
 	return received, nil
@@ -364,9 +381,10 @@ func (vio *Net) tunReader() {
 
 		network.DebugIP(vio, ip[:n])
 
-		buf := make([]byte, 12+14+n)
-		network.MakeEthernet(buf[12:], vio.GuestMAC, vio.HostMAC, 0x0800)
-		copy(buf[12+14:], ip[:n])
+		buf := make([]byte, vio.hdrLen+14+n)
+		network.MakeEthernet(buf[vio.hdrLen:], vio.GuestMAC, vio.HostMAC,
+			0x0800)
+		copy(buf[vio.hdrLen+14:], ip[:n])
 		vio.recvCh <- buf
 	}
 }
@@ -404,9 +422,9 @@ func (vio *Net) send(vq *Queue, idx uint16) (uint32, error) {
 	var hdr *NetHdr
 	var payload []byte
 
-	if desc.Len < 12 {
+	if desc.Len < uint32(vio.hdrLen) {
 		return 0, fmt.Errorf("truncated request: len=%v", desc.Len)
-	} else if desc.Len == 12 {
+	} else if desc.Len <= 12 {
 		// First descriptor is the header.
 		chunk, err := vio.guestData(desc.Addr, uint64(desc.Len))
 		if err != nil {
@@ -416,7 +434,7 @@ func (vio *Net) send(vq *Queue, idx uint16) (uint32, error) {
 		if err != nil {
 			return 0, err
 		}
-		transferred = 12
+		transferred = desc.Len
 	} else {
 		// Header and payload start in the first descriptor.
 		chunk, err := vio.guestData(desc.Addr, uint64(desc.Len))
@@ -427,7 +445,7 @@ func (vio *Net) send(vq *Queue, idx uint16) (uint32, error) {
 		if err != nil {
 			return 0, err
 		}
-		payload = chunk[12:]
+		payload = chunk[vio.hdrLen:]
 		transferred = desc.Len
 	}
 	// Check if payload is sent in multiple chunks.
@@ -494,9 +512,10 @@ func (vio *Net) processSend(hdr *NetHdr, data []byte) error {
 			vio.Debugf("ARP  who-has %v tell %v", arp.TPA, arp.SPA)
 			if arp.TPA.Equal(vio.HostIP) {
 				// Respond to ARP requests.
-				resp := make([]byte, 12+14+28)
-				network.MakeEthernet(resp[12:], arp.SHA, vio.HostMAC, frameType)
-				network.MakeARP(resp[12+14:], 2, vio.HostMAC, arp.TPA,
+				resp := make([]byte, vio.hdrLen+14+28)
+				network.MakeEthernet(resp[vio.hdrLen:], arp.SHA, vio.HostMAC,
+					frameType)
+				network.MakeARP(resp[vio.hdrLen+14:], 2, vio.HostMAC, arp.TPA,
 					arp.SHA, arp.SPA)
 
 				vio.recvCh <- resp
@@ -588,13 +607,13 @@ func (vio *Net) respondIPv4(packet []byte) bool {
 			vio.Debugf("DHCP response: %v", resp)
 			rdata := resp.Encode()
 
-			data := make([]byte, 12+14+20+8+len(rdata))
+			data := make([]byte, vio.hdrLen+14+20+8+len(rdata))
 
-			network.MakeEthernet(data[12:],
+			network.MakeEthernet(data[vio.hdrLen:],
 				dstMAC, vio.HostMAC, network.EthernetIPv4)
 
 			// IP.
-			ip := 12 + 14
+			ip := vio.hdrLen + 14
 			data[ip+0] = 0x45
 			data[ip+1] = 0x10
 			network.BO.PutUint16(data[ip+2:], uint16(20+8+len(rdata)))
@@ -708,8 +727,12 @@ func (hdr *NetHdr) String() string {
 }
 
 func (vio *Net) decodeHeader(data []byte) (*NetHdr, error) {
-	if len(data) < 12 {
+	if len(data) < 10 {
 		return nil, fmt.Errorf("invalid transmit packet: len=%v", len(data))
+	}
+	var numbuffers uint16
+	if len(data) >= 12 {
+		numbuffers = vioBO.Uint16(data[10:])
 	}
 
 	return &NetHdr{
@@ -719,6 +742,6 @@ func (vio *Net) decodeHeader(data []byte) (*NetHdr, error) {
 		GSOSize:    vioBO.Uint16(data[4:]),
 		CSUMStart:  vioBO.Uint16(data[6:]),
 		CSUMOffset: vioBO.Uint16(data[8:]),
-		NumBuffers: vioBO.Uint16(data[10:]),
+		NumBuffers: numbuffers,
 	}, nil
 }

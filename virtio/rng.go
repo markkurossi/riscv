@@ -54,6 +54,10 @@ func NewRng(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	return rng
 }
 
+// Ready implements Handler.Ready.
+func (rng *Rng) Ready() {
+}
+
 // Reset implements Handler.Reset.
 func (rng *Rng) Reset() error {
 	return nil

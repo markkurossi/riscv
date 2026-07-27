@@ -95,6 +95,10 @@ func NewInput(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	return vio
 }
 
+// Ready implements Handler.Ready.
+func (vio *Input) Ready() {
+}
+
 // Reset implements Handler.Reset.
 func (vio *Input) Reset() error {
 	return nil

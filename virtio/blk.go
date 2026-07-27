@@ -74,6 +74,10 @@ func (blk *Blk) SetID(id string) {
 	blk.id = append(blk.id, 0)
 }
 
+// Ready implements Handler.Ready.
+func (blk *Blk) Ready() {
+}
+
 // Reset implements Handler.Reset.
 func (blk *Blk) Reset() error {
 	// Wait for current requests to complete.

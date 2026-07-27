@@ -293,6 +293,10 @@ func (vio *GPU) Halt() error {
 	return vio.Reset()
 }
 
+// Ready implements Handler.Ready.
+func (vio *GPU) Ready() {
+}
+
 // Reset implements Handler.Reset.
 func (vio *GPU) Reset() error {
 	vio.drawImage(vio.logo)
