@@ -6,26 +6,37 @@
     {
       "id":     "hd0",
       "format": "raw",
-      "file":   "freebsd/FreeBSD-15.1-RELEASE-riscv-riscv64-GENERICSD.img"
+      "file":   "openbsd/install79.img"
+    },
+    {
+      "id":     "hd1",
+      "format": "raw",
+      "file":   "openbsd/disk.img"
     }
   ],
   "netdevs": [
     {
       "id":         "eth0",
-      "ip":         "192.168.42.1",
+      "ip":         "192.168.42.4",
       "gw":         "192.168.42.254",
-      "hostname":   "freebsd",
+      "hostname":   "openbsd",
       "domainname": "goemu.ephemelier.com"
     }
   ],
   "devices": [
     {
       "type":  "virtio-blk-device",
-      "drive": "hd0"
+      "drive": "hd1"
     },
     {
       "type":   "virtio-net-device",
       "netdev": "eth0"
+    }
+  ],
+  "_devices": [
+    {
+      "type":  "virtio-blk-device",
+      "drive": "hd0"
     }
   ]
 }
