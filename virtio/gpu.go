@@ -681,7 +681,9 @@ func (vio *GPU) cmdResourceAttachBacking(hdr *GPUCtrlHdr, hdrBuf []byte,
 
 	// Collect all memory entries.
 
-	input := hdrBuf[32:]
+	var input []byte
+	input = append(input, hdrBuf[32:]...)
+
 	for idx, buf := range bufs {
 		if idx+1 >= len(bufs) {
 			// Last.
