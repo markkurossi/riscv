@@ -290,7 +290,13 @@ func (vio *GPU) drawImage(img image.Image) {
 
 // Halt implements mmu.MMIO.Halt.
 func (vio *GPU) Halt() error {
-	return vio.Reset()
+	if err := vio.Reset(); err != nil {
+		return err
+	}
+
+	// Trigger window close.
+	vio.window.SetShouldClose(true)
+	return nil
 }
 
 // Ready implements Handler.Ready.
@@ -655,8 +661,8 @@ func (vio *GPU) cmdResourceCreate2D(hdr *GPUCtrlHdr, hdrBuf []byte,
 
 func (vio *GPU) cmdResourceAttachBacking(hdr *GPUCtrlHdr, hdrBuf []byte,
 	bufs [][]byte, writable []bool) (uint32, error) {
-	if len(bufs) != 2 || writable[0] || !writable[1] {
-		return 0, fmt.Errorf("%v: invalid buffers", hdr.Type)
+	if len(bufs) == 0 {
+		return 0, fmt.Errorf("%v: no buffers", hdr.Type)
 	}
 	if len(hdrBuf) < 32 {
 		return 0, fmt.Errorf("%v: truncated request", hdr.Type)
@@ -672,12 +678,36 @@ func (vio *GPU) cmdResourceAttachBacking(hdr *GPUCtrlHdr, hdrBuf []byte,
 		vio.Errorf("unknown resource %v", resourceID)
 		return 0, fmt.Errorf("unknown resource %v", resourceID)
 	}
-	// XXX this could be scattered across multiple chunks.
-	input := bufs[0]
-	for i := uint32(0); i < nrEntries; i++ {
-		if len(input) < 16 {
-			return 0, fmt.Errorf("truncated buffer")
+
+	// Collect all memory entries.
+
+	input := hdrBuf[32:]
+	for idx, buf := range bufs {
+		if idx+1 >= len(bufs) {
+			// Last.
+			if !writable[idx] {
+				return 0, fmt.Errorf("last buffer is not writable")
+			}
+		} else {
+			if writable[idx] {
+				return 0, fmt.Errorf("descriptor buffer is writable")
+			}
+			input = append(input, buf...)
 		}
+	}
+
+	// Memory entries have the structure:
+	//
+	//	struct virtio_gpu_mem_entry {
+	//	        le64 addr;
+	//	        le32 length;
+	//	        le32 padding;
+	//	};
+	if len(input) != int(nrEntries*16) {
+		return 0, fmt.Errorf("invalid memory entries: len=%v, nrEntries*16=%v",
+			len(input), nrEntries*16)
+	}
+	for i := uint32(0); i < nrEntries; i++ {
 		addr := vioBO.Uint64(input[0:])
 		length := vioBO.Uint32(input[8:])
 		input = input[16:]
@@ -688,7 +718,7 @@ func (vio *GPU) cmdResourceAttachBacking(hdr *GPUCtrlHdr, hdrBuf []byte,
 		}
 		resource.Pages = append(resource.Pages, buf)
 	}
-	hdr.Response(VIRTIO_GPU_RESP_OK_NODATA, bufs[1][0:])
+	hdr.Response(VIRTIO_GPU_RESP_OK_NODATA, bufs[len(bufs)-1][0:])
 
 	return 24, nil
 }
