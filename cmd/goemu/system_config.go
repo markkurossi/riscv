@@ -21,6 +21,7 @@ type SystemConfig struct {
 	Symbols string    `json:"symbols,omitempty"`
 	Append  string    `json:"append"`
 	Initrd  string    `json:"initrd,omitempty"`
+	DumpDTB string    `json:"dumpdtb,omitempty"`
 	Drives  []*Drive  `json:"drives,omitempty"`
 	Netdevs []*Netdev `json:"netdevs,omitempty"`
 	GPUs    []*GPU    `json:"gpus,omitempty"`

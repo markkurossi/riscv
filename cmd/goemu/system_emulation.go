@@ -11,6 +11,7 @@ import (
 	"debug/elf"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/markkurossi/gofdt"
@@ -257,8 +258,16 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 	go uart.Run()
 
 	if gpu != nil {
-		go hart.Run()
+		var wg sync.WaitGroup
+
+		wg.Add(1)
+		go func() {
+			hart.Run()
+			wg.Done()
+		}()
+
 		gpu.EventLoop()
+		wg.Wait()
 	} else {
 		err = hart.Run()
 		if err != nil {
@@ -696,7 +705,9 @@ func makeDTB(initrdSize uint64, mem *memory.Memory, plic *dev.PLIC,
 
 	dtb := buf[:size]
 
-	os.WriteFile("goemu.dtb", dtb, 0644)
+	if len(cfg.DumpDTB) > 0 {
+		os.WriteFile(cfg.DumpDTB, dtb, 0644)
+	}
 
 	return dtb
 }

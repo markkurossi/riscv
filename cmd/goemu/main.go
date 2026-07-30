@@ -77,6 +77,8 @@ func main() {
 	csr802 := flag.String("csr802", ",csr802", "CSR802 CPU profiling filename")
 	gpu := flag.String("gpu", "", "graphics device")
 	htif := flag.Bool("htif", false, "enable host target interface")
+	dumpdtb := flag.String("dumpdtb", "", "dump DTB to `file`")
+	memsize := flag.String("m", "512M", "guest RAM size")
 
 	flag.Var(&argDrives, "drive", "configure drive")
 	flag.Var(&argDevices, "device", "configure device")
@@ -161,6 +163,10 @@ func main() {
 			GPU:  gpu.ID,
 		})
 	}
+	if len(*dumpdtb) > 0 {
+		systemConfig.DumpDTB = *dumpdtb
+	}
+	_ = memsize
 
 	// If any critical system emulation parameters are set, start
 	// system emulation.
