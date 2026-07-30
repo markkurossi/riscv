@@ -53,7 +53,10 @@ const (
 func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 	args []string) error {
 
-	var ramSize uint64 = 0x20000000
+	ramSize, err := ParseMem(cfg.Memory)
+	if err != nil {
+		return err
+	}
 	mem := memory.New(memory.RAMBase, ramSize)
 
 	hart := cpu.New(mem)
@@ -209,7 +212,6 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 	}
 
 	var data []byte
-	var err error
 	var entrypoint, entry uint64
 	var htifDev *dev.HTIF
 

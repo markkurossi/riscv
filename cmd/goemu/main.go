@@ -110,8 +110,10 @@ func main() {
 	argCfg.BIOS = *bios
 	argCfg.Kernel = *kern
 	argCfg.Symbols = *symbols
-	argCfg.Initrd = *initrd
 	argCfg.Append = *bootargs
+	argCfg.Initrd = *initrd
+	argCfg.DumpDTB = *dumpdtb
+	argCfg.Memory = *memsize
 
 	if *objdump {
 		disassemble(flag.Args())
@@ -163,10 +165,6 @@ func main() {
 			GPU:  gpu.ID,
 		})
 	}
-	if len(*dumpdtb) > 0 {
-		systemConfig.DumpDTB = *dumpdtb
-	}
-	_ = memsize
 
 	// If any critical system emulation parameters are set, start
 	// system emulation.

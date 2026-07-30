@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -22,6 +23,7 @@ type SystemConfig struct {
 	Append  string    `json:"append"`
 	Initrd  string    `json:"initrd,omitempty"`
 	DumpDTB string    `json:"dumpdtb,omitempty"`
+	Memory  string    `json:"memory,omitempty"`
 	Drives  []*Drive  `json:"drives,omitempty"`
 	Netdevs []*Netdev `json:"netdevs,omitempty"`
 	GPUs    []*GPU    `json:"gpus,omitempty"`
@@ -69,6 +71,36 @@ func parseBool(v string) (bool, error) {
 	default:
 		return false, fmt.Errorf("invalid boolean value '%v'", v)
 	}
+}
+
+var reMem = regexp.MustCompilePOSIX(`^([[:digit:]]+)([[:alpha:]])?$`)
+
+func ParseMem(v string) (uint64, error) {
+	m := reMem.FindStringSubmatch(v)
+	if m == nil {
+		return 0, fmt.Errorf("invalid memory specification: %v", v)
+	}
+	base, err := strconv.ParseUint(m[1], 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	switch m[2] {
+	case "k", "K":
+		base *= 1024
+
+	case "m", "M":
+		base *= 1024 * 1024
+
+	case "g", "G":
+		base *= 1024 * 1024 * 1024
+
+	case "":
+
+	default:
+		return 0, fmt.Errorf("invalid suffix '%v'", m[2])
+	}
+
+	return base, nil
 }
 
 func ParseDrive(args string) (*Drive, error) {
@@ -210,6 +242,12 @@ func (cfg *SystemConfig) Merge(o *SystemConfig) *SystemConfig {
 	}
 	if len(o.Initrd) > 0 {
 		cfg.Initrd = o.Initrd
+	}
+	if len(o.DumpDTB) > 0 {
+		cfg.DumpDTB = o.DumpDTB
+	}
+	if len(o.Memory) > 0 {
+		cfg.Memory = o.Memory
 	}
 	cfg.Drives = append(cfg.Drives, o.Drives...)
 	cfg.Devices = append(cfg.Devices, o.Devices...)
