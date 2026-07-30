@@ -263,11 +263,14 @@ func (vio *Net) Ready() {
 	vio.hdrLen = 12
 	if vio.driverFeatures[1]&1 == 0 {
 		// Legacy version. 12-byte header only with VIRTIO_NET_F_MRG_RXBUF.
+		vio.Debugf("Legacy Version")
 		if vio.driverFeatures[0]&(1<<VIRTIO_NET_F_MRG_RXBUF) == 0 {
 			vio.hdrLen = 10
 		} else {
 			vio.Debugf("VIRTIO_NET_F_MRG_RXBUF")
 		}
+	} else {
+		vio.Debugf("Version 1")
 	}
 	vio.Debugf("hdrLen=%v", vio.hdrLen)
 }
