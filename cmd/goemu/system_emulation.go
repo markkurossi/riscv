@@ -31,15 +31,17 @@ const (
 	OfsInitrd = 0x8800_0000
 
 	UARTBase = 0x10000000
-	UARTSize = 256
 	UARTIRQ  = 10
 
 	SysconBase = 0x10000100
 	SysconSize = 256
 
+	NMEABase = 0x10000200
+	NMEAIRQ  = 11
+
 	RTCBase = 0x10100000
 	RTCSize = 0x1000
-	RTCIRQ  = 11
+	RTCIRQ  = 12
 
 	VirtioROMBase = 0x10008000
 	VirtioIRQBase = 1
@@ -65,14 +67,26 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 
 	plic := dev.NewPLIC([]isa.Hart{hart}, PLICBase)
 
-	uart := dev.NewUART(hart, UARTBase, UARTSize, plic, UARTIRQ,
-		params.Color, params.Cooked)
+	var uarts []*dev.UART
+
+	uart := dev.NewUART(hart, "Cons", UARTBase, plic, UARTIRQ, &dev.UARTConsole{
+		Hart:   hart,
+		Color:  params.Color,
+		Cooked: params.Cooked,
+	})
+	uarts = append(uarts, uart)
+
+	nmea := dev.NewUART(hart, "NMEA", NMEABase, plic, NMEAIRQ, &dev.UARTNMEA{
+		Hart: hart,
+	})
+	uarts = append(uarts, nmea)
 
 	mmio := &MMIO{
 		Hart: hart,
 		Segments: []mmu.MMIO{
 			plic,
 			uart,
+			nmea,
 			dev.NewSyscon(hart, SysconBase, SysconSize),
 			&dev.GoldfishRTC{
 				Hart:  hart,
@@ -250,14 +264,17 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 		copy(mem.RAM[mem.Offset(OfsInitrd):], data)
 	}
 
-	dtb := makeDTB(initrdSize, mem, plic, virtioDevices, cfg)
+	dtb := makeDTB(initrdSize, mem, plic, uarts, virtioDevices, cfg)
 	copy(mem.RAM[mem.Offset(OfsDTB):], dtb)
 
 	hart.X[isa.A0] = 0
 	hart.X[isa.A1] = OfsDTB
 	hart.PC = entrypoint
 
-	go uart.Run()
+	// Start UARTS.
+	for _, u := range uarts {
+		go u.Peer.Run(u)
+	}
 
 	if gpu != nil {
 		var wg sync.WaitGroup
@@ -371,7 +388,7 @@ func loadKernel(hart *cpu.CPU, mem *memory.Memory, file string) (
 }
 
 func makeDTB(initrdSize uint64, mem *memory.Memory, plic *dev.PLIC,
-	virtioDevices []*virtio.MMIO, cfg *SystemConfig) []byte {
+	uarts []*dev.UART, virtioDevices []*virtio.MMIO, cfg *SystemConfig) []byte {
 
 	// Initialize FDT buffer
 	buf := make([]byte, 65536)
@@ -569,31 +586,34 @@ func makeDTB(initrdSize uint64, mem *memory.Memory, plic *dev.PLIC,
 	// UART (16550A)
 	// ---------------------------------------------------------------------
 
-	fdt.BeginNodeNum("uart", UARTBase)
+	for _, uart := range uarts {
+		fdt.BeginNodeNum("uart", UARTBase)
 
-	fdt.PropStr("compatible", "ns16550a")
+		fdt.PropStr("compatible", "ns16550a")
 
-	tab = [8]uint32{
-		uint32(UARTBase >> 32),
-		uint32(UARTBase),
+		size := uart.End - uart.Start
+		tab = [8]uint32{
+			uint32(uart.Start >> 32),
+			uint32(uart.Start),
 
-		uint32(UARTSize >> 32),
-		uint32(UARTSize),
+			uint32(size >> 32),
+			uint32(size),
+		}
+
+		fdt.PropTabU32("reg", &tab[0], 4)
+
+		tab = [8]uint32{24000000}
+		fdt.PropTabU32("clock-frequency", &tab[0], 1)
+
+		fdt.PropU32("reg-shift", 0)
+		fdt.PropU32("reg-io-width", 1)
+
+		// UART interrupt comes from PLIC
+		tab = [8]uint32{2, uart.IRQ} // phandle=2 (PLIC), irq source=UARTIRQ
+		fdt.PropTabU32("interrupts-extended", &tab[0], 2)
+
+		fdt.EndNode()
 	}
-
-	fdt.PropTabU32("reg", &tab[0], 4)
-
-	tab = [8]uint32{24000000}
-	fdt.PropTabU32("clock-frequency", &tab[0], 1)
-
-	fdt.PropU32("reg-shift", 0)
-	fdt.PropU32("reg-io-width", 1)
-
-	// UART interrupt comes from PLIC
-	tab = [8]uint32{2, UARTIRQ} // phandle=2 (PLIC), irq source=UARTIRQ
-	fdt.PropTabU32("interrupts-extended", &tab[0], 2)
-
-	fdt.EndNode()
 
 	// Generic Syscon Register Block.
 	fdt.BeginNodeNum("syscon", SysconBase)

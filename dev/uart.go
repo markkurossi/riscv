@@ -8,13 +8,16 @@ package dev
 
 import (
 	"fmt"
-	"os"
 	"sync"
 	"sync/atomic"
 
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/logger"
-	"golang.org/x/term"
+)
+
+const (
+	// UARTSize defines the UART MMIO size.
+	UARTSize = 256
 )
 
 // UARTRReg implements UART read registers.
@@ -131,23 +134,27 @@ var MCRBits = []string{
 	"Reserved",
 }
 
+// MSR Bits.
+const (
+	MsrCTS = 1 << 4 // Clear To Send
+	MsrDSR = 1 << 5 // Data Set Ready
+	MsrRI  = 1 << 6 // Ring Indicator
+	MsrDCD = 1 << 7 // Data Carrier Detect
+)
+
 // UART implements the UART 16550A universal asynchronous
 // receiver-transmitter.
 type UART struct {
 	logger.Log
-	Hart   isa.Hart
-	Start  uint64
-	End    uint64
-	Plic   *PLIC
-	IRQ    uint32
-	Color  bool
-	Cooked bool
+	Hart  isa.Hart
+	Start uint64
+	End   uint64
+	Plic  *PLIC
+	IRQ   uint32
 
-	oldState *term.State
-
+	Peer       UARTPeer
 	m          sync.Mutex
 	inputAvail atomic.Bool
-	input      []byte
 
 	// Registers
 	IER uint8 // Interrupt Enable
@@ -164,22 +171,29 @@ type UART struct {
 	isrPending uint8
 }
 
+// UARTPeer implements the peer device.
+type UARTPeer interface {
+	Run(uart *UART)
+	Halt() error
+	Receive() (b byte, more bool)
+	Send(b byte)
+}
+
 // NewUART creates a new UART.
-func NewUART(hart isa.Hart, start, size uint64, plic *PLIC, irq uint32,
-	color, cooked bool) *UART {
+func NewUART(hart isa.Hart, name string, start uint64, plic *PLIC, irq uint32,
+	peer UARTPeer) *UART {
 
 	uart := &UART{
 		Log: logger.Log{
-			Name:  "UART",
+			Name:  name,
 			Level: logger.Error,
 		},
-		Hart:   hart,
-		Start:  start,
-		End:    start + size,
-		Plic:   plic,
-		IRQ:    irq,
-		Color:  color,
-		Cooked: cooked,
+		Hart:  hart,
+		Start: start,
+		End:   start + UARTSize,
+		Plic:  plic,
+		IRQ:   irq,
+		Peer:  peer,
 
 		// Initialize the standard default baud latches to a sane state.
 		// For a 24MHz clock, a divisor of 13 matches 115200 baud.
@@ -195,41 +209,9 @@ func NewUART(hart isa.Hart, start, size uint64, plic *PLIC, irq uint32,
 	return uart
 }
 
-// Run is a go-routine handling UART input.
-func (uart *UART) Run() {
-	if !uart.Cooked {
-		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
-		if err != nil {
-			fmt.Printf("term.MakeRaw: %v\n", err)
-			return
-		}
-		uart.oldState = oldState
-	}
-
-	var buf [1]byte
-
-	for {
-		n, err := os.Stdin.Read(buf[:])
-		if err != nil {
-			break
-		}
-		uart.m.Lock()
-		uart.input = append(uart.input, buf[:n]...)
-		if (uart.IER & 0x01) != 0 {
-			uart.isrPending |= 0x01 // Receiver data available
-			uart.Plic.SetInterruptRequest(uart.IRQ, true)
-		}
-		uart.inputAvail.Store(true)
-		uart.m.Unlock()
-	}
-}
-
 // Halt implements MMIO.Halt.
 func (uart *UART) Halt() error {
-	if uart.oldState != nil {
-		term.Restore(int(os.Stdin.Fd()), uart.oldState)
-	}
-	return nil
+	return uart.Peer.Halt()
 }
 
 // Contains implements MMIO.Contains.
@@ -252,15 +234,10 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 			return uart.DLL, nil
 		}
 
-		var v byte = 0xff
+		v, avail := uart.Peer.Receive()
 
 		uart.m.Lock()
-		if len(uart.input) > 0 {
-			v = uart.input[0]
-			uart.input = uart.input[1:]
-		}
-
-		if len(uart.input) == 0 {
+		if !avail {
 			uart.inputAvail.Store(false)
 			uart.isrPending &^= 0x01 // Clear receiver interrupt flag
 			if uart.isrPending == 0 {
@@ -330,7 +307,8 @@ func (uart *UART) Load8(paddr uint64) (uint8, error) {
 
 	case RRegMSR: // Modem Status
 		uart.Infof("MSR read")
-		return 0, nil
+		var msr uint8 = MsrCTS | MsrDSR | MsrDCD
+		return msr, nil
 
 	case RRegSCR: // Scratch
 		return uart.SCR, nil
@@ -372,13 +350,7 @@ func (uart *UART) Store8(paddr uint64, v uint8) error {
 			uart.DLL = v
 			return nil
 		}
-		if uart.Color {
-			uart.Hart.ColorOn()
-			os.Stdout.Write([]byte{v})
-			uart.Hart.ColorOff()
-		} else {
-			os.Stdout.Write([]byte{v})
-		}
+		uart.Peer.Send(v)
 
 		// Check if CPU wants to know that the THR is empty via an
 		// interrupt.
@@ -483,6 +455,18 @@ func (uart *UART) Store32(paddr uint64, v uint32) error {
 func (uart *UART) Store64(paddr uint64, v uint64) error {
 	fmt.Printf("ROM.store64: %x = %v\n", paddr, v)
 	return nil
+}
+
+// InputAvailable notifies that UART peer has input.
+func (uart *UART) InputAvailable() {
+	uart.m.Lock()
+	defer uart.m.Unlock()
+
+	if (uart.IER & 0x01) != 0 {
+		uart.isrPending |= 0x01 // Receiver data available
+		uart.Plic.SetInterruptRequest(uart.IRQ, true)
+	}
+	uart.inputAvail.Store(true)
 }
 
 func (uart *UART) checkInterrupts() {
