@@ -20,18 +20,20 @@ OpenSBI &#8594; U-Boot &#8594; EFI &#8594; GRUB &#8594; Ubuntu Linux
 
 - RV64GC instruction set support
 - Machine, Supervisor, and User privilege modes
-- SV39 virtual memory and page tables
+- SV39 virtual memory and page tables with TLB fastpaths
+- Custom Device Tree generation for hardware peripherals
 - OpenSBI support
-- VirtIO block storage support
+- VirtIO support (block, net, rng, gpu) with stable multi-hour async
+  DMA handling
 - Operating Systems:
   - OpenSBI
   - U-Boot
   - EFI Boot
   - Buildroot Linux
-  - Ubuntu 24.04
+  - Ubuntu 24.04 (tested with full package upgrade cycles)
   - NetBSD 11.99
   - FreeBSD 15.1
-  - OpenBSD 7.9
+  - OpenBSD 7.9 (tested with kernel compilation inside guest)
 - Linux syscall emulation mode
 - Device emulation:
   - NS16550A UART
@@ -226,7 +228,13 @@ Hello, RISC-V!
 
 ## Real Workloads
 
-NetBSD 11.99:
+### OpenBSD 7.9
+
+- Boot to console via OpenSBI → U-Boot → EFI
+- Full native kernel compilation (`make build`) inside the guest environment
+- Verified memory management stability under heavy parallel compiler runs
+
+### NetBSD 11.99
 
 - Boot to login prompt
 - Compile Hello World with GCC
@@ -239,6 +247,12 @@ Example:
 $ time cc -o hello hello.c
         4.20 real         2.62 user         1.00 sys
 ```
+
+### Ubuntu 24.04 LTS
+
+- Complete unattended system package upgrade (apt upgrade)
+- Sustained high VirtIO disk and network I/O throughput over
+  multi-hour runs
 
 ## Fibonacci
 
@@ -267,7 +281,7 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 | unsafe.Add          |  0.358 |  3.582 | 0m39.659s | 179.27 | 9.08x |  +2.4% |
 
 1. contains several optimizations:
-  - instr decode cache by `pc>>2` instread of `raw>>`
+  - instr decode cache by `pc>>2` instead of `raw>>2`
   - unsafe.Pointer PC load and uint64 `sd` and `ld`
 
 # Appendix
