@@ -253,43 +253,27 @@ from running [fibo.c](tests/static/fibo.c) on:
 cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 ```
 
-| Optimization             |   MIPS |
-|:-------------------------|-------:|
-| Base                     |  19.75 |
-| GC-less decode           |  32.55 |
-| PTE access checks        |  33.57 |
-| MMU Map fastpath         |  34.70 |
-| DecodeCFast              |  45.78 |
-| Cached code page         |  60.68 |
-| Concrete memory          |  65.29 |
-| 32-bit decode cache      |  87.64 |
-| Ld/Sd TLB fastpath       | 101.49 |
-| Optimized Instr struct   | 159.65 |
-| Added interrupt handling | 147.38 |
-
-# Appendix
-
-## Benchmark history
-
-| Optimization           | fib 30 | fib 35 |    fib 40 |   MIPS | Speedup |
-|:-----------------------|-------:|-------:|----------:|-------:|--------:|
-| Base                   |  2.969 | 32.510 |           |  19.75 |   1.00x |
-| GC-less decode         |  1.803 | 19.726 |           |  32.55 |   1.65x |
-| PTE access checks      |  1.763 | 19.128 |           |  33.57 |   1.70x |
-| MMU Map fastpath       |  1.709 | 18.507 |           |  34.70 |   1.76x |
-| DecodeCFast            |  1.280 | 13.848 | 2m33.240s |  45.78 |   2.35x |
-| Cached code page       |  0.977 | 10.582 | 1m57.654s |  60.68 |   3.07x |
-| Concrete memory        |  0.915 |  9.835 | 1m48.920s |  65.29 |   3.31x |
-| 32-bit decode cache    |  0.684 |  7.327 | 1m20.509s |  87.64 |   4.44x |
-| Ld/Sd TLB fastpath     |  0.603 |  6.327 | 1m10.533s | 101.49 |   5.14x |
-| Optimized Instr struct |  0.385 |  4.022 | 0m44.167s | 159.65 |   8.08x |
-| Interrupts             |  0.416 |  4.321 | 0m49.085s | 148.61 |   7.52x |
-| unsafe.Pointer et al.¹ |  0.363 |  3.668 | 0m40.373s | 175.06 |   8.86x |
-| unsafe.Add             |  0.358 |  3.582 | 0m39.659s | 179.27 |   9.08x |
+| Optimization        | fib 30 | fib 35 |    fib 40 |   MIPS | Total |   Incr |
+|:--------------------|-------:|-------:|----------:|-------:|------:|-------:|
+| Base                |  2.969 | 32.510 |           |  19.75 | 1.00x |     -- |
+| GC-less decode      |  1.803 | 19.726 |           |  32.55 | 1.65x | +64.8% |
+| PTE access checks   |  1.763 | 19.128 |           |  33.57 | 1.70x |  +3.1% |
+| MMU Map fastpath    |  1.709 | 18.507 |           |  34.70 | 1.76x |  +3.4% |
+| DecodeCFast         |  1.280 | 13.848 | 2m33.240s |  45.78 | 2.35x | +31.9% |
+| Cached code page    |  0.977 | 10.582 | 1m57.654s |  60.68 | 3.07x | +32.5% |
+| Concrete memory     |  0.915 |  9.835 | 1m48.920s |  65.29 | 3.31x |  +7.6% |
+| 32-bit decode cache |  0.684 |  7.327 | 1m20.509s |  87.64 | 4.44x | +34.2% |
+| Ld/Sd TLB fastpath  |  0.603 |  6.327 | 1m10.533s | 101.49 | 5.14x | +15.8% |
+| Optimized Instr     |  0.385 |  4.022 | 0m44.167s | 159.65 | 8.08x | +57.3% |
+| Interrupts          |  0.416 |  4.321 | 0m49.085s | 148.61 | 7.52x |  -6.9% |
+| unsafe.Pointer¹     |  0.363 |  3.668 | 0m40.373s | 175.06 | 8.86x | +17.8% |
+| unsafe.Add          |  0.358 |  3.582 | 0m39.659s | 179.27 | 9.08x |  +2.4% |
 
 1. contains several optimizations:
   - instr decode cache by `pc>>2` instread of `raw>>`
   - unsafe.Pointer PC load and uint64 `sd` and `ld`
+
+# Appendix
 
 ## Userspace Emulation - MMU Refactoring
 
