@@ -20,6 +20,14 @@ func GetUint64(buf []byte, ofs uint64) uint64 {
 	return bo.Uint64(buf[ofs:])
 }
 
+func PutUint16(buf []byte, ofs uint64, v uint16) {
+	bo.PutUint16(buf[ofs:], v)
+}
+
+func PutUint32(buf []byte, ofs uint64, v uint32) {
+	bo.PutUint32(buf[ofs:], v)
+}
+
 func PutUint64(buf []byte, ofs, v uint64) {
 	bo.PutUint64(buf[ofs:], v)
 }
