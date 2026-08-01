@@ -358,37 +358,6 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 +--------------------------------+
 
 ```
-# OpenSBI and Das U-Boot
-
-## u-boot
-
-``` shell
-$ apt-get update && apt-get install -y libssl-dev
-$ apt-get update && apt-get install -y libgnutls28-dev uuid-dev
-```
-
-``` shell
-$ cd u-boot-2026.04/
-$ export CROSS_COMPILE=riscv64-linux-gnu-
-$ ls configs/ | grep riscv
-openpiton_riscv64_defconfig
-openpiton_riscv64_spl_defconfig
-qemu-riscv64_defconfig
-qemu-riscv64_smode_acpi_defconfig
-qemu-riscv64_smode_defconfig
-qemu-riscv64_spl_defconfig
-$ make qemu-riscv64_smode_defconfig
-  HOSTCC  scripts/basic/fixdep
-  HOSTCC  scripts/kconfig/conf.o
-  YACC    scripts/kconfig/zconf.tab.[ch]
-  LEX     scripts/kconfig/zconf.lex.c
-  HOSTCC  scripts/kconfig/zconf.tab.o
-  HOSTLD  scripts/kconfig/conf
-#
-# configuration written to .config
-#
-$ make -j$(nproc)
-```
 
 ## Network routing
 
@@ -409,81 +378,6 @@ Load conf:
 ``` shell
 $ sudo pfctl -f pf.conf
 $ sudo pfctl -e
-```
-
-# FreeBSD
-
-## ports
-
-``` shell
-$ tar -xf ports-main.tar.gz -C /usr
-$ mv /usr/ports-main /usr/ports
-$ cd /usr/ports/x11/xorg
-$ make install clean
-```
-
-## Compiling git
-
-### Compile curl
-
-``` shell
-$ ./configure --with-openssl --without-libpsl
-```
-
-### Compile git
-
-The `-O0` is needed to prevent clang compiler error:
-
-``` shell
-CC sha1dc/sha1.o
-
-error: ran out of registers during register allocation
-
-1 error generated.
-```
-
-``` shell
-$ ./configure --with-curl=/usr/local
-$ gmake NO_RUST=1 CFLAGS="-O0 -I/usr/local/include" LDFLAGS="-L/usr/local/lib -liconv"
-```
-
-## Expanding image
-
-Host:
-
-``` shell
-$ truncate -s +1G FreeBSD-15.1-RELEASE-riscv-riscv64-GENERICSD.img
-```
-
-Guest:
-
-``` shell
-# gpart recover vtbd0
-# gpart resize -i 4 vtbd0
-# growfs /
-```
-
-# Ubuntu
-
-Check how to disable systemd. It is using +35% CPU if host network is
-down.
-
-## Grow Image
-
-Host:
-
-``` shell
-# Add 5 GB to the image
-$ truncate -s +5G rootfs.img
-```
-
-Guest:
-
-``` shell
-$ df -h
-$ lsblk -f
-$ sudo growpart /dev/vda 1
-$ sudo resize2fs /dev/vda1
 ```
 
 # Conformance tests
