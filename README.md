@@ -231,16 +231,13 @@ NetBSD 11.99:
 - Boot to login prompt
 - Compile Hello World with GCC
 - Run user binaries
-- Multi-minute uptime
 - Clean shutdown
 
 Example:
 
 ``` shell
 $ time cc -o hello hello.c
-33.57 real
-32.15 user
-1.30 sys
+        4.20 real         2.62 user         1.00 sys
 ```
 
 ## Fibonacci
@@ -379,32 +376,6 @@ $ make qemu-riscv64_smode_defconfig
 $ make -j$(nproc)
 ```
 
-# NetBSD
-
-``` shell
-$ ./goemu netbsd.goemu
-<RET>
-fatload virtio 0:1 0x84000000 /EFI/BOOT/BOOTRISCV64.EFI
-setenv bootargs "boot hd0a:netbsd -v -s consdev=com0 speed=115200"
-bootefi 0x84000000 0x9eeae220
-```
-
-debugging in u-boot:
-
-``` shell
-=> part list virtio 0
-```
-
-# FreeBSD
-
-Press space to enter FreeBSD boot console:
-
-``` shell
-<SPACE>
-OK set boot_verbose=1
-OK boot
-```
-
 ## Network routing
 
 On macOS host:
@@ -426,14 +397,6 @@ $ sudo pfctl -f pf.conf
 $ sudo pfctl -e
 ```
 
-## pkg
-
-``` shell
-pkg_env: {
-    http_proxy: "http://myproxy:3128",
-}
-```
-
 ## ports
 
 ``` shell
@@ -442,19 +405,6 @@ $ mv /usr/ports-main /usr/ports
 $ cd /usr/ports/x11/xorg
 $ make install clean
 ```
-
-### graphics/feh
-
-If you need an actual interactive viewer (to zoom, scale, or close out
-of the image with a hotkey), you can use graphics/feh. While feh
-typically expects an X server, it can run directly over the vt(4)
-console framebuffer if paired with SDL or a minimalist backend.
-
-``` shell
-$ feh --geometry 1920x1080 image.png
-```
-
-(Replace `1920x1080` with your actual console's pixel resolution).
 
 ## Compiling git
 
