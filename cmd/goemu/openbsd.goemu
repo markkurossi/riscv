@@ -39,12 +39,10 @@
     {
       "type":   "virtio-net-device",
       "netdev": "eth0"
-    }
-  ],
-  "_devices": [
+    },
     {
-      "type":  "virtio-blk-device",
-      "drive": "hd0"
+      "type": "virtio-gpu-device",
+      "gpu":  "gpu"
     }
   ]
 }

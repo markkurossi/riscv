@@ -163,6 +163,9 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 			vio = net.Device()
 
 		case "virtio-gpu-device":
+			if cfg.NoGraphic {
+				continue
+			}
 			gpudev := cfg.GPUDev(dev.GPU)
 			if gpudev == nil {
 				return fmt.Errorf("unknown GPU: %v", dev.GPU)

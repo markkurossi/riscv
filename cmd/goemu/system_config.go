@@ -17,17 +17,18 @@ import (
 )
 
 type SystemConfig struct {
-	BIOS    string    `json:"bios"`
-	Kernel  string    `json:"kernel"`
-	Symbols string    `json:"symbols,omitempty"`
-	Append  string    `json:"append"`
-	Initrd  string    `json:"initrd,omitempty"`
-	DumpDTB string    `json:"dumpdtb,omitempty"`
-	Memory  string    `json:"memory,omitempty"`
-	Drives  []*Drive  `json:"drives,omitempty"`
-	Netdevs []*Netdev `json:"netdevs,omitempty"`
-	GPUs    []*GPU    `json:"gpus,omitempty"`
-	Devices []*Device `json:"devices,omitempty"`
+	BIOS      string    `json:"bios"`
+	Kernel    string    `json:"kernel"`
+	Symbols   string    `json:"symbols,omitempty"`
+	Append    string    `json:"append"`
+	Initrd    string    `json:"initrd,omitempty"`
+	DumpDTB   string    `json:"dumpdtb,omitempty"`
+	Memory    string    `json:"memory,omitempty"`
+	NoGraphic bool      `json:"nographic,omitempty"`
+	Drives    []*Drive  `json:"drives,omitempty"`
+	Netdevs   []*Netdev `json:"netdevs,omitempty"`
+	GPUs      []*GPU    `json:"gpus,omitempty"`
+	Devices   []*Device `json:"devices,omitempty"`
 }
 
 type Drive struct {
@@ -248,6 +249,9 @@ func (cfg *SystemConfig) Merge(o *SystemConfig) *SystemConfig {
 	}
 	if len(o.Memory) > 0 {
 		cfg.Memory = o.Memory
+	}
+	if o.NoGraphic {
+		cfg.NoGraphic = true
 	}
 	cfg.Drives = append(cfg.Drives, o.Drives...)
 	cfg.Devices = append(cfg.Devices, o.Devices...)

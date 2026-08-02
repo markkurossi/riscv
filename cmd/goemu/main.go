@@ -79,6 +79,7 @@ func main() {
 	htif := flag.Bool("htif", false, "enable host target interface")
 	dumpdtb := flag.String("dumpdtb", "", "dump DTB to `file`")
 	memsize := flag.String("m", "512M", "guest RAM size")
+	nographic := flag.Bool("nographic", false, "disable graphical output")
 
 	flag.Var(&argDrives, "drive", "configure drive")
 	flag.Var(&argDevices, "device", "configure device")
@@ -114,6 +115,7 @@ func main() {
 	argCfg.Initrd = *initrd
 	argCfg.DumpDTB = *dumpdtb
 	argCfg.Memory = *memsize
+	argCfg.NoGraphic = *nographic
 
 	if *objdump {
 		disassemble(flag.Args())
