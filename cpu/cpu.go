@@ -8,7 +8,6 @@
 package cpu
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
@@ -25,8 +24,7 @@ import (
 )
 
 var (
-	bo          = binary.LittleEndian
-	_  isa.Hart = &CPU{}
+	_ isa.Hart = &CPU{}
 )
 
 const (
@@ -254,13 +252,13 @@ dispatch:
 			cpu.codePagenum = memory.Page(cpu.PC)
 		}
 		ofs := memory.PageOffset(cpu.PC)
-		raw := uint32(GetUint16(cpu.codePage, uint64(ofs)))
+		raw := uint32(memory.Uint16(cpu.codePage, uint64(ofs)))
 
 		if raw&0b11 == 0b11 {
 			// 32-bit instruction.
 			if cpu.PC>>12 == (cpu.PC+2)>>12 {
 				// Same page.
-				raw |= uint32(GetUint16(cpu.codePage, uint64(ofs+2))) << 16
+				raw |= uint32(memory.Uint16(cpu.codePage, uint64(ofs+2))) << 16
 			} else {
 				// 32-bit instruction crosses page boundary.
 				paddr, err := cpu.MMU.Map(cpu.PC+2, mmu.AccessExec)
@@ -601,7 +599,7 @@ dispatch:
 				tlb.Flags.Readable() && memory.Avail(addr, 8) {
 				// Fast path: TLB hit.
 				paddr := tlb.Page | (addr & uint64(tlb.OffsetMask))
-				cpu.X[instr.Rd] = GetUint64(cpu.MMU.Mem.RAM,
+				cpu.X[instr.Rd] = memory.Uint64(cpu.MMU.Mem.RAM,
 					cpu.MMU.Mem.Offset(paddr))
 			} else {
 				// Slow path fallback.
@@ -746,7 +744,7 @@ dispatch:
 				memory.Avail(addr, 8) {
 				// Fast path: TLB hit.
 				paddr := tlb.Page | (addr & uint64(tlb.OffsetMask))
-				PutUint64(cpu.MMU.Mem.RAM, cpu.MMU.Mem.Offset(paddr),
+				memory.PutUint64(cpu.MMU.Mem.RAM, cpu.MMU.Mem.Offset(paddr),
 					cpu.X[instr.Rs2])
 			} else {
 				// Slow path fallback.
@@ -1805,18 +1803,18 @@ func (cpu *CPU) vectorExtension(instr isa.Instr, raw uint32) error {
 		case 16:
 			val16 := uint16(scalarVal)
 			for i := uint64(0); i < vl; i++ {
-				bo.PutUint16(dest[i*2:], val16)
+				memory.PutUint16(dest, i*2, val16)
 			}
 
 		case 32:
 			val32 := uint32(scalarVal)
 			for i := uint64(0); i < vl; i++ {
-				bo.PutUint32(dest[i*4:], val32)
+				memory.PutUint32(dest, i*4, val32)
 			}
 
 		case 64:
 			for i := uint64(0); i < vl; i++ {
-				bo.PutUint64(dest[i*8:], scalarVal)
+				memory.PutUint64(dest, i*8, scalarVal)
 			}
 		}
 		cpu.vpu.VStart = 0
@@ -1836,19 +1834,19 @@ func (cpu *CPU) vectorExtension(instr isa.Instr, raw uint32) error {
 		case 16:
 			val16 := uint16(instr.Imm)
 			for i := cpu.vpu.VStart; i < vl; i++ {
-				bo.PutUint16(dest[i*2:], val16)
+				memory.PutUint16(dest, i*2, val16)
 			}
 
 		case 32:
 			val32 := uint32(instr.Imm)
 			for i := cpu.vpu.VStart; i < vl; i++ {
-				bo.PutUint32(dest[i*4:], val32)
+				memory.PutUint32(dest, i*4, val32)
 			}
 
 		case 64:
 			val64 := uint64(instr.Imm)
 			for i := cpu.vpu.VStart; i < vl; i++ {
-				bo.PutUint64(dest[i*8:], val64)
+				memory.PutUint64(dest, i*8, val64)
 			}
 		}
 		cpu.vpu.VStart = 0
@@ -1926,7 +1924,7 @@ func (cpu *CPU) vectorExtension(instr isa.Instr, raw uint32) error {
 			if elementOfs+8 > uint64(len(srcVec)) {
 				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
 			}
-			v := bo.Uint64(srcVec[elementOfs:])
+			v := memory.Uint64(srcVec, elementOfs)
 
 			targetAddr := baseAddr + i*8
 			err := cpu.MMU.Store64(targetAddr, v)

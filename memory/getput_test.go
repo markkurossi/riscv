@@ -4,7 +4,7 @@
 // All rights reserved.
 //
 
-package cpu
+package memory
 
 import (
 	"encoding/binary"

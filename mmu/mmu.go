@@ -8,17 +8,12 @@
 package mmu
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
 
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/memory"
-)
-
-var (
-	bo = binary.LittleEndian
 )
 
 const (
@@ -444,7 +439,7 @@ func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 		idx := index(vaddr, level)
 		pteAddr := base + idx*8
 
-		pte := PTE(bo.Uint64(mmu.Mem.RAM[mmu.Mem.Offset(pteAddr):]))
+		pte := PTE(memory.Uint64(mmu.Mem.RAM, mmu.Mem.Offset(pteAddr)))
 
 		if !pte.Valid() {
 			var err error
@@ -625,7 +620,7 @@ func (mmu *MMU) mapLeaf(pte PTE, pteAddr, vaddr uint64, level, access int) (
 	}
 	if flagsModified {
 		pte.SetFlags(flags)
-		bo.PutUint64(mmu.Mem.RAM[mmu.Mem.Offset(pteAddr):], uint64(pte))
+		memory.PutUint64(mmu.Mem.RAM, mmu.Mem.Offset(pteAddr), uint64(pte))
 	}
 
 	return page, flags, level, nil
@@ -654,7 +649,7 @@ func (mmu *MMU) Load16(vaddr uint64) (uint16, error) {
 			return mmu.MMIO.Load16(paddr)
 		}
 		if mmu.Mem.Contains(paddr) {
-			return bo.Uint16(mmu.Mem.RAM[mmu.Mem.Offset(paddr):]), nil
+			return memory.Uint16(mmu.Mem.RAM, mmu.Mem.Offset(paddr)), nil
 		}
 		if debugMMU {
 			err = fmt.Errorf("%v: Load16(%x): addr out of obunds [%x...%x[",
@@ -699,7 +694,7 @@ func (mmu *MMU) Load32(vaddr uint64) (uint32, error) {
 		if paddr < mmu.Mem.RAMBase {
 			return mmu.MMIO.Load32(paddr)
 		}
-		return bo.Uint32(mmu.Mem.RAM[mmu.Mem.Offset(paddr):]), nil
+		return memory.Uint32(mmu.Mem.RAM, mmu.Mem.Offset(paddr)), nil
 	}
 
 	var page uint64
@@ -741,7 +736,7 @@ func (mmu *MMU) Load64(vaddr uint64) (uint64, error) {
 				fmt.Errorf("mapped page out of range: vaddr=%x, paddr=%x",
 					vaddr, paddr))
 		}
-		return bo.Uint64(mmu.Mem.RAM[mmu.Mem.Offset(paddr):]), nil
+		return memory.Uint64(mmu.Mem.RAM, mmu.Mem.Offset(paddr)), nil
 	}
 
 	var page uint64
@@ -801,13 +796,13 @@ func (mmu *MMU) Store16(vaddr uint64, v uint16) error {
 		if paddr < mmu.Mem.RAMBase {
 			return mmu.MMIO.Store16(paddr, v)
 		}
-		bo.PutUint16(mmu.Mem.RAM[mmu.Mem.Offset(paddr):], uint16(v))
+		memory.PutUint16(mmu.Mem.RAM, mmu.Mem.Offset(paddr), uint16(v))
 		return nil
 
 	}
 	var buf [2]byte
 
-	bo.PutUint16(buf[:], uint16(v))
+	memory.PutUint16(buf[:], 0, uint16(v))
 
 	return mmu.CopyToUser(vaddr, buf[:])
 }
@@ -822,7 +817,7 @@ func (mmu *MMU) Store32(vaddr uint64, v uint32) error {
 		if paddr < mmu.Mem.RAMBase {
 			return mmu.MMIO.Store32(paddr, v)
 		}
-		bo.PutUint32(mmu.Mem.RAM[mmu.Mem.Offset(paddr):], uint32(v))
+		memory.PutUint32(mmu.Mem.RAM, mmu.Mem.Offset(paddr), uint32(v))
 		if mmu.Overlay != nil && mmu.Overlay.Contains(paddr) {
 			return mmu.Overlay.Store(paddr)
 		}
@@ -830,7 +825,7 @@ func (mmu *MMU) Store32(vaddr uint64, v uint32) error {
 	}
 	var buf [4]byte
 
-	bo.PutUint32(buf[:], uint32(v))
+	memory.PutUint32(buf[:], 0, uint32(v))
 
 	return mmu.CopyToUser(vaddr, buf[:])
 }
@@ -845,12 +840,12 @@ func (mmu *MMU) Store64(vaddr uint64, v uint64) error {
 		if paddr < mmu.Mem.RAMBase {
 			return mmu.MMIO.Store64(paddr, v)
 		}
-		bo.PutUint64(mmu.Mem.RAM[mmu.Mem.Offset(paddr):], v)
+		memory.PutUint64(mmu.Mem.RAM, mmu.Mem.Offset(paddr), v)
 		return nil
 	}
 	var buf [8]byte
 
-	bo.PutUint64(buf[:], v)
+	memory.PutUint64(buf[:], 0, v)
 
 	return mmu.CopyToUser(vaddr, buf[:])
 }

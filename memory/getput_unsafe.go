@@ -6,23 +6,23 @@
 
 //go:build amd64 || arm64
 
-package cpu
+package memory
 
 import (
 	"unsafe"
 )
 
-func GetUint16(buf []byte, ofs uint64) uint16 {
+func Uint16(buf []byte, ofs uint64) uint16 {
 	ptr := unsafe.Add(unsafe.Pointer(unsafe.SliceData(buf)), ofs)
 	return *(*uint16)(ptr)
 }
 
-func GetUint32(buf []byte, ofs uint64) uint32 {
+func Uint32(buf []byte, ofs uint64) uint32 {
 	ptr := unsafe.Add(unsafe.Pointer(unsafe.SliceData(buf)), ofs)
 	return *(*uint32)(ptr)
 }
 
-func GetUint64(buf []byte, ofs uint64) uint64 {
+func Uint64(buf []byte, ofs uint64) uint64 {
 	ptr := unsafe.Add(unsafe.Pointer(unsafe.SliceData(buf)), ofs)
 	return *(*uint64)(ptr)
 }

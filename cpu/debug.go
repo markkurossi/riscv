@@ -11,6 +11,7 @@ import (
 	"log"
 
 	"github.com/markkurossi/riscv/isa"
+	"github.com/markkurossi/riscv/memory"
 )
 
 func (cpu *CPU) disassembleFunction(name string) {
@@ -106,11 +107,11 @@ func (cpu *CPU) disassembleKernel(vaddr uint64) {
 		var err error
 
 		if mem.RAM[mem.Offset(i)]&0b11 == 0b11 {
-			raw = bo.Uint32(mem.RAM[mem.Offset(i):])
+			raw = memory.Uint32(mem.RAM, mem.Offset(i))
 			instr, err = isa.Decode(raw)
 			size = 4
 		} else {
-			raw = uint32(bo.Uint16(mem.RAM[mem.Offset(i):]))
+			raw = uint32(memory.Uint16(mem.RAM, mem.Offset(i)))
 			instr, err = isa.DecodeC(uint16(raw))
 			size = 2
 		}

@@ -100,7 +100,7 @@ func SetMapSv39(mem *memory.Memory, satp Satp, vpage, ppage uint64,
 		idx := (vpage >> uint64(9*level)) & 0b111111111
 		pteAddr := base + idx*8
 
-		pte := PTE(bo.Uint64(mem.RAM[mem.Offset(pteAddr):]))
+		pte := PTE(memory.Uint64(mem.RAM, mem.Offset(pteAddr)))
 
 		if pte.Valid() {
 			if pte.Leaf() {
@@ -123,7 +123,7 @@ func SetMapSv39(mem *memory.Memory, satp Satp, vpage, ppage uint64,
 			}
 			clear(page)
 
-			bo.PutUint64(mem.RAM[mem.Offset(pteAddr):],
+			memory.PutUint64(mem.RAM, mem.Offset(pteAddr),
 				uint64(MakePTE(newPage, PteV)))
 
 			base = newPageAddr
@@ -135,12 +135,13 @@ func SetMapSv39(mem *memory.Memory, satp Satp, vpage, ppage uint64,
 	idx := vpage & 0b111111111
 	pteAddr := base + idx*8
 
-	pte := PTE(bo.Uint64(mem.RAM[mem.Offset(pteAddr):]))
+	pte := PTE(memory.Uint64(mem.RAM, mem.Offset(pteAddr)))
 	if pte.Valid() {
 		return fmt.Errorf("mapping already exists: %v", pte)
 	}
 
-	bo.PutUint64(mem.RAM[mem.Offset(pteAddr):], uint64(MakePTE(ppage, flags)))
+	memory.PutUint64(mem.RAM, mem.Offset(pteAddr),
+		uint64(MakePTE(ppage, flags)))
 
 	return nil
 }
@@ -161,7 +162,7 @@ func (mmu *MMU) Dump() error {
 func (mmu *MMU) dumpLevel(root, vpage uint64, level int) error {
 	for i := uint64(0); i < 512; i++ {
 		addr := root + i*8
-		pte := PTE(bo.Uint64(mmu.Mem.RAM[mmu.Mem.Offset(addr):]))
+		pte := PTE(memory.Uint64(mmu.Mem.RAM, mmu.Mem.Offset(addr)))
 		if !pte.Valid() {
 			continue
 		}
