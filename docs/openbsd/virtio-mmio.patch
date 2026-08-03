@@ -1,0 +1,27 @@
+--- virtio_mmio.c.bak.c	2026-04-16 20:25:02
++++ virtio_mmio.c	2026-07-30 06:08:30
+@@ -426,7 +426,24 @@
+ 		vsc->sc_indirect = 1;
+ 	else
+ 		vsc->sc_indirect = 0;
++
++        /* Check upper 32-bits of device independent feature bits. */
++	bus_space_write_4(sc->sc_iot, sc->sc_ioh,
++	    VIRTIO_MMIO_HOST_FEATURES_SEL, 1);
++	host = bus_space_read_4(sc->sc_iot, sc->sc_ioh,
++				VIRTIO_MMIO_HOST_FEATURES);
++        host <<= 32;
++        neg = host & VIRTIO_F_VERSION_1;
+ 
++	bus_space_write_4(sc->sc_iot, sc->sc_ioh,
++	    VIRTIO_MMIO_GUEST_FEATURES_SEL, 1);
++	bus_space_write_4(sc->sc_iot, sc->sc_ioh,
++			  VIRTIO_MMIO_GUEST_FEATURES, neg >> 32);
++        if (neg & VIRTIO_F_VERSION_1)
++        	vsc->sc_version_1 = 1;
++        else
++        	vsc->sc_version_1 = 0;
++
+ 	return 0;
+ }
+ 

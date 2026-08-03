@@ -60,3 +60,16 @@ hw.sensors.nmea0.velocity0=0.000 m/s (Ground speed), OK
 ```
 
 ## X11 and VirtIO GPU
+
+### VirtIO GPU over MMIO
+
+The virtio-gpu does not work over MMIO. The driver does not negotiate
+the `VIRTIO_F_VERSION_1` with the upper 32-bit
+`VIRTIO_MMIO_HOST_FEATURES_SEL`. The
+[virtio-mmio.patch](virtio-mmio.patch) fixes that. After this patch,
+the virtual console works and `startx` starts X11 desktop environment.
+
+### Virtio Input not implemented
+
+The OpenBSD does not have virtio-input driver. This means that virtual
+console and X11 do not receive keyboard and mouse events.
