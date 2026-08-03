@@ -704,7 +704,7 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 		}
 		satp := mmu.Satp(v)
 		cpu.MMU.SetSatp(satp)
-		cpu.codePagenum = 0
+		cpu.codePagenum = 0xffffffffffffffff
 		cpu.codePage = nil
 
 		// Save Satp to CSR so that it can be queried.

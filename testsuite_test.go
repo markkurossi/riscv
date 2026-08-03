@@ -53,8 +53,10 @@ func TestISA(t *testing.T) {
 		t.Fatalf("ReadDir: %v", err)
 	}
 	var count, success, known, failure, panic int
-	for _, entry := range entries {
+	for idx, entry := range entries {
 		name := entry.Name()
+		t.Logf("test-%d: %s", idx, name)
+
 		file := filepath.Join(dir, name)
 		if strings.HasSuffix(file, ".dump") {
 			continue
