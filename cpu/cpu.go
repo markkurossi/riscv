@@ -187,10 +187,8 @@ dispatch:
 		// Ensure zero=zero.
 		cpu.X[isa.Zero] = 0
 
-		// Check interrupts every 64 instructions or if any interrupts
-		// are pending. The loop below will not trigger interrupts if
-		// they are pending but not enabled.
-		if cpu.Instret&0x3f == 0 {
+		// Check interrupts every 64 ticks.
+		if cpu.Time&0x3f == 0 {
 			// Sync time to wall clock.
 			now := cpu.syncTime()
 			stimecmp := cpu.CSR[CsrStimecmp].Load()
