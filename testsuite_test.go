@@ -52,7 +52,7 @@ func TestISA(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadDir: %v", err)
 	}
-	var count, success, known, failure, panic int
+	var count, success, known, unimplemented, failure, panic int
 	for _, entry := range entries {
 		name := entry.Name()
 		file := filepath.Join(dir, name)
@@ -72,13 +72,16 @@ func TestISA(t *testing.T) {
 			success++
 		} else if assertion == expect {
 			known++
+		} else if assertion > 600 {
+			t.Errorf("%v: unimpl %v", file, assertion)
+			unimplemented++
 		} else {
 			t.Errorf("%v: assertion %v", file, assertion)
 			failure++
 		}
 	}
-	t.Logf("%v tests, %v success, %v broken, %v fail, %v panic",
-		count, success, known, failure, panic)
+	t.Logf("%v tests, %v success, %v broken, %v unimpl, %v fail, %v panic",
+		count, success, known, unimplemented, failure, panic)
 }
 
 func runTest(t *testing.T, file string) (bool, uint64, error) {
