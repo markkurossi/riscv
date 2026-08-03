@@ -129,7 +129,7 @@ func (cpu *CPU) Run() error {
 	for !cpu.shutdown {
 		err := cpu.loop()
 		if err != nil {
-			cpu.codePagenum = 0xffffffffffffffff
+			cpu.codePagenum = memory.InvalidPagenum
 			if trap, ok := errors.AsType[*isa.Trap](err); ok {
 				// The trap handler saved relevant CPU state and moved
 				// PC to trap handler. All done, let's continue
@@ -534,7 +534,7 @@ dispatch:
 		case isa.Fence:
 
 		case isa.FenceI:
-			cpu.codePagenum = 0xffffffffffffffff
+			cpu.codePagenum = memory.InvalidPagenum
 			for i := range cpu.decodeCache {
 				cpu.decodeCache[i].Raw = 0
 			}
@@ -560,7 +560,7 @@ dispatch:
 				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
 			}
 			cpu.MMU.FlushTLB()
-			cpu.codePagenum = 0xffffffffffffffff
+			cpu.codePagenum = memory.InvalidPagenum
 			cpu.ReservationValid = false
 
 		case isa.Jal:

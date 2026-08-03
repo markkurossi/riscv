@@ -33,6 +33,11 @@ const (
 
 	// RAMBase defines the RAM base address.
 	RAMBase = 0x80000000
+
+	// InvalidPagenum defines an invalid page number. On Sv39, the
+	// page indices are 12 bits and page numbers are 52 bits i.e. no
+	// valid page number can have 64 bits set.
+	InvalidPagenum = 0xffffffffffffffff
 )
 
 // Avail tests if the page of the address addr has n bytes of data

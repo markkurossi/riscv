@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/markkurossi/riscv/isa"
+	"github.com/markkurossi/riscv/memory"
 	"github.com/markkurossi/riscv/mmu"
 )
 
@@ -704,7 +705,7 @@ func (cpu *CPU) SetCSRX(csr CSR, v uint64, raw uint32, instr isa.Instr) error {
 		}
 		satp := mmu.Satp(v)
 		cpu.MMU.SetSatp(satp)
-		cpu.codePagenum = 0xffffffffffffffff
+		cpu.codePagenum = memory.InvalidPagenum
 		cpu.codePage = nil
 
 		// Save Satp to CSR so that it can be queried.
