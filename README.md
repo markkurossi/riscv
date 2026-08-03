@@ -279,6 +279,7 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 | Interrupts          |  0.416 |  4.321 | 0m49.085s | 148.61 | 7.52x |  -6.9% |
 | unsafe.Pointer¹     |  0.363 |  3.668 | 0m40.373s | 175.06 | 8.86x | +17.8% |
 | unsafe.Add          |  0.358 |  3.582 | 0m39.659s | 179.27 | 9.08x |  +2.4% |
+| Interrupt opts      |  0.351 |  3.542 | 0m39.144s | 181.29 | 9.18x |  +1.1% |
 
 1. contains several optimizations:
   - instr decode cache by `pc>>2` instead of `raw>>2`

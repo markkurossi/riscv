@@ -25,6 +25,9 @@ import (
 
 var (
 	_ isa.Hart = &CPU{}
+
+	intNums = []uint64{11, 9, 7, 5, 3, 1}
+	intBits = []uint64{1 << 11, 1 << 9, 1 << 7, 1 << 5, 1 << 3, 1 << 1}
 )
 
 const (
@@ -205,10 +208,11 @@ dispatch:
 			if pending != 0 {
 				mideleg := cpu.CSR[CsrMideleg].Load()
 				currentMode := cpu.Mode()
+				mie := cpu.mstatus.MIE()
+				sie := cpu.mstatus.SIE()
 
 				// Check each pending interrupt, highest priority first
-				for _, bit := range []uint64{11, 9, 7, 5, 3, 1} {
-					bitMask := uint64(1 << bit)
+				for idx, bitMask := range intBits {
 					if pending&bitMask == 0 {
 						continue
 					}
@@ -217,8 +221,8 @@ dispatch:
 						// Handle in M-mode Enabled if explicitly in a
 						// lower mode, OR if in M-mode with MIE active.
 						if currentMode < isa.ModeM ||
-							(currentMode == isa.ModeM && cpu.mstatus.MIE()) {
-							cpu.Interrupt(isa.ModeM, bit)
+							(currentMode == isa.ModeM && mie) {
+							cpu.Interrupt(isa.ModeM, intNums[idx])
 							continue dispatch
 						}
 					} else {
@@ -226,8 +230,8 @@ dispatch:
 						// in User mode, OR if in S-mode with SIE
 						// active.
 						if currentMode < isa.ModeS ||
-							(currentMode == isa.ModeS && cpu.mstatus.SIE()) {
-							cpu.Interrupt(isa.ModeS, bit)
+							(currentMode == isa.ModeS && sie) {
+							cpu.Interrupt(isa.ModeS, intNums[idx])
 							continue dispatch
 						}
 					}
