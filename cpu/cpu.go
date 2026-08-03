@@ -435,6 +435,9 @@ dispatch:
 			return cpu.Trap(isa.CauseBreakpoint, 0, nil)
 
 		case isa.Sret:
+			if cpu.mstatus.TSR() {
+				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
+			}
 			if cpu.Trace {
 				cpu.traceFunc(cpu.PC)
 				cpu.tracef(raw, instr, "mode=%v => %v, sepc=%x",

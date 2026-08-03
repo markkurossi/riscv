@@ -138,6 +138,11 @@ func (m *Mstatus) SetSPP(mode PrivilegeMode) {
 	*m |= Mstatus(mode&0b1) << MsSPP
 }
 
+// TSR returns the TSR (Trap Supervisor Return) flag.
+func (m Mstatus) TSR() bool {
+	return m&(1<<MsTSR) != 0
+}
+
 // RegStatus defines the register status. This is used floating point
 // and vector extensions.
 type RegStatus uint8
