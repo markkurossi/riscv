@@ -65,7 +65,7 @@ func (t *Tunnel) Configure(cfg Config) error {
 // Read reads a raw IP packet from the Linux tun interface.
 func (t *Tunnel) Read(p []byte) (int, error) {
 	for {
-		n, err := unix.Read(int(t.Fd), p)
+		n, err := unix.Read(int(t.fd), p)
 		if err == unix.EINTR {
 			continue
 		}
@@ -84,7 +84,7 @@ func (t *Tunnel) Write(p []byte) (int, error) {
 
 	var writtenTotal int
 	for writtenTotal < len(p) {
-		n, err := unix.Write(int(t.Fd), p[writtenTotal:])
+		n, err := unix.Write(int(t.fd), p[writtenTotal:])
 		if err == nil {
 			writtenTotal += n
 			continue
@@ -101,7 +101,7 @@ func (t *Tunnel) Write(p []byte) (int, error) {
 			// Set up a standard poll matching the original C code
 			// timeout window
 			pfd := []unix.PollFd{{
-				Fd:     int32(t.Fd),
+				Fd:     int32(t.fd),
 				Events: unix.POLLOUT,
 			}}
 			// 60,000ms timeout window matching old TIMEOUT definition
