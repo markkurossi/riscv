@@ -52,7 +52,7 @@
 struct vtinput_softc {
         struct fb_info vtinput_fb_info;
         device_t       vtinput_dev;
-}
+};
 
 static int	vtinput_modevent(module_t, int, void *);
 
@@ -111,7 +111,7 @@ vtinput_probe(device_t dev)
 static int
 vtinput_attach(device_t dev)
 {
-	struct vtgpu_softc *sc;
+	struct vtinput_softc *sc;
 
         sc = device_get_softc(dev);
         sc->vtinput_dev = dev;
