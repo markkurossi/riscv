@@ -78,7 +78,7 @@ func main() {
 	gpu := flag.String("gpu", "", "graphics device")
 	htif := flag.Bool("htif", false, "enable host target interface")
 	dumpdtb := flag.String("dumpdtb", "", "dump DTB to `file`")
-	memsize := flag.String("m", "512M", "guest RAM size")
+	memsize := flag.String("m", "", "guest RAM size")
 	nographic := flag.Bool("nographic", false, "disable graphical output")
 
 	flag.Var(&argDrives, "drive", "configure drive")
@@ -114,7 +114,6 @@ func main() {
 	argCfg.Append = *bootargs
 	argCfg.Initrd = *initrd
 	argCfg.DumpDTB = *dumpdtb
-	argCfg.Memory = *memsize
 	argCfg.NoGraphic = *nographic
 
 	if *objdump {
@@ -155,6 +154,13 @@ func main() {
 	systemConfig = systemConfig.Merge(argCfg)
 	systemConfig.Drives = append(systemConfig.Drives, argDrives...)
 	systemConfig.Devices = append(systemConfig.Devices, argDevices...)
+
+	if len(*memsize) > 0 {
+		systemConfig.Memory = *memsize
+	}
+	if len(systemConfig.Memory) == 0 {
+		systemConfig.Memory = "512M"
+	}
 
 	if len(*gpu) > 0 {
 		gpu, err := ParseGPU(*gpu)

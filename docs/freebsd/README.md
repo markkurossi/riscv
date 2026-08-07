@@ -1,5 +1,16 @@
 # FreeBSD
 
+## Kernel
+
+Build:
+
+```shell
+$ cd /usr/src
+$ make kernel KERNCONF=GOEMU MODULES_OVERRIDE=""
+$ make installkernel KERNCONF=GOEMU MODULES_OVERRIDE="" # XXX is this needed
+$ reboot
+```
+
 ## ports
 
 ``` shell
