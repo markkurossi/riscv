@@ -49,12 +49,18 @@
 #include <dev/virtio/virtqueue.h>
 #include <dev/virtio/input/virtio_input.h>
 
+#include <dev/evdev/input.h>
+#include <dev/evdev/evdev.h>
+
 struct vtinput_softc {
         struct fb_info		vtinput_fb_info;
         device_t		vtinput_dev;
 
         struct virtqueue       *vtinput_event_vq;
         struct virtqueue       *vtinput_status_vq;
+
+        struct evdev_dev       *kbd;
+        struct evdev_dev       *ptr;
 };
 
 static int	vtinput_modevent(module_t, int, void *);
@@ -157,6 +163,41 @@ vtinput_attach(device_t dev)
 
         virtio_setup_intr(dev, INTR_TYPE_TTY);
 
+        /* ev devices. */
+
+        sc->kbd = evdev_alloc();
+
+        evdev_set_name(sc->kbd, "virtio-keyboard");
+        evdev_set_phys(sc->kbd, device_get_nameunit(dev));
+        evdev_set_id(sc->kbd, BUS_VIRTUAL, 1, 1, 1);
+
+        evdev_support_event(sc->kbd, EV_KEY);
+        evdev_support_event(sc->kbd, EV_SYN);
+
+        for (int code = 0; code < 256; code++)
+                evdev_support_key(sc->kbd, code);
+
+        evdev_register(sc->kbd);
+
+        sc->ptr = evdev_alloc();
+
+        evdev_set_name(sc->ptr, "virtio-mouse");
+        evdev_set_phys(sc->ptr, device_get_nameunit(dev));
+        evdev_set_id(sc->ptr, BUS_VIRTUAL, 2, 2, 2);
+
+        evdev_support_event(sc->ptr, EV_KEY);
+        evdev_support_event(sc->ptr, EV_ABS);
+        evdev_support_event(sc->ptr, EV_SYN);
+
+        evdev_support_key(sc->ptr, BTN_LEFT);
+        evdev_support_key(sc->ptr, BTN_RIGHT);
+        evdev_support_key(sc->ptr, BTN_MIDDLE);
+
+        evdev_support_abs(sc->ptr, ABS_X, 0, 1024, 0, 0, 0);
+        evdev_support_abs(sc->ptr, ABS_Y, 0, 768, 0, 0, 0);
+
+        evdev_register(sc->ptr);
+
         device_printf(dev, "VirtIO Input Device attached\n");
 
 fail:
@@ -176,23 +217,31 @@ vtinput_detach(device_t dev)
 static void
 vtinput_intr(void *arg)
 {
-        device_t dev;
         struct vtinput_softc *sc = arg;
         struct virtqueue *vq = sc->vtinput_event_vq;
         struct virtio_input_event *ev;
         int len;
 
-        dev = sc->vtinput_dev;
-        device_printf(dev, "vtinput_intr\n");
-
         while ((ev = virtqueue_dequeue(vq, &len)) != NULL) {
                 struct sglist sg;
                 struct sglist_seg segs[1];
-#if 0
-                vtinput_process_event(sc, ev);
-#endif
-                device_printf(dev, "type=%d, code=%d, value=%d\n",
-                        ev->type, ev->code, ev->value);
+
+                if (ev->type == EV_KEY && ev->code < 256) {
+                        evdev_push_event(sc->kbd, ev->type, ev->code,
+                                         ev->value);
+                }
+                else if (ev->type == EV_KEY && ev->code >= BTN_MOUSE) {
+                        evdev_push_event(sc->ptr, ev->type, ev->code,
+                                         ev->value);
+                }
+                else if (ev->type == EV_ABS) {
+                        evdev_push_event(sc->ptr, ev->type, ev->code,
+                                         ev->value);
+                }
+                if (ev->type == EV_SYN) {
+                        evdev_sync(sc->kbd);
+                        evdev_sync(sc->ptr);
+                }
 
                 /* Enqueue event. */
                 sglist_init(&sg, 1, segs);
