@@ -11,6 +11,16 @@ $ make installkernel KERNCONF=GOEMU MODULES_OVERRIDE="" # XXX is this needed
 $ reboot
 ```
 
+# X11
+
+``` shell
+$ pkg install xorg-server
+$ pkg install xf86-input-libinput
+$ pkg install xf86-video-scfb
+$ pkg install xinit xauth xset xterm xeyes xload xclock twm
+$ pkg install font-misc-misc fontconfig xorg-fonts
+```
+
 ## ports
 
 ``` shell
