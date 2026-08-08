@@ -50,8 +50,11 @@
 #include <dev/virtio/input/virtio_input.h>
 
 struct vtinput_softc {
-        struct fb_info vtinput_fb_info;
-        device_t       vtinput_dev;
+        struct fb_info		vtinput_fb_info;
+        device_t		vtinput_dev;
+
+        struct virtqueue       *vtinput_event_vq;
+        struct virtqueue       *vtinput_status_vq;
 };
 
 static int	vtinput_modevent(module_t, int, void *);
@@ -59,6 +62,9 @@ static int	vtinput_modevent(module_t, int, void *);
 static int	vtinput_probe(device_t);
 static int	vtinput_attach(device_t);
 static int	vtinput_detach(device_t);
+
+static void	vtinput_intr(void *);
+static void	vtinput_read_config(struct vtinput_softc *);
 
 static device_method_t vtinput_methods[] = {
         /* Device methods. */
@@ -112,13 +118,52 @@ static int
 vtinput_attach(device_t dev)
 {
 	struct vtinput_softc *sc;
+        struct vq_alloc_info vq_info[2];
+        int error;
 
         sc = device_get_softc(dev);
         sc->vtinput_dev = dev;
 
+        vtinput_read_config(sc);
+
+        VQ_ALLOC_INFO_INIT(&vq_info[0], 0, vtinput_intr, sc,
+                           &sc->vtinput_event_vq, "%s eventq",
+                           device_get_nameunit(dev));
+        VQ_ALLOC_INFO_INIT(&vq_info[1], 0, NULL, sc,
+                           &sc->vtinput_status_vq, "%s statusq",
+                           device_get_nameunit(dev));
+
+        error = virtio_alloc_virtqueues(dev, 2, vq_info);
+        if (error != 0) {
+                device_printf(dev, "cannot allocate virtqueues: %d\n", error);
+                goto fail;
+        }
+
+        for (int i = 0; i < 32; i++) {
+                struct sglist sg;
+                struct sglist_seg segs[1];
+                struct virtio_input_event *ev;
+
+                ev = malloc(sizeof(*ev), M_DEVBUF, M_WAITOK);
+
+                sglist_init(&sg, 1, segs);
+                sglist_append(&sg, ev, sizeof(*ev));
+
+                virtqueue_enqueue(sc->vtinput_event_vq, ev, &sg, 0, 1);
+        }
+
+        virtqueue_notify(sc->vtinput_event_vq);
+        virtqueue_enable_intr(sc->vtinput_event_vq);
+
+        virtio_setup_intr(dev, INTR_TYPE_TTY);
+
         device_printf(dev, "VirtIO Input Device attached\n");
 
-        return (0);
+fail:
+        if (error != 0)
+                vtinput_detach(dev);
+
+        return (error);
 }
 
 static int
@@ -127,6 +172,73 @@ vtinput_detach(device_t dev)
         device_printf(dev, "VirtIO Input Device detached\n");
         return (0);
 }
+
+static void
+vtinput_intr(void *arg)
+{
+        device_t dev;
+        struct vtinput_softc *sc = arg;
+        struct virtqueue *vq = sc->vtinput_event_vq;
+        struct virtio_input_event *ev;
+        int len;
+
+        dev = sc->vtinput_dev;
+        device_printf(dev, "vtinput_intr\n");
+
+        while ((ev = virtqueue_dequeue(vq, &len)) != NULL) {
+                struct sglist sg;
+                struct sglist_seg segs[1];
+#if 0
+                vtinput_process_event(sc, ev);
+#endif
+                device_printf(dev, "type=%d, code=%d, value=%d\n",
+                        ev->type, ev->code, ev->value);
+
+                /* Enqueue event. */
+                sglist_init(&sg, 1, segs);
+                sglist_append(&sg, ev, sizeof(*ev));
+
+                virtqueue_enqueue(vq, ev, &sg, 0, 1);
+        }
+
+        virtqueue_notify(vq);
+        virtqueue_enable_intr(sc->vtinput_event_vq);
+}
+
+static void
+vtinput_read_config(struct vtinput_softc *sc)
+{
+        device_t dev;
+        struct virtio_input_config inputcfg;
+
+        dev = sc->vtinput_dev;
+
+        bzero(&inputcfg, sizeof(inputcfg));
+
+#define VTINPUT_SET_CONFIG(_dev, _field, _cfg)                  \
+        virtio_write_device_config(_dev,                        \
+            offsetof(struct virtio_input_config, _field),       \
+            &(_cfg)->_field, sizeof((_cfg)->_field))
+
+#define VTINPUT_GET_CONFIG(_dev, _field, _cfg)                  \
+        virtio_read_device_config(_dev,                         \
+            offsetof(struct virtio_input_config, _field),       \
+            &(_cfg)->_field, sizeof((_cfg)->_field))
+
+        inputcfg.select = VIRTIO_INPUT_CFG_ID_NAME;
+        VTINPUT_SET_CONFIG(dev, select, &inputcfg);
+        VTINPUT_GET_CONFIG(dev, size, &inputcfg);
+
+        if (inputcfg.size > 127)
+                inputcfg.size = 127;
+
+        for (uint8_t i = 0; i < inputcfg.size; i++) {
+                virtio_read_device_config(dev, 8+i, &inputcfg.u.string[i], 1);
+        }
+        device_printf(dev, "%s\n", inputcfg.u.string);
+}
+
+
 /*
  * Local Variables:
  * c-file-style: "bsd"
