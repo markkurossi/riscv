@@ -754,11 +754,12 @@ var inputCategoriesBitmap = [128]byte{
 var inputKeyBitmap [128]byte
 
 var inputRelBitmap = [128]byte{
-	0x03, 0x01,
+	0x03, // REL_X | REL_Y
+	0x01, // REL_WHEEL
 }
 
 var inputAbsBitmap = [128]byte{
-	0x03,
+	0x03, // ABS_X | ABS_Y
 }
 
 func setBit(v uint16) {
