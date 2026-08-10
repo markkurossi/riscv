@@ -54,7 +54,7 @@ func NewInput(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		MMIO: MMIO{
 			Log: logger.Log{
 				Name:  "virtio-input",
-				Level: logger.Trace,
+				Level: logger.Info,
 			},
 			DeviceID: InputDeviceID,
 			Hart:     hart,
