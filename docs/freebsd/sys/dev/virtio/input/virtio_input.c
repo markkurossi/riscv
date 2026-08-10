@@ -161,7 +161,7 @@ vtinput_attach(device_t dev)
 
         sc->kbd = evdev_alloc();
 
-        evdev_set_name(sc->kbd, "virtio-keyboard");
+        evdev_set_name(sc->kbd, "VirtIO keyboard");
         evdev_set_phys(sc->kbd, device_get_nameunit(dev));
         evdev_set_id(sc->kbd, BUS_VIRTUAL, 1, 1, 1);
 
@@ -175,7 +175,7 @@ vtinput_attach(device_t dev)
 
         sc->ptr = evdev_alloc();
 
-        evdev_set_name(sc->ptr, "virtio-mouse");
+        evdev_set_name(sc->ptr, "VirtIO mouse");
         evdev_set_phys(sc->ptr, device_get_nameunit(dev));
         evdev_set_id(sc->ptr, BUS_VIRTUAL, 1, 2, 1);
 
