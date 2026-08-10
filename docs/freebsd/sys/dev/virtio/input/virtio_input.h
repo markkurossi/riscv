@@ -31,6 +31,34 @@
 #ifndef _VIRTIO_INPUT_H
 #define _VIRTIO_INPUT_H
 
+#define VTINPUT_FIFOSZ 		128
+
+struct vtinput_softc {
+        struct fb_info		vtinput_fb_info;
+        device_t		vtinput_dev;
+
+        struct virtqueue       *vtinput_event_vq;
+        struct virtqueue       *vtinput_status_vq;
+
+        struct evdev_dev       *kbd;
+        struct evdev_dev       *ptr;
+
+        keyboard_t 	        vt_kbd;
+
+        /* Keyboard FIFO and synchronization */
+        struct mtx              vtinput_mtx;
+        uint8_t                 vtinput_fifo[VTINPUT_FIFOSZ];
+        u_int                   vtinput_fifo_head;
+        u_int                   vtinput_fifo_tail;
+        u_int                   vtinput_fifo_count;
+
+        /* State machine tracking */
+        int                     vtinput_prefix;
+        int                     viokbd_state;
+        int                     viokbd_accents;
+        int                     viokbd_mode;
+};
+
 enum virtio_input_config_select {
         VIRTIO_INPUT_CFG_UNSET      = 0x00,
         VIRTIO_INPUT_CFG_ID_NAME    = 0x01,
@@ -74,6 +102,12 @@ struct virtio_input_event {
         uint16_t code;
         uint32_t value;
 };
+
+/* Keyboard interface. */
+int vtinput_kbd_driver_load(module_t, int, void *);
+int vtinput_kbd_driver_attach(device_t);
+int vtinput_kbd_driver_detach(device_t);
+int vtinput_kbd_intr(keyboard_t *, void *);
 
 #endif /* _VIRTIO_INPUT_H */
 

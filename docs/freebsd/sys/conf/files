@@ -3495,6 +3495,7 @@ dev/virtio/block/virtio_blk.c		optional	virtio_blk
 dev/virtio/console/virtio_console.c	optional	virtio_console
 dev/virtio/gpu/virtio_gpu.c		optional	virtio_gpu
 dev/virtio/input/virtio_input.c		optional	virtio_input
+dev/virtio/input/virtio_input_kbd.c	optional	virtio_input
 dev/virtio/p9fs/virtio_p9fs.c		optional	virtio_p9fs
 dev/virtio/random/virtio_random.c	optional	virtio_random
 dev/virtio/scmi/virtio_scmi.c		optional	virtio_scmi
