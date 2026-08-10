@@ -132,7 +132,7 @@ vtinput_kbd_driver_attach(device_t dev)
                 return (ENXIO);
         }
 
-        kbd_init_struct(kbd, VIOKBD_DRIVER_NAME, KB_OTHER, unit, 0, 0, 0);
+        kbd_init_struct(kbd, VIOKBD_DRIVER_NAME, KB_101, unit, 0, 0, 0);
         kbd->kb_data = (void *) sc;
         kbd_set_maps(kbd, &key_map, &accent_map, fkey_tab, nitems(fkey_tab));
         KBD_FOUND_DEVICE(kbd);
@@ -146,9 +146,11 @@ vtinput_kbd_driver_attach(device_t dev)
                 goto detach;
         }
         KBD_CONFIG_DONE(kbd);
+#if 0
         if (kbd_attach(kbd)) {
                 goto detach;
         }
+#endif
         kbdd_diag(kbd, 1);
 
         return (0);
@@ -183,16 +185,13 @@ vtinput_kbd_driver_detach(device_t dev)
 int
 vtinput_kbd_intr(keyboard_t *kbd, void *arg)
 {
-	int		      c;
-        struct vtinput_softc *sc = kbd->kb_data;
+	int c;
 
 	if (KBD_IS_ACTIVE(kbd) && KBD_IS_BUSY(kbd)) {
-                device_printf(sc->vtinput_dev, "%s: callback\n", __FUNCTION__);
 		/* let the callback function to process the input */
 		(*kbd->kb_callback.kc_func)(kbd, KBDIO_KEYINPUT,
 					    kbd->kb_callback.kc_arg);
 	} else {
-                device_printf(sc->vtinput_dev, "%s: discard\n", __FUNCTION__);
 		/* read and discard the input; no one is waiting for input */
 		do {
 			c = viokbd_read_char(kbd, FALSE);
@@ -263,7 +262,7 @@ viokbd_read(keyboard_t *kbd, int wait)
 static int
 viokbd_check(keyboard_t *kbd)
 {
-        return (0);
+        return (viokbd_check_char(kbd));
 }
 
 static u_int
@@ -287,10 +286,12 @@ next_code:
         sc->vtinput_fifo_count--;
         mtx_unlock(&sc->vtinput_mtx);
 
+#if 0
         /* DEBUG: Log popped scancode and current console mode */
         device_printf(((struct vtinput_softc *)kbd->kb_data)->vtinput_dev,
                       "READ_CHAR: popped scancode 0x%02X, mode=%d\n",
                       scancode, sc->viokbd_mode);
+#endif
 
         /* K_RAW: The graphical console wants raw scancodes. Return immediately. */
         if (sc->viokbd_mode == K_RAW)
@@ -363,6 +364,18 @@ viokbd_ioctl(keyboard_t *kbd, u_long cmd, caddr_t arg)
                 default:
                         return (EINVAL);
                 }
+        /* -- MISSING IOCTLS NEEDED BY KBDMUX -- */
+        case KDGETLED:
+                *(int *)arg = 0; /* No physical LEDs */
+                return (0);
+        case KDSETLED:
+                return (0);      /* Fake success for setting LEDs */
+        case KDGKBSTATE:
+                *(int *)arg = sc->viokbd_state;
+                return (0);
+        case KDSKBSTATE:
+                sc->viokbd_state = *(int *)arg;
+                return (0);
         }
 
         /* Let the general keyboard layer handle standard ioctls */
