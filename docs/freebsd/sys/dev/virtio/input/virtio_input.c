@@ -51,6 +51,7 @@
 #include <dev/evdev/input.h>
 #include <dev/evdev/evdev.h>
 #include <dev/evdev/evdev_private.h>
+#include <dev/evdev/input-event-codes.h>
 
 #include <dev/virtio/input/virtio_input.h>
 
@@ -60,7 +61,8 @@ static int	vtinput_probe(device_t);
 static int	vtinput_attach(device_t);
 static int	vtinput_detach(device_t);
 static void	vtinput_intr(void *);
-static void	vtinput_read_config(struct vtinput_softc *);
+static void	vtinput_read_config(device_t, struct virtio_input_config *,
+                                    int, int);
 
 static device_method_t vtinput_methods[] = {
         /* Device methods. */
@@ -117,12 +119,39 @@ vtinput_attach(device_t dev)
 {
 	struct vtinput_softc *sc;
         struct vq_alloc_info vq_info[2];
+        struct virtio_input_config cfg;
+        uint32_t ev_categories;
         int error;
 
         sc = device_get_softc(dev);
         sc->vtinput_dev = dev;
 
-        vtinput_read_config(sc);
+        vtinput_read_config(dev, &cfg, VIRTIO_INPUT_CFG_ID_NAME, 0);
+        device_printf(dev, "%.*s\n", (int) cfg.size, cfg.u.string);
+
+        vtinput_read_config(dev, &cfg, VIRTIO_INPUT_CFG_ID_SERIAL, 0);
+        device_printf(dev, "serial    : %.*s\n", (int) cfg.size, cfg.u.string);
+
+        vtinput_read_config(dev, &cfg, VIRTIO_INPUT_CFG_ID_DEVIDS, 0);
+        device_printf(dev, "bustype   : %d\n", (int) cfg.u.ids.bustype);
+        device_printf(dev, "vendor    : %d\n", (int) cfg.u.ids.vendor);
+        device_printf(dev, "product   : %d\n", (int) cfg.u.ids.product);
+        device_printf(dev, "version   : %d\n", (int) cfg.u.ids.version);
+
+        /* Supported event categories. */
+
+        vtinput_read_config(dev, &cfg, VIRTIO_INPUT_CFG_EV_BITS, 0);
+        ev_categories = ((uint32_t) cfg.u.bitmap[0]) |
+                (((uint32_t) cfg.u.bitmap[1]) << 8)  |
+                (((uint32_t) cfg.u.bitmap[2]) << 16) |
+                (((uint32_t) cfg.u.bitmap[3]) << 24);
+
+        if (ev_categories & 1<<EV_KEY)
+                device_printf(dev, "keyboard\n");
+        if (ev_categories & 1<<EV_REL)
+                device_printf(dev, "mouse\n");
+        if (ev_categories & 1<<EV_ABS)
+                device_printf(dev, "touchpad\n");
 
         VQ_ALLOC_INFO_INIT(&vq_info[0], 0, vtinput_intr, sc,
                            &sc->vtinput_event_vq, "%s eventq",
@@ -137,7 +166,10 @@ vtinput_attach(device_t dev)
                 goto fail;
         }
 
-        for (int i = 0; i < 32; i++) {
+        int nentries = virtqueue_size(sc->vtinput_event_vq);
+        device_printf(dev, "eventq size %d\n", nentries);
+
+        for (int i = 0; i < nentries; i++) {
                 struct sglist sg;
                 struct sglist_seg segs[1];
                 struct virtio_input_event *ev;
@@ -155,9 +187,7 @@ vtinput_attach(device_t dev)
 
         virtio_setup_intr(dev, INTR_TYPE_TTY);
 
-        /*
-         * Setup evdev devices for keyboard and mouse.
-         */
+        /* Setup evdev device for keyboard. */
 
         sc->kbd = evdev_alloc();
 
@@ -172,6 +202,8 @@ vtinput_attach(device_t dev)
                 evdev_support_key(sc->kbd, code);
 
         evdev_register(sc->kbd);
+
+        /* Setup evdev device for mouse. */
 
         sc->ptr = evdev_alloc();
 
@@ -192,14 +224,10 @@ vtinput_attach(device_t dev)
 
         evdev_register(sc->ptr);
 
-        /*
-         * Register keyboad.
-         */
+        /* Register keyboad. */
         error = vtinput_kbd_driver_attach(dev);
         if (error != 0)
                 goto fail;
-
-        device_printf(dev, "vt keyboard registered\n");
 
         device_printf(dev, "VirtIO Input Device attached\n");
 
@@ -282,14 +310,14 @@ vtinput_intr(void *arg)
 }
 
 static void
-vtinput_read_config(struct vtinput_softc *sc)
+vtinput_read_config(device_t dev, struct virtio_input_config *cfg,
+                    int select, int subsel)
 {
-        device_t dev;
-        struct virtio_input_config inputcfg;
+        uint16_t *arr16;
+        uint32_t *arr32;
+        int num_items;
 
-        dev = sc->vtinput_dev;
-
-        bzero(&inputcfg, sizeof(inputcfg));
+        bzero(cfg, sizeof(struct virtio_input_config));
 
 #define VTINPUT_SET_CONFIG(_dev, _field, _cfg)                  \
         virtio_write_device_config(_dev,                        \
@@ -301,17 +329,64 @@ vtinput_read_config(struct vtinput_softc *sc)
             offsetof(struct virtio_input_config, _field),       \
             &(_cfg)->_field, sizeof((_cfg)->_field))
 
-        inputcfg.select = VIRTIO_INPUT_CFG_ID_NAME;
-        VTINPUT_SET_CONFIG(dev, select, &inputcfg);
-        VTINPUT_GET_CONFIG(dev, size, &inputcfg);
+        cfg->select = (uint8_t) select;
+        cfg->subsel = (uint8_t) subsel;
+        VTINPUT_SET_CONFIG(dev, select, cfg);
+        VTINPUT_SET_CONFIG(dev, subsel, cfg);
+        VTINPUT_GET_CONFIG(dev, size, cfg);
 
-        if (inputcfg.size > 127)
-                inputcfg.size = 127;
+        switch (select) {
+        case VIRTIO_INPUT_CFG_ID_NAME:
+        case VIRTIO_INPUT_CFG_ID_SERIAL:
+                /* result in u.string */
+                if (cfg->size > 128) {
+                        cfg->size = 128;
+                }
+                for (uint8_t i = 0; i < cfg->size; i++) {
+                        virtio_read_device_config(dev, 8 + i,
+                                                  &cfg->u.string[i], 1);
+                }
+                break;
 
-        for (uint8_t i = 0; i < inputcfg.size; i++) {
-                virtio_read_device_config(dev, 8+i, &inputcfg.u.string[i], 1);
+        case VIRTIO_INPUT_CFG_ID_DEVIDS:
+                /* result in u.ids */
+                arr16 = &cfg->u.ids.bustype;
+                num_items = cfg->size / 2;
+                if (num_items > 4) {
+                        num_items = 4;
+                }
+                for (int i = 0; i < num_items; i++) {
+                        arr16[i] = virtio_read_dev_config_2(dev, 8 + i * 2);
+                }
+                break;
+
+        case VIRTIO_INPUT_CFG_PROP_BITS:
+        case VIRTIO_INPUT_CFG_EV_BITS:
+                /* result in u.bitmap */
+                if (cfg->size > 128) {
+                        cfg->size = 128;
+                }
+                for (uint8_t i = 0; i < cfg->size; i++) {
+                        virtio_read_device_config(dev, 8 + i,
+                                                  &cfg->u.bitmap[i], 1);
+                }
+                break;
+
+        case VIRTIO_INPUT_CFG_ABS_INFO:
+                /* result in u.abs */
+                arr32 = &cfg->u.abs.min;
+                num_items = cfg->size / 4;
+                if (num_items > 5) {
+                        num_items = 5;
+                }
+                for (int i = 0; i < num_items; i++) {
+                        arr32[i] = virtio_read_dev_config_4(dev, 8 + i * 4);
+                }
+                break;
+
+        default:
+                device_printf(dev, "invalid config select %d\n", select);
         }
-        device_printf(dev, "%s\n", inputcfg.u.string);
 }
 
 /*
