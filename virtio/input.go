@@ -767,6 +767,7 @@ func setBit(v uint16) {
 }
 
 func init() {
+	// These are defined in gpu.go.
 	for _, v := range inputKeyMap {
 		setBit(uint16(v))
 	}
