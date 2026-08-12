@@ -399,7 +399,6 @@ func (vio *Input) OnMouseMove(x, y int32) {
 		if vio.lastCount > 0 {
 			vio.addEvent(uint16(EV_REL), REL_X, uint32(x-vio.lastX))
 			vio.addEvent(uint16(EV_REL), REL_Y, uint32(y-vio.lastY))
-			vio.Logf("mouse: %v,%v\n", x-vio.lastX, y-vio.lastY)
 		}
 		vio.lastX = x
 		vio.lastY = y
