@@ -28,8 +28,14 @@ type Input struct {
 
 	Width  int
 	Height int
-	absX   []byte
-	absY   []byte
+
+	abs  bool
+	absX []byte
+	absY []byte
+
+	lastX     int32
+	lastY     int32
+	lastCount uint64
 
 	sel    uint8
 	subsel uint8
@@ -48,7 +54,7 @@ type InputEvent struct {
 }
 
 func NewInput(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
-	mem *memory.Memory, width, height int) *Input {
+	mem *memory.Memory, width, height int, absolute bool) *Input {
 
 	vio := &Input{
 		MMIO: MMIO{
@@ -66,6 +72,7 @@ func NewInput(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		},
 		Width:   width,
 		Height:  height,
+		abs:     absolute,
 		recvCh:  make(chan uint16, queueNumMax),
 		eventCh: make(chan *InputEvent, queueNumMax),
 	}
@@ -89,6 +96,14 @@ func NewInput(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 
 	vio.absY = make([]byte, 20)
 	vioBO.PutUint32(vio.absY[4:], uint32(vio.Height-1))
+
+	if vio.abs {
+		inputPropBitmap[0] = 0x02       // INPUT_PROP_DIRECT
+		inputCategoriesBitmap[0] = 0x0a // EV_KEY | EV_ABS
+	} else {
+		inputPropBitmap[0] = 0x01       // INPUT_PROP_POINTER
+		inputCategoriesBitmap[0] = 0x06 // EV_KEY | EV_REL
+	}
 
 	go vio.receiver(vio.queues[0])
 
@@ -202,10 +217,14 @@ func (vio *Input) cfg() ([]byte, int) {
 		data = []byte("GoEMU Input Device")
 	case 0x0200: // VIRTIO_INPUT_CFG_ID_SERIAL
 		data = []byte("424242")
+	case 0x1000: // VIRTIO_INPUT_CFG_PROP_BITS
+		data = inputPropBitmap[:]
 	case 0x1100: // VIRTIO_INPUT_CFG_EV_BITS | 0 - supported categories
 		data = inputCategoriesBitmap[:]
 	case 0x1101: // VIRTIO_INPUT_CFG_EV_BITS | EV_KEY
 		data = inputKeyBitmap[:]
+	case 0x1102: // VIRTIO_INPUT_CFG_EV_BITS | EV_REL
+		data = inputRelBitmap[:]
 	case 0x1103: // VIRTIO_INPUT_CFG_EV_BITS | EV_ABS
 		data = inputAbsBitmap[:]
 	case 0x1200: // VIRTIO_INPUT_CFG_ABS_INFO | ABS_X
@@ -373,8 +392,19 @@ func (vio *Input) OnMouseMove(x, y int32) {
 		return
 	}
 
-	vio.addEvent(uint16(EV_ABS), ABS_X, uint32(x))
-	vio.addEvent(uint16(EV_ABS), ABS_Y, uint32(y))
+	if vio.abs {
+		vio.addEvent(uint16(EV_ABS), ABS_X, uint32(x))
+		vio.addEvent(uint16(EV_ABS), ABS_Y, uint32(y))
+	} else {
+		if vio.lastCount > 0 {
+			vio.addEvent(uint16(EV_REL), REL_X, uint32(x-vio.lastX))
+			vio.addEvent(uint16(EV_REL), REL_Y, uint32(y-vio.lastY))
+			vio.Logf("mouse: %v,%v\n", x-vio.lastX, y-vio.lastY)
+		}
+		vio.lastX = x
+		vio.lastY = y
+		vio.lastCount++
+	}
 	vio.addEvent(uint16(EV_SYN), SYN_REPORT, 0)
 	vio.ProcessQueue(0)
 }
@@ -747,8 +777,12 @@ const (
 	ABS_MISC        uint16 = 0x28
 )
 
-var inputCategoriesBitmap = [128]byte{
-	0x0a, // EV_KEY | EV_ABS
+var inputPropBitmap = [1]byte{
+	0x01, // INPUT_PROP_POINTER
+}
+
+var inputCategoriesBitmap = [1]byte{
+	0x06, // EV_KEY | EV_REL
 }
 
 var inputKeyBitmap [128]byte

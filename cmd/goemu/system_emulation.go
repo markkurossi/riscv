@@ -191,7 +191,7 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 	// If gpu is configured, add its input devices.
 	if gpu != nil {
 		input := virtio.NewInput(hart, virtioROM, plic, virtioIRQ, mem,
-			gpu.Width, gpu.Height)
+			gpu.Width, gpu.Height, false)
 		mmio.Segments = append(mmio.Segments, input)
 		gpu.InputListener = input
 
