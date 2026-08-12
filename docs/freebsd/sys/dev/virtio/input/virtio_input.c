@@ -61,8 +61,8 @@ static int	vtinput_probe(device_t);
 static int	vtinput_attach(device_t);
 static int	vtinput_detach(device_t);
 static void	vtinput_intr(void *);
-static void	vtinput_read_config(device_t, struct virtio_input_config *,
-                                    int, int);
+static void	vtinput_read_cfg(device_t, struct virtio_input_config *,
+                                 int, int);
 
 static device_method_t vtinput_methods[] = {
         /* Device methods. */
@@ -126,32 +126,27 @@ vtinput_attach(device_t dev)
         sc = device_get_softc(dev);
         sc->vtinput_dev = dev;
 
-        vtinput_read_config(dev, &cfg, VIRTIO_INPUT_CFG_ID_NAME, 0);
+        vtinput_read_cfg(dev, &cfg, VIRTIO_INPUT_CFG_ID_NAME, 0);
         device_printf(dev, "%.*s\n", (int) cfg.size, cfg.u.string);
 
-        vtinput_read_config(dev, &cfg, VIRTIO_INPUT_CFG_ID_SERIAL, 0);
+#if 0
+        vtinput_read_cfg(dev, &cfg, VIRTIO_INPUT_CFG_ID_SERIAL, 0);
         device_printf(dev, "serial    : %.*s\n", (int) cfg.size, cfg.u.string);
 
-        vtinput_read_config(dev, &cfg, VIRTIO_INPUT_CFG_ID_DEVIDS, 0);
+        vtinput_read_cfg(dev, &cfg, VIRTIO_INPUT_CFG_ID_DEVIDS, 0);
         device_printf(dev, "bustype   : %d\n", (int) cfg.u.ids.bustype);
         device_printf(dev, "vendor    : %d\n", (int) cfg.u.ids.vendor);
         device_printf(dev, "product   : %d\n", (int) cfg.u.ids.product);
         device_printf(dev, "version   : %d\n", (int) cfg.u.ids.version);
+#endif
 
         /* Supported event categories. */
 
-        vtinput_read_config(dev, &cfg, VIRTIO_INPUT_CFG_EV_BITS, 0);
+        vtinput_read_cfg(dev, &cfg, VIRTIO_INPUT_CFG_EV_BITS, 0);
         ev_categories = ((uint32_t) cfg.u.bitmap[0]) |
                 (((uint32_t) cfg.u.bitmap[1]) << 8)  |
                 (((uint32_t) cfg.u.bitmap[2]) << 16) |
                 (((uint32_t) cfg.u.bitmap[3]) << 24);
-
-        if (ev_categories & 1<<EV_KEY)
-                device_printf(dev, "keyboard\n");
-        if (ev_categories & 1<<EV_REL)
-                device_printf(dev, "mouse\n");
-        if (ev_categories & 1<<EV_ABS)
-                device_printf(dev, "touchpad\n");
 
         VQ_ALLOC_INFO_INIT(&vq_info[0], 0, vtinput_intr, sc,
                            &sc->vtinput_event_vq, "%s eventq",
@@ -167,7 +162,6 @@ vtinput_attach(device_t dev)
         }
 
         int nentries = virtqueue_size(sc->vtinput_event_vq);
-        device_printf(dev, "eventq size %d\n", nentries);
 
         for (int i = 0; i < nentries; i++) {
                 struct sglist sg;
@@ -187,42 +181,98 @@ vtinput_attach(device_t dev)
 
         virtio_setup_intr(dev, INTR_TYPE_TTY);
 
+        /*
+         * Read supported keys. This is shared between keyboard and
+         * mouse/touchpad.
+         */
+        vtinput_read_cfg(dev, &cfg, VIRTIO_INPUT_CFG_EV_BITS, EV_KEY);
+
         /* Setup evdev device for keyboard. */
+        if (ev_categories & 1<<EV_KEY) {
+                int num_keys = 0;
 
-        sc->kbd = evdev_alloc();
+                sc->kbd = evdev_alloc();
 
-        evdev_set_name(sc->kbd, "VirtIO keyboard");
-        evdev_set_phys(sc->kbd, device_get_nameunit(dev));
-        evdev_set_id(sc->kbd, BUS_VIRTUAL, 1, 1, 1);
+                evdev_set_name(sc->kbd, "VirtIO keyboard");
+                evdev_set_phys(sc->kbd, device_get_nameunit(dev));
+                evdev_set_id(sc->kbd, BUS_VIRTUAL, 1, 1, 1);
 
-        evdev_support_event(sc->kbd, EV_KEY);
-        evdev_support_event(sc->kbd, EV_SYN);
+                evdev_support_event(sc->kbd, EV_KEY);
+                evdev_support_event(sc->kbd, EV_SYN);
 
-        for (int code = 0; code < 256; code++)
-                evdev_support_key(sc->kbd, code);
+                for (int i = 0; i < cfg.size; i++) {
+                        for (int j = 0; j < 8; j++) {
+                                if (cfg.u.bitmap[i] & 1<<j) {
+                                        evdev_support_key(sc->kbd, i * 8 + j);
+                                        num_keys++;
+                                }
+                        }
+                }
 
-        evdev_register(sc->kbd);
+                evdev_register(sc->kbd);
 
-        /* Setup evdev device for mouse. */
+                device_printf(dev, "keyboard with %d keys\n", num_keys);
+        }
 
-        sc->ptr = evdev_alloc();
+        /* Setup evdev device for mouse/touchpad. */
+        if (ev_categories & (1<<EV_REL | 1<<EV_ABS)) {
+                int num_keys = 0;
+                int num_props = 0;
 
-        evdev_set_name(sc->ptr, "VirtIO mouse");
-        evdev_set_phys(sc->ptr, device_get_nameunit(dev));
-        evdev_set_id(sc->ptr, BUS_VIRTUAL, 1, 2, 1);
+                sc->ptr = evdev_alloc();
 
-        evdev_support_event(sc->ptr, EV_KEY);
-        evdev_support_event(sc->ptr, EV_ABS);
-        evdev_support_event(sc->ptr, EV_SYN);
+                evdev_set_phys(sc->ptr, device_get_nameunit(dev));
+                evdev_set_id(sc->ptr, BUS_VIRTUAL, 1, 2, 1);
 
-        evdev_support_key(sc->ptr, BTN_LEFT);
-        evdev_support_key(sc->ptr, BTN_RIGHT);
-        evdev_support_key(sc->ptr, BTN_MIDDLE);
+                evdev_support_event(sc->ptr, EV_KEY);
+                evdev_support_event(sc->ptr, EV_SYN);
 
-        evdev_support_abs(sc->ptr, ABS_X, 0, 1024, 0, 0, 0);
-        evdev_support_abs(sc->ptr, ABS_Y, 0, 768, 0, 0, 0);
+                for (int i = 32; i < cfg.size; i++) {
+                        for (int j = 0; j < 8; j++) {
+                                if (cfg.u.bitmap[i] & 1<<j) {
+                                        evdev_support_key(sc->ptr, i * 8 + j);
+                                        num_keys++;
+                                }
+                        }
+                }
 
-        evdev_register(sc->ptr);
+                /* Read device properties. */
+                vtinput_read_cfg(dev, &cfg, VIRTIO_INPUT_CFG_PROP_BITS, 0);
+                for (int i = 0; i < cfg.size; i++) {
+                        for (int j = 0; j < 8; j++) {
+                                if (cfg.u.bitmap[i] & 1<<j) {
+                                        evdev_support_prop(sc->ptr, i * 8 + j);
+                                        num_props++;
+                                }
+                        }
+                }
+
+                if (ev_categories & 1<<EV_REL) {
+                        evdev_set_name(sc->ptr, "VirtIO mouse");
+
+                        evdev_support_event(sc->ptr, EV_REL);
+
+                        evdev_support_rel(sc->ptr, REL_X);
+                        evdev_support_rel(sc->ptr, REL_Y);
+                        evdev_support_rel(sc->ptr, REL_WHEEL);
+
+                        device_printf(dev, "mouse with %d buttons, %d props\n",
+                                      num_keys, num_props);
+                } else {
+                        evdev_set_name(sc->ptr, "VirtIO touchpad");
+
+                        evdev_support_event(sc->ptr, EV_ABS);
+
+                        evdev_support_abs(sc->ptr, ABS_X, 0, 1024, 0, 0, 0);
+                        evdev_support_abs(sc->ptr, ABS_Y, 0, 768, 0, 0, 0);
+
+                        device_printf(dev,
+                                      "touchpad with %d buttons, %d props\n",
+                                      num_keys, num_props);
+                }
+
+                evdev_register(sc->ptr);
+        }
 
         /* Register keyboad. */
         error = vtinput_kbd_driver_attach(dev);
@@ -289,7 +339,7 @@ vtinput_intr(void *arg)
                         evdev_push_event(sc->ptr, ev->type, ev->code,
                                          ev->value);
                 }
-                else if (ev->type == EV_ABS) {
+                else if (ev->type == EV_REL || ev->type == EV_ABS) {
                         evdev_push_event(sc->ptr, ev->type, ev->code,
                                          ev->value);
                 }
@@ -310,7 +360,7 @@ vtinput_intr(void *arg)
 }
 
 static void
-vtinput_read_config(device_t dev, struct virtio_input_config *cfg,
+vtinput_read_cfg(device_t dev, struct virtio_input_config *cfg,
                     int select, int subsel)
 {
         uint16_t *arr16;
