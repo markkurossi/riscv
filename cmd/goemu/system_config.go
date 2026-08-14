@@ -48,10 +48,31 @@ type Netdev struct {
 }
 
 type GPU struct {
-	ID     string `json:"id"`
-	Title  string `json:"title,omitempty"`
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
+	ID      string `json:"id"`
+	Title   string `json:"title,omitempty"`
+	Width   int    `json:"width"`
+	Height  int    `json:"height"`
+	Pointer string `json:"pointer,omitempty"`
+}
+
+type PointerType int
+
+const (
+	PointerRel PointerType = iota
+	PointerAbs
+)
+
+func (gpu *GPU) PointerType() (PointerType, error) {
+	switch gpu.Pointer {
+	case "abs", "absolute", "touchpad":
+		return PointerAbs, nil
+
+	case "rel", "relative", "mouse", "":
+		return PointerRel, nil
+
+	default:
+		return PointerRel, fmt.Errorf("invalid pointer type '%v'", gpu.Pointer)
+	}
 }
 
 type Device struct {
