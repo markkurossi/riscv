@@ -20,10 +20,11 @@
   ],
   "gpus": [
     {
-      "id":     "gpu",
-      "title":  "Ubuntu 24.04",
-      "width":  1024,
-      "height": 768
+      "id":      "gpu",
+      "title":   "Ubuntu 24.04",
+      "width":   1024,
+      "height":  768,
+      "pointer": "touchpad"
     }
   ],
   "devices": [

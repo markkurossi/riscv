@@ -29,13 +29,18 @@ type Input struct {
 	Width  int
 	Height int
 
+	inputDevIDs     []byte
+	inputPropBitmap []byte
+	inputCatBitmap  []byte
+	inputRelBitmap  []byte
+	inputAbsBitmap  []byte
+
 	abs  bool
 	absX []byte
 	absY []byte
 
-	lastX     int32
-	lastY     int32
-	lastCount uint64
+	lastX int32
+	lastY int32
 
 	sel    uint8
 	subsel uint8
@@ -81,28 +86,43 @@ func NewInput(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	vio.Init(2)
 	vio.MMIO.Handler = vio
 
-	// struct virtio_input_absinfo {
-	//   le32  min;
-	//   le32  max;
-	//   le32  fuzz;
-	//   le32  flat;
-	//   le32  res;
-	// };
-
 	vio.Infof("screen: %v\u00d7%v", vio.Width, vio.Height)
 
-	vio.absX = make([]byte, 20)
-	vioBO.PutUint32(vio.absX[4:], uint32(vio.Width-1))
-
-	vio.absY = make([]byte, 20)
-	vioBO.PutUint32(vio.absY[4:], uint32(vio.Height-1))
+	// struct virtio_input_devids {
+	//   le16  bustype;
+	//   le16  vendor;
+	//   le16  product;
+	//   le16  version;
+	// };
+	vio.inputDevIDs = []byte{
+		BUS_VIRTUAL, 0x00,
+		0x01, 0x00,
+		0x01, 0x00,
+		0x01, 0x00,
+	}
 
 	if vio.abs {
-		inputPropBitmap[0] = 0x02       // INPUT_PROP_DIRECT
-		inputCategoriesBitmap[0] = 0x0a // EV_KEY | EV_ABS
+		vio.inputPropBitmap = []byte{0x02} // INPUT_PROP_DIRECT
+		vio.inputCatBitmap = []byte{0x0a}  // EV_KEY | EV_ABS
+		vio.inputAbsBitmap = []byte{0x03}  // ABS_X | ABS_Y
+
+		// struct virtio_input_absinfo {
+		//   le32  min;
+		//   le32  max;
+		//   le32  fuzz;
+		//   le32  flat;
+		//   le32  res;
+		// };
+
+		vio.absX = make([]byte, 20)
+		vioBO.PutUint32(vio.absX[4:], uint32(vio.Width-1))
+
+		vio.absY = make([]byte, 20)
+		vioBO.PutUint32(vio.absY[4:], uint32(vio.Height-1))
 	} else {
-		inputPropBitmap[0] = 0x01       // INPUT_PROP_POINTER
-		inputCategoriesBitmap[0] = 0x06 // EV_KEY | EV_REL
+		vio.inputPropBitmap = []byte{0x01}      // INPUT_PROP_POINTER
+		vio.inputCatBitmap = []byte{0x06}       // EV_KEY | EV_REL
+		vio.inputRelBitmap = []byte{0x03, 0x01} // REL_X | REL_Y, REL_WHEEL
 	}
 
 	go vio.receiver(vio.queues[0])
@@ -211,28 +231,40 @@ var inputRegs = map[uint64]string{
 
 func (vio *Input) cfg() ([]byte, int) {
 	var data []byte
+
 	switch uint16(vio.sel)<<8 | uint16(vio.subsel) {
 	case 0x0000: // VIRTIO_INPUT_CFG_UNSET
 	case 0x0100: // VIRTIO_INPUT_CFG_ID_NAME
 		data = []byte("GoEMU Input Device")
 	case 0x0200: // VIRTIO_INPUT_CFG_ID_SERIAL
 		data = []byte("424242")
+	case 0x0300: // VIRTIO_INPUT_CFG_ID_DEVIDS
+		data = vio.inputDevIDs
 	case 0x1000: // VIRTIO_INPUT_CFG_PROP_BITS
-		data = inputPropBitmap[:]
+		data = vio.inputPropBitmap
 	case 0x1100: // VIRTIO_INPUT_CFG_EV_BITS | 0 - supported categories
-		data = inputCategoriesBitmap[:]
+		data = vio.inputCatBitmap
 	case 0x1101: // VIRTIO_INPUT_CFG_EV_BITS | EV_KEY
 		data = inputKeyBitmap[:]
 	case 0x1102: // VIRTIO_INPUT_CFG_EV_BITS | EV_REL
-		data = inputRelBitmap[:]
+		data = vio.inputRelBitmap
 	case 0x1103: // VIRTIO_INPUT_CFG_EV_BITS | EV_ABS
-		data = inputAbsBitmap[:]
+		data = vio.inputAbsBitmap
+	case 0x1112: // VIRTIO_INPUT_CFG_EV_BITS | EV_SND
+		data = nil
+	case 0x1114: // VIRTIO_INPUT_CFG_EV_BITS | EV_REP
+		data = nil
 	case 0x1200: // VIRTIO_INPUT_CFG_ABS_INFO | ABS_X
 		data = vio.absX
 	case 0x1201: // VIRTIO_INPUT_CFG_ABS_INFO | ABS_Y
 		data = vio.absY
 	default:
 		vio.Debugf("cfg: skipping: sel=%02x, subsel=%02x", vio.sel, vio.subsel)
+	}
+
+	if vio.sel == 0x11 {
+		vio.Logf("VIRTIO_INPUT_CFG_EV_BITS: %v=%x",
+			KeyEventType(vio.subsel), data)
 	}
 
 	return data, len(data)
@@ -350,6 +382,7 @@ type InputListener interface {
 	OnButtonRelease(key MouseButton)
 	OnButtonPress(key MouseButton)
 	OnButtonRepeat(key MouseButton)
+	OnMouseEnter(entered bool, x, y int32)
 	OnMouseMove(x, y int32)
 }
 
@@ -383,6 +416,14 @@ func (vio *Input) OnButtonRepeat(button MouseButton) {
 	vio.keyEvent(uint16(button), 2)
 }
 
+// OnMouseEnter implements InputListener.OnMouseEnter.
+func (vio *Input) OnMouseEnter(entered bool, x, y int32) {
+	if entered {
+		vio.lastX = x
+		vio.lastY = y
+	}
+}
+
 // OnMouseMove implements InputListener.OnMouseMove
 func (vio *Input) OnMouseMove(x, y int32) {
 	vio.M.Lock()
@@ -396,13 +437,11 @@ func (vio *Input) OnMouseMove(x, y int32) {
 		vio.addEvent(uint16(EV_ABS), ABS_X, uint32(x))
 		vio.addEvent(uint16(EV_ABS), ABS_Y, uint32(y))
 	} else {
-		if vio.lastCount > 0 {
-			vio.addEvent(uint16(EV_REL), REL_X, uint32(x-vio.lastX))
-			vio.addEvent(uint16(EV_REL), REL_Y, uint32(y-vio.lastY))
-		}
+		vio.addEvent(uint16(EV_REL), REL_X, uint32(x-vio.lastX))
+		vio.addEvent(uint16(EV_REL), REL_Y, uint32(y-vio.lastY))
+
 		vio.lastX = x
 		vio.lastY = y
-		vio.lastCount++
 	}
 	vio.addEvent(uint16(EV_SYN), SYN_REPORT, 0)
 	vio.ProcessQueue(0)
@@ -462,6 +501,29 @@ const (
 	EV_PWR       KeyEventType = 0x16
 	EV_FF_STATUS KeyEventType = 0x17
 )
+
+var keyEventTypes = map[KeyEventType]string{
+	EV_SYN:       "EV_SYN",
+	EV_KEY:       "EV_KEY",
+	EV_REL:       "EV_REL",
+	EV_ABS:       "EV_ABS",
+	EV_MSC:       "EV_MSC",
+	EV_SW:        "EV_SW",
+	EV_LED:       "EV_LED",
+	EV_SND:       "EV_SND",
+	EV_REP:       "EV_REP",
+	EV_FF:        "EV_FF",
+	EV_PWR:       "EV_PWR",
+	EV_FF_STATUS: "EV_FF_STATUS",
+}
+
+func (t KeyEventType) String() string {
+	name, ok := keyEventTypes[t]
+	if ok {
+		return name
+	}
+	return fmt.Sprintf("{KeyEventType %d}", int(t))
+}
 
 type Key uint16
 
@@ -776,24 +838,31 @@ const (
 	ABS_MISC        uint16 = 0x28
 )
 
-var inputPropBitmap = [1]byte{
-	0x01, // INPUT_PROP_POINTER
-}
-
-var inputCategoriesBitmap = [1]byte{
-	0x06, // EV_KEY | EV_REL
-}
+const (
+	BUS_PCI       = 0x01
+	BUS_ISAPNP    = 0x02
+	BUS_USB       = 0x03
+	BUS_HIL       = 0x04
+	BUS_BLUETOOTH = 0x05
+	BUS_VIRTUAL   = 0x06
+	BUS_ISA       = 0x10
+	BUS_I8042     = 0x11
+	BUS_XTKBD     = 0x12
+	BUS_RS232     = 0x13
+	BUS_GAMEPORT  = 0x14
+	BUS_PARPORT   = 0x15
+	BUS_AMIGA     = 0x16
+	BUS_ADB       = 0x17
+	BUS_I2C       = 0x18
+	BUS_HOST      = 0x19
+	BUS_GSC       = 0x1A
+	BUS_ATARI     = 0x1B
+	BUS_SPI       = 0x1C
+	BUS_RMI       = 0x1D
+	BUS_CEC       = 0x1E
+)
 
 var inputKeyBitmap [128]byte
-
-var inputRelBitmap = [128]byte{
-	0x03, // REL_X | REL_Y
-	0x01, // REL_WHEEL
-}
-
-var inputAbsBitmap = [128]byte{
-	0x03, // ABS_X | ABS_Y
-}
 
 func setBit(v uint16) {
 	inputKeyBitmap[v/8] |= 1 << (v % 8)

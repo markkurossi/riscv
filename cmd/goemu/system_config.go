@@ -14,6 +14,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/markkurossi/riscv/virtio"
 )
 
 type SystemConfig struct {
@@ -55,23 +57,17 @@ type GPU struct {
 	Pointer string `json:"pointer,omitempty"`
 }
 
-type PointerType int
-
-const (
-	PointerRel PointerType = iota
-	PointerAbs
-)
-
-func (gpu *GPU) PointerType() (PointerType, error) {
+func (gpu *GPU) PointerType() (virtio.PointerType, error) {
 	switch gpu.Pointer {
 	case "abs", "absolute", "touchpad":
-		return PointerAbs, nil
+		return virtio.PointerAbs, nil
 
 	case "rel", "relative", "mouse", "":
-		return PointerRel, nil
+		return virtio.PointerRel, nil
 
 	default:
-		return PointerRel, fmt.Errorf("invalid pointer type '%v'", gpu.Pointer)
+		return virtio.PointerRel, fmt.Errorf("invalid pointer type '%v'",
+			gpu.Pointer)
 	}
 }
 

@@ -21,10 +21,11 @@
   ],
   "gpus": [
     {
-      "id":     "gpu",
-      "title":  "FreeBSD 15.1",
-      "width":  1024,
-      "height": 768
+      "id":      "gpu",
+      "title":   "FreeBSD 15.1",
+      "width":   1024,
+      "height":  768,
+      "pointer": "mouse"
     }
   ],
   "_devices": [

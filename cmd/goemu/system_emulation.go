@@ -170,9 +170,12 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 			if gpudev == nil {
 				return fmt.Errorf("unknown GPU: %v", dev.GPU)
 			}
-			var err error
+			pointer, err := gpudev.PointerType()
+			if err != nil {
+				return err
+			}
 			gpu, err = virtio.NewGPU(hart, virtioROM, plic, virtioIRQ, mem,
-				gpudev.Title, gpudev.Width, gpudev.Height)
+				gpudev.Title, gpudev.Width, gpudev.Height, pointer)
 			if err != nil {
 				return err
 			}
@@ -191,7 +194,7 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 	// If gpu is configured, add its input devices.
 	if gpu != nil {
 		input := virtio.NewInput(hart, virtioROM, plic, virtioIRQ, mem,
-			gpu.Width, gpu.Height, false)
+			gpu.Width, gpu.Height, gpu.Pointer == virtio.PointerAbs)
 		mmio.Segments = append(mmio.Segments, input)
 		gpu.InputListener = input
 

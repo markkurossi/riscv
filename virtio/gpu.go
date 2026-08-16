@@ -38,6 +38,13 @@ const (
 	GPUSize     = 4096
 )
 
+type PointerType int
+
+const (
+	PointerRel PointerType = iota
+	PointerAbs
+)
+
 // Feature bits.
 const (
 	// Virgl 3D mode is supported.
@@ -65,13 +72,15 @@ const (
 
 type GPU struct {
 	MMIO
-	Title  string
-	Width  int
-	Height int
+	Title   string
+	Width   int
+	Height  int
+	Pointer PointerType
 
 	InputListener InputListener
 	lastX         int
 	lastY         int
+	grabbed       bool
 
 	renderM    sync.Mutex
 	window     *glfw.Window
@@ -113,7 +122,8 @@ const (
 )
 
 func NewGPU(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
-	mem *memory.Memory, title string, width, height int) (*GPU, error) {
+	mem *memory.Memory, title string, width, height int,
+	pointer PointerType) (*GPU, error) {
 
 	logo, err := loadImage("resources/goemu-small.png")
 	if err != nil {
@@ -135,9 +145,10 @@ func NewGPU(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 			IRQ:      irq,
 			Mem:      mem,
 		},
-		Title:  title,
-		Width:  width,
-		Height: height,
+		Title:   title,
+		Width:   width,
+		Height:  height,
+		Pointer: pointer,
 		pixels: NewBGRAImage(image.Rectangle{
 			Max: image.Point{width, height},
 		}),
@@ -170,16 +181,14 @@ func (vio *GPU) EventLoop() {
 		return
 	}
 
-	title := "GoEMU"
-	if len(vio.Title) != 0 {
-		title += " \u2014 " + vio.Title
-	}
-
-	vio.window, err = glfw.CreateWindow(vio.Width, vio.Height, title, nil, nil)
+	vio.window, err = glfw.CreateWindow(vio.Width, vio.Height, "", nil, nil)
 	if err != nil {
 		vio.Errorf("glfw.CreateWindow: %v", err)
 		return
 	}
+	vio.setTitle()
+
+	vio.window.SetCursorEnterCallback(vio.cursorEnterCallback)
 	vio.window.SetCursorPosCallback(vio.cursorPosCallback)
 	vio.window.SetMouseButtonCallback(vio.mouseButtonCallback)
 	vio.window.SetKeyCallback(vio.keyCallback)
@@ -286,6 +295,21 @@ func (vio *GPU) drawImage(img image.Image) {
 	dstRect := image.Rect(x, y, x+b.Dx(), y+b.Dy())
 
 	draw.Draw(vio.pixels, dstRect, img, b.Min, draw.Over)
+}
+
+func (vio *GPU) grabbable() bool {
+	return vio.Pointer == PointerRel
+}
+
+func (vio *GPU) setTitle() {
+	title := "GoEMU"
+	if len(vio.Title) != 0 {
+		title += " \u2014 " + vio.Title
+	}
+	if vio.grabbed {
+		title += " (\u2325 ESC)"
+	}
+	vio.window.SetTitle(title)
 }
 
 // Halt implements mmu.MMIO.Halt.
@@ -930,7 +954,19 @@ func (vio *GPU) cmdMoveCursor(hdr *GPUCtrlHdr, hdrBuf []byte,
 	return 24, nil
 }
 
+func (vio *GPU) cursorEnterCallback(w *glfw.Window, entered bool) {
+	x, y := w.GetCursorPos()
+	ix := int32(x)
+	iy := int32(y)
+
+	vio.InputListener.OnMouseEnter(entered, ix, iy)
+}
+
 func (vio *GPU) cursorPosCallback(w *glfw.Window, x, y float64) {
+	if vio.grabbable() && !vio.grabbed {
+		return
+	}
+
 	ix := int(x)
 	iy := int(y)
 
@@ -940,11 +976,14 @@ func (vio *GPU) cursorPosCallback(w *glfw.Window, x, y float64) {
 	vio.lastX = ix
 	vio.lastY = iy
 
-	vio.Tracef("cursor: x=%v, y=%v", ix, iy)
-
-	if vio.InputListener == nil ||
-		ix < 0 || ix >= vio.Width || iy < 0 || iy >= vio.Height {
+	if vio.InputListener == nil {
 		return
+	}
+	switch vio.Pointer {
+	case PointerAbs:
+		if ix < 0 || ix >= vio.Width || iy < 0 || iy >= vio.Height {
+			return
+		}
 	}
 
 	vio.InputListener.OnMouseMove(int32(ix), int32(iy))
@@ -960,6 +999,17 @@ func (vio *GPU) mouseButtonCallback(w *glfw.Window, button glfw.MouseButton,
 			button, action, mod)
 		return
 	}
+	if vio.grabbable() && !vio.grabbed {
+		if action != glfw.Press || k != BTN_LEFT {
+			return
+		}
+		vio.window.SetInputMode(glfw.CursorMode, glfw.CursorDisabled)
+		vio.grabbed = true
+		vio.setTitle()
+		// Eat grab click.
+		return
+	}
+
 	if vio.InputListener != nil {
 		switch action {
 		case glfw.Release:
@@ -976,6 +1026,16 @@ func (vio *GPU) keyCallback(w *glfw.Window, key glfw.Key, scancode int,
 	action glfw.Action, mod glfw.ModifierKey) {
 	vio.Tracef("key: key=%v, scancode=%v, action=%v, mod=%v",
 		key, scancode, action, mod)
+	if key == glfw.KeyEscape && mod&(1<<2) != 0 && action == glfw.Press {
+		if vio.grabbable() && vio.grabbed {
+			vio.window.SetInputMode(glfw.CursorMode, glfw.CursorNormal)
+			vio.grabbed = false
+			vio.setTitle()
+		}
+	}
+	if vio.grabbable() && !vio.grabbed {
+		return
+	}
 
 	k, ok := inputKeyMap[key]
 	if !ok {
