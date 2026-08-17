@@ -74,6 +74,8 @@ type GPU struct {
 	MouseListener    MouseListener
 	lastX            int
 	lastY            int
+	scrollX          float64
+	scrollY          float64
 	grabbed          bool
 
 	leftAlt  bool
@@ -187,6 +189,7 @@ func (vio *GPU) EventLoop() {
 
 	vio.window.SetCursorEnterCallback(vio.cursorEnterCallback)
 	vio.window.SetCursorPosCallback(vio.cursorPosCallback)
+	vio.window.SetScrollCallback(vio.scrollCallback)
 	vio.window.SetMouseButtonCallback(vio.mouseButtonCallback)
 	vio.window.SetKeyCallback(vio.keyCallback)
 
@@ -988,6 +991,29 @@ func (vio *GPU) cursorPosCallback(w *glfw.Window, x, y float64) {
 	}
 
 	vio.MouseListener.OnMouseMove(int32(ix), int32(iy))
+}
+
+func (vio *GPU) scrollCallback(w *glfw.Window, xoff, yoff float64) {
+	if vio.MouseListener == nil {
+		return
+	}
+	if vio.grabbable() && !vio.grabbed {
+		return
+	}
+	vio.scrollX += xoff
+	vio.scrollY += yoff
+
+	x := int32(vio.scrollX)
+	y := int32(vio.scrollY)
+
+	vio.scrollX -= float64(x)
+	vio.scrollY -= float64(y)
+
+	if x == 0 && y == 0 {
+		return
+	}
+
+	vio.MouseListener.OnMouseScroll(x, y)
 }
 
 func (vio *GPU) mouseButtonCallback(w *glfw.Window, button glfw.MouseButton,

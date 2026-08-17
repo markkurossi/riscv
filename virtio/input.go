@@ -130,15 +130,21 @@ func NewInput(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		vio.inputKeyBitmap = inputKeyboardBitmap[:]
 
 	case InputMouse:
-		vio.inputPropBitmap = []byte{0x01}      // INPUT_PROP_POINTER
-		vio.inputCatBitmap = []byte{0x06}       // EV_KEY | EV_REL
-		vio.inputRelBitmap = []byte{0x03, 0x01} // REL_X | REL_Y, REL_WHEEL
+		vio.inputPropBitmap = []byte{0x01} // INPUT_PROP_POINTER
+		vio.inputCatBitmap = []byte{0x06}  // EV_KEY | EV_REL
+		vio.inputRelBitmap = []byte{
+			0x43, // REL_X | REL_Y | REL_HWHEEL
+			0x01, // REL_WHEEL
+		}
 		vio.inputKeyBitmap = inputMouseBitmap[:]
 
 	case InputTouchpad:
 		vio.inputPropBitmap = []byte{0x02} // INPUT_PROP_DIRECT
 		vio.inputCatBitmap = []byte{0x0a}  // EV_KEY | EV_ABS
-		vio.inputAbsBitmap = []byte{0x03}  // ABS_X | ABS_Y
+		vio.inputAbsBitmap = []byte{
+			0x43, // ABS_X | ABS_Y | REL_HWHEEL
+			0x01, // REL_WHEEL
+		}
 		vio.inputKeyBitmap = inputMouseBitmap[:]
 
 		// struct virtio_input_absinfo {
@@ -423,6 +429,7 @@ type MouseListener interface {
 	OnButtonRepeat(key MouseButton)
 	OnMouseEnter(entered bool, x, y int32)
 	OnMouseMove(x, y int32)
+	OnMouseScroll(x, y int32)
 }
 
 // OnKeyRelease implements KeyboardListener.OnKeyRelease.
@@ -463,7 +470,7 @@ func (vio *Input) OnMouseEnter(entered bool, x, y int32) {
 	}
 }
 
-// OnMouseMove implements InputListener.OnMouseMove
+// OnMouseMove implements InputListener.OnMouseMove.
 func (vio *Input) OnMouseMove(x, y int32) {
 	vio.M.Lock()
 	defer vio.M.Unlock()
@@ -482,6 +489,31 @@ func (vio *Input) OnMouseMove(x, y int32) {
 		vio.addEvent(uint16(EV_REL), REL_Y, uint32(y-vio.lastY))
 		vio.lastX = x
 		vio.lastY = y
+
+	case InputKeyboard:
+		return
+	}
+	vio.addEvent(uint16(EV_SYN), SYN_REPORT, 0)
+	vio.ProcessQueue(0)
+}
+
+// OnMouseScroll implements InputListener.OnMouseScroll.
+func (vio *Input) OnMouseScroll(x, y int32) {
+	vio.M.Lock()
+	defer vio.M.Unlock()
+
+	if !vio.DriverOK() {
+		return
+	}
+
+	switch vio.Type {
+	case InputTouchpad, InputMouse:
+		if x != 0 {
+			vio.addEvent(uint16(EV_REL), REL_WHEEL, uint32(-x))
+		}
+		if y != 0 {
+			vio.addEvent(uint16(EV_REL), REL_HWHEEL, uint32(-y))
+		}
 
 	case InputKeyboard:
 		return
@@ -838,16 +870,20 @@ const (
 )
 
 const (
-	REL_X      uint16 = 0x00
-	REL_Y      uint16 = 0x01
-	REL_Z      uint16 = 0x02
-	REL_RX     uint16 = 0x03
-	REL_RY     uint16 = 0x04
-	REL_RZ     uint16 = 0x05
-	REL_HWHEEL uint16 = 0x06
-	REL_DIAL   uint16 = 0x07
-	REL_WHEEL  uint16 = 0x08
-	REL_MISC   uint16 = 0x09
+	REL_X             uint16 = 0x00
+	REL_Y             uint16 = 0x01
+	REL_Z             uint16 = 0x02
+	REL_RX            uint16 = 0x03
+	REL_RY            uint16 = 0x04
+	REL_RZ            uint16 = 0x05
+	REL_HWHEEL        uint16 = 0x06
+	REL_DIAL          uint16 = 0x07
+	REL_WHEEL         uint16 = 0x08
+	REL_MISC          uint16 = 0x09
+	REL_RESERVED      uint16 = 0x0a
+	REL_WHEEL_HI_RES  uint16 = 0x0b
+	REL_HWHEEL_HI_RES uint16 = 0x0c
+	REL_MAX           uint16 = 0x0f
 )
 
 const (
