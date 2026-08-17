@@ -294,8 +294,13 @@ func (vio *Input) cfg() ([]byte, int) {
 	}
 
 	if vio.sel == 0x11 {
-		vio.Logf("VIRTIO_INPUT_CFG_EV_BITS: %v=%x",
-			KeyEventType(vio.subsel), data)
+		if len(data) > 0 {
+			vio.Tracef("%v: VIRTIO_INPUT_CFG_EV_BITS: %v:\n%s",
+				vio.Type, KeyEventType(vio.subsel), hex.Dump(data))
+		} else {
+			vio.Tracef("%v: VIRTIO_INPUT_CFG_EV_BITS: %v",
+				vio.Type, KeyEventType(vio.subsel))
+		}
 	}
 
 	return data, len(data)

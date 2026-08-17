@@ -76,6 +76,9 @@ type GPU struct {
 	lastY            int
 	grabbed          bool
 
+	leftAlt  bool
+	rightAlt bool
+
 	renderM    sync.Mutex
 	window     *glfw.Window
 	pixels     *BGRAImage
@@ -1025,11 +1028,22 @@ func (vio *GPU) keyCallback(w *glfw.Window, key glfw.Key, scancode int,
 	action glfw.Action, mod glfw.ModifierKey) {
 	vio.Tracef("key: key=%v, scancode=%v, action=%v, mod=%v",
 		key, scancode, action, mod)
+
 	if key == glfw.KeyEscape && mod&(1<<2) != 0 && action == glfw.Press {
 		if vio.grabbable() && vio.grabbed {
 			vio.window.SetInputMode(glfw.CursorMode, glfw.CursorNormal)
 			vio.grabbed = false
 			vio.setTitle()
+
+			// We have passed alt press to guest, now release it.
+			if vio.leftAlt {
+				vio.KeyboardListener.OnKeyRelease(KEY_LEFTALT)
+				vio.leftAlt = false
+			}
+			if vio.rightAlt {
+				vio.KeyboardListener.OnKeyRelease(KEY_RIGHTALT)
+				vio.rightAlt = false
+			}
 		}
 	}
 	if vio.grabbable() && !vio.grabbed {
@@ -1045,6 +1059,13 @@ func (vio *GPU) keyCallback(w *glfw.Window, key glfw.Key, scancode int,
 			key, scancode, action, mod)
 		return
 	}
+	switch k {
+	case KEY_LEFTALT:
+		vio.leftAlt = action == glfw.Press
+	case KEY_RIGHTALT:
+		vio.rightAlt = action == glfw.Press
+	}
+
 	switch action {
 	case glfw.Release:
 		vio.KeyboardListener.OnKeyRelease(k)
