@@ -38,13 +38,6 @@ const (
 	GPUSize     = 4096
 )
 
-type PointerType int
-
-const (
-	PointerRel PointerType = iota
-	PointerAbs
-)
-
 // Feature bits.
 const (
 	// Virgl 3D mode is supported.
@@ -75,12 +68,13 @@ type GPU struct {
 	Title   string
 	Width   int
 	Height  int
-	Pointer PointerType
+	Pointer InputType
 
-	InputListener InputListener
-	lastX         int
-	lastY         int
-	grabbed       bool
+	KeyboardListener KeyboardListener
+	MouseListener    MouseListener
+	lastX            int
+	lastY            int
+	grabbed          bool
 
 	renderM    sync.Mutex
 	window     *glfw.Window
@@ -123,7 +117,7 @@ const (
 
 func NewGPU(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 	mem *memory.Memory, title string, width, height int,
-	pointer PointerType) (*GPU, error) {
+	pointer InputType) (*GPU, error) {
 
 	logo, err := loadImage("resources/goemu-small.png")
 	if err != nil {
@@ -298,7 +292,7 @@ func (vio *GPU) drawImage(img image.Image) {
 }
 
 func (vio *GPU) grabbable() bool {
-	return vio.Pointer == PointerRel
+	return vio.Pointer == InputMouse
 }
 
 func (vio *GPU) setTitle() {
@@ -955,14 +949,21 @@ func (vio *GPU) cmdMoveCursor(hdr *GPUCtrlHdr, hdrBuf []byte,
 }
 
 func (vio *GPU) cursorEnterCallback(w *glfw.Window, entered bool) {
+	if vio.MouseListener == nil {
+		return
+	}
+
 	x, y := w.GetCursorPos()
 	ix := int32(x)
 	iy := int32(y)
 
-	vio.InputListener.OnMouseEnter(entered, ix, iy)
+	vio.MouseListener.OnMouseEnter(entered, ix, iy)
 }
 
 func (vio *GPU) cursorPosCallback(w *glfw.Window, x, y float64) {
+	if vio.MouseListener == nil {
+		return
+	}
 	if vio.grabbable() && !vio.grabbed {
 		return
 	}
@@ -976,17 +977,14 @@ func (vio *GPU) cursorPosCallback(w *glfw.Window, x, y float64) {
 	vio.lastX = ix
 	vio.lastY = iy
 
-	if vio.InputListener == nil {
-		return
-	}
 	switch vio.Pointer {
-	case PointerAbs:
+	case InputTouchpad:
 		if ix < 0 || ix >= vio.Width || iy < 0 || iy >= vio.Height {
 			return
 		}
 	}
 
-	vio.InputListener.OnMouseMove(int32(ix), int32(iy))
+	vio.MouseListener.OnMouseMove(int32(ix), int32(iy))
 }
 
 func (vio *GPU) mouseButtonCallback(w *glfw.Window, button glfw.MouseButton,
@@ -1009,16 +1007,17 @@ func (vio *GPU) mouseButtonCallback(w *glfw.Window, button glfw.MouseButton,
 		// Eat grab click.
 		return
 	}
+	if vio.MouseListener == nil {
+		return
+	}
 
-	if vio.InputListener != nil {
-		switch action {
-		case glfw.Release:
-			vio.InputListener.OnButtonRelease(k)
-		case glfw.Press:
-			vio.InputListener.OnButtonPress(k)
-		case glfw.Repeat:
-			vio.InputListener.OnButtonRepeat(k)
-		}
+	switch action {
+	case glfw.Release:
+		vio.MouseListener.OnButtonRelease(k)
+	case glfw.Press:
+		vio.MouseListener.OnButtonPress(k)
+	case glfw.Repeat:
+		vio.MouseListener.OnButtonRepeat(k)
 	}
 }
 
@@ -1036,6 +1035,9 @@ func (vio *GPU) keyCallback(w *glfw.Window, key glfw.Key, scancode int,
 	if vio.grabbable() && !vio.grabbed {
 		return
 	}
+	if vio.KeyboardListener == nil {
+		return
+	}
 
 	k, ok := inputKeyMap[key]
 	if !ok {
@@ -1043,15 +1045,13 @@ func (vio *GPU) keyCallback(w *glfw.Window, key glfw.Key, scancode int,
 			key, scancode, action, mod)
 		return
 	}
-	if vio.InputListener != nil {
-		switch action {
-		case glfw.Release:
-			vio.InputListener.OnKeyRelease(k)
-		case glfw.Press:
-			vio.InputListener.OnKeyPress(k)
-		case glfw.Repeat:
-			vio.InputListener.OnKeyRepeat(k)
-		}
+	switch action {
+	case glfw.Release:
+		vio.KeyboardListener.OnKeyRelease(k)
+	case glfw.Press:
+		vio.KeyboardListener.OnKeyPress(k)
+	case glfw.Repeat:
+		vio.KeyboardListener.OnKeyRepeat(k)
 	}
 }
 

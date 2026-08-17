@@ -23,19 +23,42 @@ const (
 	InputSize     = 4096
 )
 
+type InputType int
+
+const (
+	InputKeyboard InputType = iota
+	InputMouse
+	InputTouchpad
+)
+
+var inputTypes = map[InputType]string{
+	InputKeyboard: "keyboard",
+	InputMouse:    "mouse",
+	InputTouchpad: "touchpad",
+}
+
+func (t InputType) String() string {
+	name, ok := inputTypes[t]
+	if ok {
+		return name
+	}
+	return fmt.Sprintf("{InputType %d}", t)
+}
+
 type Input struct {
 	MMIO
 
 	Width  int
 	Height int
+	Type   InputType
 
 	inputDevIDs     []byte
 	inputPropBitmap []byte
 	inputCatBitmap  []byte
+	inputKeyBitmap  []byte
 	inputRelBitmap  []byte
 	inputAbsBitmap  []byte
 
-	abs  bool
 	absX []byte
 	absY []byte
 
@@ -59,7 +82,7 @@ type InputEvent struct {
 }
 
 func NewInput(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
-	mem *memory.Memory, width, height int, absolute bool) *Input {
+	mem *memory.Memory, width, height int, inputType InputType) *Input {
 
 	vio := &Input{
 		MMIO: MMIO{
@@ -77,16 +100,16 @@ func NewInput(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		},
 		Width:   width,
 		Height:  height,
-		abs:     absolute,
+		Type:    inputType,
 		recvCh:  make(chan uint16, queueNumMax),
 		eventCh: make(chan *InputEvent, queueNumMax),
 	}
-	plic.IRQs[irq] = "input"
+	plic.IRQs[irq] = inputType.String()
 
 	vio.Init(2)
 	vio.MMIO.Handler = vio
 
-	vio.Infof("screen: %v\u00d7%v", vio.Width, vio.Height)
+	vio.Infof("input %v: screen %v\u00d7%v", inputType, vio.Width, vio.Height)
 
 	// struct virtio_input_devids {
 	//   le16  bustype;
@@ -101,10 +124,22 @@ func NewInput(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 		0x01, 0x00,
 	}
 
-	if vio.abs {
+	switch vio.Type {
+	case InputKeyboard:
+		vio.inputCatBitmap = []byte{0x02} // EV_KEY
+		vio.inputKeyBitmap = inputKeyboardBitmap[:]
+
+	case InputMouse:
+		vio.inputPropBitmap = []byte{0x01}      // INPUT_PROP_POINTER
+		vio.inputCatBitmap = []byte{0x06}       // EV_KEY | EV_REL
+		vio.inputRelBitmap = []byte{0x03, 0x01} // REL_X | REL_Y, REL_WHEEL
+		vio.inputKeyBitmap = inputMouseBitmap[:]
+
+	case InputTouchpad:
 		vio.inputPropBitmap = []byte{0x02} // INPUT_PROP_DIRECT
 		vio.inputCatBitmap = []byte{0x0a}  // EV_KEY | EV_ABS
 		vio.inputAbsBitmap = []byte{0x03}  // ABS_X | ABS_Y
+		vio.inputKeyBitmap = inputMouseBitmap[:]
 
 		// struct virtio_input_absinfo {
 		//   le32  min;
@@ -119,10 +154,6 @@ func NewInput(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 
 		vio.absY = make([]byte, 20)
 		vioBO.PutUint32(vio.absY[4:], uint32(vio.Height-1))
-	} else {
-		vio.inputPropBitmap = []byte{0x01}      // INPUT_PROP_POINTER
-		vio.inputCatBitmap = []byte{0x06}       // EV_KEY | EV_REL
-		vio.inputRelBitmap = []byte{0x03, 0x01} // REL_X | REL_Y, REL_WHEEL
 	}
 
 	go vio.receiver(vio.queues[0])
@@ -245,7 +276,7 @@ func (vio *Input) cfg() ([]byte, int) {
 	case 0x1100: // VIRTIO_INPUT_CFG_EV_BITS | 0 - supported categories
 		data = vio.inputCatBitmap
 	case 0x1101: // VIRTIO_INPUT_CFG_EV_BITS | EV_KEY
-		data = inputKeyBitmap[:]
+		data = vio.inputKeyBitmap
 	case 0x1102: // VIRTIO_INPUT_CFG_EV_BITS | EV_REL
 		data = vio.inputRelBitmap
 	case 0x1103: // VIRTIO_INPUT_CFG_EV_BITS | EV_ABS
@@ -375,10 +406,13 @@ func (vio *Input) Store64(paddr uint64, v uint64) error {
 	return vio.MMIO.Store64(paddr, v)
 }
 
-type InputListener interface {
+type KeyboardListener interface {
 	OnKeyRelease(key Key)
 	OnKeyPress(key Key)
 	OnKeyRepeat(key Key)
+}
+
+type MouseListener interface {
 	OnButtonRelease(key MouseButton)
 	OnButtonPress(key MouseButton)
 	OnButtonRepeat(key MouseButton)
@@ -386,37 +420,37 @@ type InputListener interface {
 	OnMouseMove(x, y int32)
 }
 
-// OnKeyRelease implements InputListener.OnKeyRelease.
+// OnKeyRelease implements KeyboardListener.OnKeyRelease.
 func (vio *Input) OnKeyRelease(key Key) {
 	vio.keyEvent(uint16(key), 0)
 }
 
-// OnKeyPress implements InputListener.OnKeyPress.
+// OnKeyPress implements KeyboardListener.OnKeyPress.
 func (vio *Input) OnKeyPress(key Key) {
 	vio.keyEvent(uint16(key), 1)
 }
 
-// OnKeyRepeat implements InputListener.OnKeyRepeat.
+// OnKeyRepeat implements KeyboardListener.OnKeyRepeat.
 func (vio *Input) OnKeyRepeat(key Key) {
 	vio.keyEvent(uint16(key), 2)
 }
 
-// OnButtonRelease implements InputListener.OnButtonRelease.
+// OnButtonRelease implements MouseListener.OnButtonRelease.
 func (vio *Input) OnButtonRelease(button MouseButton) {
 	vio.keyEvent(uint16(button), 0)
 }
 
-// OnButtonPress implements InputListener.OnButtonPress.
+// OnButtonPress implements MouseListener.OnButtonPress.
 func (vio *Input) OnButtonPress(button MouseButton) {
 	vio.keyEvent(uint16(button), 1)
 }
 
-// OnButtonRepeat implements InputListener.OnButtonRepeat.
+// OnButtonRepeat implements MouseListener.OnButtonRepeat.
 func (vio *Input) OnButtonRepeat(button MouseButton) {
 	vio.keyEvent(uint16(button), 2)
 }
 
-// OnMouseEnter implements InputListener.OnMouseEnter.
+// OnMouseEnter implements MouseListener.OnMouseEnter.
 func (vio *Input) OnMouseEnter(entered bool, x, y int32) {
 	if entered {
 		vio.lastX = x
@@ -433,15 +467,19 @@ func (vio *Input) OnMouseMove(x, y int32) {
 		return
 	}
 
-	if vio.abs {
+	switch vio.Type {
+	case InputTouchpad:
 		vio.addEvent(uint16(EV_ABS), ABS_X, uint32(x))
 		vio.addEvent(uint16(EV_ABS), ABS_Y, uint32(y))
-	} else {
+
+	case InputMouse:
 		vio.addEvent(uint16(EV_REL), REL_X, uint32(x-vio.lastX))
 		vio.addEvent(uint16(EV_REL), REL_Y, uint32(y-vio.lastY))
-
 		vio.lastX = x
 		vio.lastY = y
+
+	case InputKeyboard:
+		return
 	}
 	vio.addEvent(uint16(EV_SYN), SYN_REPORT, 0)
 	vio.ProcessQueue(0)
@@ -862,18 +900,19 @@ const (
 	BUS_CEC       = 0x1E
 )
 
-var inputKeyBitmap [128]byte
+var inputKeyboardBitmap [128]byte
+var inputMouseBitmap [128]byte
 
-func setBit(v uint16) {
-	inputKeyBitmap[v/8] |= 1 << (v % 8)
+func setBit(bitmap []byte, v uint16) {
+	bitmap[v/8] |= 1 << (v % 8)
 }
 
 func init() {
 	// These are defined in gpu.go.
 	for _, v := range inputKeyMap {
-		setBit(uint16(v))
+		setBit(inputKeyboardBitmap[:], uint16(v))
 	}
 	for _, v := range mouseButtonMap {
-		setBit(uint16(v))
+		setBit(inputMouseBitmap[:], uint16(v))
 	}
 }

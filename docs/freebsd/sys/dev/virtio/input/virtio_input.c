@@ -122,6 +122,7 @@ vtinput_attach(device_t dev)
         struct virtio_input_config cfg;
         uint32_t ev_categories;
         int error;
+        int num_keys = 0;
 
         sc = device_get_softc(dev);
         sc->vtinput_dev = dev;
@@ -182,15 +183,23 @@ vtinput_attach(device_t dev)
         virtio_setup_intr(dev, INTR_TYPE_TTY);
 
         /*
-         * Read supported keys. This is shared between keyboard and
-         * mouse/touchpad.
+         * Read supported keys. This bitmap is shared between keyboard
+         * and mouse/touchpad.
          */
         vtinput_read_cfg(dev, &cfg, VIRTIO_INPUT_CFG_EV_BITS, EV_KEY);
 
-        /* Setup evdev device for keyboard. */
-        if (ev_categories & 1<<EV_KEY) {
-                int num_keys = 0;
+        /* Check if any keyboard keys are defined (first 256 bits). */
+        for (int i = 0; i < cfg.size && i < 32; i++) {
+                for (int j = 0; j < 8; j++) {
+                        if (cfg.u.bitmap[i] & 1<<j) {
+                                num_keys++;
+                        }
+                }
+        }
 
+        /* Setup evdev device for keyboard. */
+        if (ev_categories & 1<<EV_KEY && num_keys) {
+                device_printf(dev, "keyboard with %d keys\n", num_keys);
                 sc->kbd = evdev_alloc();
 
                 evdev_set_name(sc->kbd, "VirtIO keyboard");
@@ -203,20 +212,21 @@ vtinput_attach(device_t dev)
                 for (int i = 0; i < cfg.size; i++) {
                         for (int j = 0; j < 8; j++) {
                                 if (cfg.u.bitmap[i] & 1<<j) {
-                                        evdev_support_key(sc->kbd, i * 8 + j);
-                                        num_keys++;
+                                        int bit = i * 8 + j;
+
+                                        if (bit < 256) {
+                                                evdev_support_key(sc->kbd, bit);
+                                        }
                                 }
                         }
                 }
 
                 evdev_register(sc->kbd);
-
-                device_printf(dev, "keyboard with %d keys\n", num_keys);
         }
 
         /* Setup evdev device for mouse/touchpad. */
         if (ev_categories & (1<<EV_REL | 1<<EV_ABS)) {
-                int num_keys = 0;
+                int num_buttons = 0;
                 int num_props = 0;
 
                 sc->ptr = evdev_alloc();
@@ -231,7 +241,7 @@ vtinput_attach(device_t dev)
                         for (int j = 0; j < 8; j++) {
                                 if (cfg.u.bitmap[i] & 1<<j) {
                                         evdev_support_key(sc->ptr, i * 8 + j);
-                                        num_keys++;
+                                        num_buttons++;
                                 }
                         }
                 }
@@ -257,7 +267,7 @@ vtinput_attach(device_t dev)
                         evdev_support_rel(sc->ptr, REL_WHEEL);
 
                         device_printf(dev, "mouse with %d buttons, %d props\n",
-                                      num_keys, num_props);
+                                      num_buttons, num_props);
                 } else {
                         evdev_set_name(sc->ptr, "VirtIO touchpad");
 
@@ -268,16 +278,18 @@ vtinput_attach(device_t dev)
 
                         device_printf(dev,
                                       "touchpad with %d buttons, %d props\n",
-                                      num_keys, num_props);
+                                      num_buttons, num_props);
                 }
 
                 evdev_register(sc->ptr);
         }
 
-        /* Register keyboad. */
-        error = vtinput_kbd_driver_attach(dev);
-        if (error != 0)
-                goto fail;
+        if (sc->kbd) {
+                /* Register keyboad. */
+                error = vtinput_kbd_driver_attach(dev);
+                if (error != 0)
+                        goto fail;
+        }
 
         device_printf(dev, "VirtIO Input Device attached\n");
 
@@ -308,7 +320,7 @@ vtinput_intr(void *arg)
                 struct sglist sg;
                 struct sglist_seg segs[1];
 
-                if (ev->type == EV_KEY && ev->code < 256) {
+                if (ev->type == EV_KEY && ev->code < 256 && sc->kbd) {
                         evdev_push_event(sc->kbd, ev->type, ev->code,
                                          ev->value);
 
@@ -321,31 +333,32 @@ vtinput_intr(void *arg)
                         }
 
                         if (sc->vtinput_fifo_count < VTINPUT_FIFOSZ) {
-                                sc->vtinput_fifo[sc->vtinput_fifo_tail] = scancode;
-                                sc->vtinput_fifo_tail = (sc->vtinput_fifo_tail + 1) % VTINPUT_FIFOSZ;
+                                sc->vtinput_fifo[sc->vtinput_fifo_tail] =
+                                        scancode;
+                                sc->vtinput_fifo_tail =
+                                        (sc->vtinput_fifo_tail + 1) %
+                                        VTINPUT_FIFOSZ;
                                 sc->vtinput_fifo_count++;
-
-#if 0
-                                device_printf(sc->vtinput_dev, "INTR: pushed scancode 0x%02X (ev->code=%d, val=%d)\n",
-                                              scancode, ev->code, ev->value);
-#endif
                         }
 
                         mtx_unlock(&sc->vtinput_mtx);
 
                         vtinput_kbd_intr(&sc->vt_kbd, NULL);
                 }
-                else if (ev->type == EV_KEY && ev->code >= BTN_MOUSE) {
+                else if (ev->type == EV_KEY && ev->code >= 256 && sc->ptr) {
                         evdev_push_event(sc->ptr, ev->type, ev->code,
                                          ev->value);
                 }
-                else if (ev->type == EV_REL || ev->type == EV_ABS) {
+                else if ((ev->type == EV_REL || ev->type == EV_ABS) &&
+                         sc->ptr) {
                         evdev_push_event(sc->ptr, ev->type, ev->code,
                                          ev->value);
                 }
                 if (ev->type == EV_SYN) {
-                        evdev_sync(sc->kbd);
-                        evdev_sync(sc->ptr);
+                        if (sc->kbd)
+                                evdev_sync(sc->kbd);
+                        if (sc->ptr)
+                                evdev_sync(sc->ptr);
                 }
 
                 /* Enqueue event. */

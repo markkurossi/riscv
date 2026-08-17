@@ -57,16 +57,16 @@ type GPU struct {
 	Pointer string `json:"pointer,omitempty"`
 }
 
-func (gpu *GPU) PointerType() (virtio.PointerType, error) {
+func (gpu *GPU) PointerType() (virtio.InputType, error) {
 	switch gpu.Pointer {
 	case "abs", "absolute", "touchpad":
-		return virtio.PointerAbs, nil
+		return virtio.InputTouchpad, nil
 
 	case "rel", "relative", "mouse", "":
-		return virtio.PointerRel, nil
+		return virtio.InputMouse, nil
 
 	default:
-		return virtio.PointerRel, fmt.Errorf("invalid pointer type '%v'",
+		return virtio.InputMouse, fmt.Errorf("invalid pointer type '%v'",
 			gpu.Pointer)
 	}
 }

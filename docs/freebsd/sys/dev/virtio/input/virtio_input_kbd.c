@@ -124,6 +124,9 @@ vtinput_kbd_driver_attach(device_t dev)
         keyboard_t *kbd = &sc->vt_kbd;
         keyboard_switch_t *sw;
 
+        if (sc->kbd == NULL)
+                return (0);
+
         mtx_init(&sc->vtinput_mtx, "vtinput", NULL, MTX_DEF|MTX_RECURSE);
 
         sw = kbd_get_switch(VIOKBD_DRIVER_NAME);
@@ -164,6 +167,9 @@ vtinput_kbd_driver_detach(device_t dev)
 {
 	int error = 0;
 	struct vtinput_softc *sc = device_get_softc(dev);
+
+        if (sc->kbd == NULL)
+                return (0);
 
 	viokbd_disable(&sc->vt_kbd);
 
