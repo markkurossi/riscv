@@ -140,8 +140,12 @@ func NewInput(hart isa.Hart, start uint64, plic *dev.PLIC, irq uint32,
 
 	case InputTouchpad:
 		vio.inputPropBitmap = []byte{0x02} // INPUT_PROP_DIRECT
-		vio.inputCatBitmap = []byte{0x0a}  // EV_KEY | EV_ABS
+		vio.inputCatBitmap = []byte{0x0e}  // EV_KEY | EV_REL | EV_ABS
 		vio.inputAbsBitmap = []byte{0x03}  // ABS_X | ABS_Y
+		vio.inputRelBitmap = []byte{
+			0x40, // REL_HWHEEL
+			0x01, // REL_WHEEL
+		}
 		vio.inputKeyBitmap = inputMouseBitmap[:]
 
 		// struct virtio_input_absinfo {
@@ -504,15 +508,15 @@ func (vio *Input) OnMouseScroll(x, y int32) {
 	}
 
 	switch vio.Type {
-	case InputKeyboard, InputTouchpad:
+	case InputKeyboard:
 		return
 
-	case InputMouse:
+	case InputMouse, InputTouchpad:
 		if x != 0 {
-			vio.addEvent(uint16(EV_REL), REL_WHEEL, uint32(-x))
+			vio.addEvent(uint16(EV_REL), REL_HWHEEL, uint32(x))
 		}
 		if y != 0 {
-			vio.addEvent(uint16(EV_REL), REL_HWHEEL, uint32(-y))
+			vio.addEvent(uint16(EV_REL), REL_WHEEL, uint32(y))
 		}
 	}
 	vio.addEvent(uint16(EV_SYN), SYN_REPORT, 0)
