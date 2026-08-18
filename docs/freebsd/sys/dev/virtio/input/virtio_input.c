@@ -121,8 +121,10 @@ vtinput_attach(device_t dev)
         struct vq_alloc_info vq_info[2];
         struct virtio_input_config cfg;
         uint32_t ev_categories;
-        int error;
+        int error = 0;
         int num_keys = 0;
+        uint32_t abs_w = 0;
+        uint32_t abs_h = 0;
 
         sc = device_get_softc(dev);
         sc->vtinput_dev = dev;
@@ -148,6 +150,25 @@ vtinput_attach(device_t dev)
                 (((uint32_t) cfg.u.bitmap[1]) << 8)  |
                 (((uint32_t) cfg.u.bitmap[2]) << 16) |
                 (((uint32_t) cfg.u.bitmap[3]) << 24);
+
+        /* Absolute axis for EV_ABS. */
+        if (ev_categories & (1<<EV_ABS)) {
+                vtinput_read_cfg(dev, &cfg, VIRTIO_INPUT_CFG_ABS_INFO, ABS_X);
+                if (cfg.size < 20) {
+                        device_printf(dev, "not absolute info for ABS_X");
+                        error = ENXIO;
+                        goto fail;
+                }
+                abs_w = cfg.u.abs.max;
+
+                vtinput_read_cfg(dev, &cfg, VIRTIO_INPUT_CFG_ABS_INFO, ABS_Y);
+                if (cfg.size < 20) {
+                        device_printf(dev, "not absolute info for ABS_Y");
+                        error = ENXIO;
+                        goto fail;
+                }
+                abs_h = cfg.u.abs.max;
+        }
 
         VQ_ALLOC_INFO_INIT(&vq_info[0], 0, vtinput_intr, sc,
                            &sc->vtinput_event_vq, "%s eventq",
@@ -227,7 +248,6 @@ vtinput_attach(device_t dev)
         /* Setup evdev device for mouse/touchpad. */
         if (ev_categories & (1<<EV_REL | 1<<EV_ABS)) {
                 int num_buttons = 0;
-                int num_props = 0;
 
                 sc->ptr = evdev_alloc();
 
@@ -237,6 +257,7 @@ vtinput_attach(device_t dev)
                 evdev_support_event(sc->ptr, EV_KEY);
                 evdev_support_event(sc->ptr, EV_SYN);
 
+                /* Buttons, followed by the 256 bits of keyboard info. */
                 for (int i = 32; i < cfg.size; i++) {
                         for (int j = 0; j < 8; j++) {
                                 if (cfg.u.bitmap[i] & 1<<j) {
@@ -252,33 +273,41 @@ vtinput_attach(device_t dev)
                         for (int j = 0; j < 8; j++) {
                                 if (cfg.u.bitmap[i] & 1<<j) {
                                         evdev_support_prop(sc->ptr, i * 8 + j);
-                                        num_props++;
                                 }
                         }
                 }
 
-                if (ev_categories & 1<<EV_REL) {
-                        evdev_set_name(sc->ptr, "VirtIO mouse");
-
-                        evdev_support_event(sc->ptr, EV_REL);
-
-                        evdev_support_rel(sc->ptr, REL_X);
-                        evdev_support_rel(sc->ptr, REL_Y);
-                        evdev_support_rel(sc->ptr, REL_WHEEL);
-
-                        device_printf(dev, "mouse with %d buttons, %d props\n",
-                                      num_buttons, num_props);
-                } else {
+                if (ev_categories & (1<<EV_ABS)) {
                         evdev_set_name(sc->ptr, "VirtIO touchpad");
 
                         evdev_support_event(sc->ptr, EV_ABS);
 
-                        evdev_support_abs(sc->ptr, ABS_X, 0, 1024, 0, 0, 0);
-                        evdev_support_abs(sc->ptr, ABS_Y, 0, 768, 0, 0, 0);
+                        evdev_support_abs(sc->ptr, ABS_X, 0, abs_w, 0, 0, 0);
+                        evdev_support_abs(sc->ptr, ABS_Y, 0, abs_h, 0, 0, 0);
 
                         device_printf(dev,
-                                      "touchpad with %d buttons, %d props\n",
-                                      num_buttons, num_props);
+                                      "touchpad %dx%d with %d buttons\n",
+                                      abs_w+1, abs_h+1, num_buttons);
+                } else {
+                        evdev_set_name(sc->ptr, "VirtIO mouse");
+
+                        device_printf(dev, "mouse with %d buttons\n",
+                                      num_buttons);
+                }
+
+                if (ev_categories & (1<<EV_REL)) {
+                        evdev_support_event(sc->ptr, EV_REL);
+
+                        vtinput_read_cfg(dev, &cfg, VIRTIO_INPUT_CFG_EV_BITS,
+                                         EV_REL);
+                        for (int i = 0; i < cfg.size; i++) {
+                                for (int j = 0; j < 8; j++) {
+                                        if (cfg.u.bitmap[i] & 1<<j) {
+                                                evdev_support_rel(sc->ptr,
+                                                                  i * 8 + j);
+                                        }
+                                }
+                        }
                 }
 
                 evdev_register(sc->ptr);

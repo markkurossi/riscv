@@ -50,23 +50,8 @@ $ pkg install font-misc-misc fontconfig xorg-fonts
 
 # Virtio / FreeBSD / X11 TODO
 
-## High Priority (Correctness)
-
-- [ ] Fix ABS range mismatch
-  - [ ] Update ABS_X to 0–65535
-  - [ ] Update ABS_Y to 0–65535
-  - [ ] Verify correct scaling in X/libinput
-
-## Low Priority (Performance / Polish)
-
-- [ ] Implement event batching
-  - [ ] Batch multiple events per interrupt
-  - [ ] Reduce VM exits
-  - [ ] Check if we can detect framebuffer sync from FreeBSD kernel:
-    - [ ] struct drm_mode_config_helper_funcs: atomic_commit{,_tail}
-
-## Bonus (Nice-to-Have)
-
+- [ ] Check if we can detect framebuffer sync from FreeBSD kernel:
+  - [ ] struct drm_mode_config_helper_funcs: atomic_commit{,_tail}
 - [ ] Improve display reporting
   - [ ] Verify resolution handling
   - [ ] Investigate EDID support
