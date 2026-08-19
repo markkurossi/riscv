@@ -52,6 +52,8 @@ time_ns()
 
 #endif  /* not __riscv */
 
+void print_riscv_extensions();
+
 int
 main(int argc, char *argv[])
 {
@@ -79,6 +81,9 @@ main(int argc, char *argv[])
       printf("CPU info:\n");
       printf(" - cycles : %ld\n", cycle);
       printf(" - instret: %ld\n", instret);
+
+      print_riscv_extensions();
+
       return 0;
     }
   if (i >= argc)
