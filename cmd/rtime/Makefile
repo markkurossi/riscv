@@ -1,10 +1,10 @@
-all: time
+all: rtime
 
-time: time.c hwcap.c
+rtime: rtime.c hwcap.c
 	$(CC) -Wall -o $@ $^
 
-TARGET := mtr@192.168.42.1:riscv/
-TARGET_LINUX := mtr@192.168.42.2:riscv/
+TARGET := mtr@192.168.42.1:rtime/
+TARGET_LINUX := mtr@192.168.42.2:rtime/
 TARGET_NETBSD := mtr@192.168.42.3:rtime/
 
 
