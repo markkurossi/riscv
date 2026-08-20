@@ -5,6 +5,7 @@
  */
 
 #include <stdio.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
@@ -54,6 +55,12 @@ time_ns()
 
 void print_riscv_extensions();
 
+static void
+usage()
+{
+  fprintf(stderr, "Usage: time [-i] [-p] program [args...]\n");
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -64,32 +71,42 @@ main(int argc, char *argv[])
   unsigned long instret, cycle;
   unsigned long start, end;
   double elapsed;
-  int i;
   bool cpu_profile = false;
+  bool info = false;
+  int ch;
 
-  for (i = 1; i < argc; i++)
+  while ((ch = getopt(argc, argv, "ip")) != -1)
     {
-      if (strcmp(argv[i], "-cpu") == 0)
-        cpu_profile = true;
-      else
-        break;
+      switch (ch)
+        {
+        case 'p':
+          cpu_profile = true;
+          break;
+
+        case 'i':
+          info = true;
+          cycle = riscv_read_csr(cycle);
+          instret = riscv_read_csr(instret);
+          printf("CPU info:\n");
+          printf(" - cycles : %ld\n", cycle);
+          printf(" - instret: %ld\n", instret);
+
+          print_riscv_extensions();
+          break;
+
+        case '?':
+        default:
+          usage();
+          return 1;
+        }
     }
-  if (i < argc && strcmp(argv[i], "info") == 0)
-    {
-      cycle = riscv_read_csr(cycle);
-      instret = riscv_read_csr(instret);
-      printf("CPU info:\n");
-      printf(" - cycles : %ld\n", cycle);
-      printf(" - instret: %ld\n", instret);
 
-      print_riscv_extensions();
-
-      return 0;
-    }
-  if (i >= argc)
+  if (optind >= argc)
     {
-      fprintf(stderr, "Usage: time program [args...]\n");
-      fprintf(stderr, "       time info\n");
+      if (info)
+        return 0;
+
+      usage();
       return 1;
     }
 
@@ -99,7 +116,7 @@ main(int argc, char *argv[])
   start = time_ns();
   cycle = riscv_read_csr(cycle);
   instret = riscv_read_csr(instret);
-  status = posix_spawnp(&pid, argv[i], NULL, NULL, argv+i, environ);
+  status = posix_spawnp(&pid, argv[optind], NULL, NULL, argv+optind, environ);
   if (status == 0)
     {
       waitpid(pid, &status, 0);

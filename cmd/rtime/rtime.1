@@ -1,0 +1,49 @@
+.\"-
+.\" Copyright (c) 2026 Markku Rossi
+.\"
+.\" All rights reserved.
+.\"
+.Dd August 20, 2026
+.Dt RTIME 1
+.Os
+.Sh NAME
+.Nm rtime
+.Nd time command execution
+.Sh SYNOPSIS
+.Nm
+.Op Fl ip
+.Ar utility
+.Op Ar argument ...
+.Sh DESCRIPTION
+The
+.Nm
+utility executes and measures a command, printing its execution time and
+system resource usage.
+.Pp
+The executed command is spawned via
+.Xr posix_spawn 3 .
+Upon completion,
+.Nm
+prints timing statistics alongside detailed metrics from
+.Xr getrusage 2 ,
+including resident set size, page faults, block I/O operations, and
+context switches. When run on a supported RISC-V system, it also
+prints the instructions retired, elapsed cycles, and execution speed
+in MIPS.
+.Pp
+The following options are available:
+.Bl -tag -width Ds
+.It Fl i
+Print detailed RISC-V CPU information before executing the
+utility. This includes the current cycle and instruction counts, as
+well as the supported base, single-letter, and Z-extensions.
+.It Fl p
+Enable CPU profiling. This flag writes a value of 1 to the custom
+goemu CSR 0x802 before execution, and 0 upon completion.
+.El
+.Sh SEE ALSO
+.Xr time 1 ,
+.Xr getrusage 2 ,
+.Xr posix_spawn 3
+.Sh AUTHORS
+.An Markku Rossi Aq Mt mtr@iki.fi
