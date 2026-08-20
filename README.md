@@ -48,9 +48,9 @@ The project is intended as a readable and hackable implementation of a
 modern RISC-V platform, suitable for learning emulator internals,
 operating systems, and the RISC-V privileged architecture.
 
+![FreeBSD](docs/freebsd.png)
 ![Linux Boot](docs/linux-shell.png)
 ![NetBSD](docs/netbsd.png)
-![FreeBSD](docs/freebsd.png)
 ![X11](docs/x11.png)
 
 ## TODO
