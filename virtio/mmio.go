@@ -104,6 +104,9 @@ type MMIO struct {
 	Mem      *memory.Memory
 	Handler  Handler
 
+	shmSel uint32
+	SHM    []*mmu.SHM
+
 	deviceFeaturesSel uint32
 	driverFeaturesSel uint32
 	driverFeatures    [2]uint32
@@ -144,6 +147,13 @@ const (
 	DEVICE_NEEDS_RESET uint32 = 64
 )
 
+func (vio *MMIO) shm(idx uint32) *mmu.SHM {
+	if int(idx) >= len(vio.SHM) {
+		return nil
+	}
+	return vio.SHM[idx]
+}
+
 func (vio *MMIO) DriverOK() bool {
 	return vio.status&DRIVER_OK != 0
 }
@@ -180,8 +190,8 @@ func (vio *MMIO) Halt() error {
 	return nil
 }
 
-func (vio *MMIO) Contains(paddr uint64) bool {
-	return vio.Start <= paddr && paddr < vio.End
+func (vio *MMIO) Contains(paddr, size uint64) bool {
+	return vio.Start <= paddr && paddr+size <= vio.End
 }
 
 func (vio *MMIO) Load8(paddr uint64) (uint8, error) {
@@ -239,17 +249,56 @@ func (vio *MMIO) Load32(paddr uint64) (uint32, error) {
 			statusString(vio.status), vio.status)
 		return vio.status, nil
 
+		// Shared memory region 64 bit long length
+		//
+		// These registers return the length of the shared memory
+		// region in bytes, as defined by the device for the region
+		// selected by the SHMSel register. The lower 32 bits of the
+		// length are read from SHMLenLow and the higher 32 bits from
+		// SHMLenHigh. Reading from a non-existent region (i.e. where
+		// the ID written to SHMSel is unused) results in a length of
+		// -1.
+
 	case 0x0b0: // SHMLenLow
-		return 0xffffffff, nil
+		shm := vio.shm(vio.shmSel)
+		if shm == nil {
+			return 0xffffffff, nil
+		}
+		l := shm.End - shm.Start
+		return uint32(l), nil
 
 	case 0x0b4: // SHMLenHigh
-		return 0xffffffff, nil
+		shm := vio.shm(vio.shmSel)
+		if shm == nil {
+			return 0xffffffff, nil
+		}
+		l := shm.End - shm.Start
+		return uint32(l >> 32), nil
+
+		// Shared memory region 64 bit long physical address
+		//
+		// The driver reads these registers to discover the base
+		// address of the region in physical address space. This
+		// address is chosen by the device (or other part of the
+		// VMM). The lower 32 bits of the address are read from
+		// SHMBaseLow with the higher 32 bits from
+		// SHMBaseHigh. Reading from a non-existent region (i.e. where
+		// the ID written to SHMSel is unused) results in a base
+		// address of 0xffffffffffffffff.
 
 	case 0x0b8: // SHMBaseLow
-		return 0, nil
+		shm := vio.shm(vio.shmSel)
+		if shm == nil {
+			return 0xffffffff, nil
+		}
+		return uint32(shm.Start), nil
 
 	case 0x0bc: // SHMBaseHigh
-		return 0, nil
+		shm := vio.shm(vio.shmSel)
+		if shm == nil {
+			return 0xffffffff, nil
+		}
+		return uint32(shm.Start >> 32), nil
 	}
 	return 0, nil
 }
@@ -406,6 +455,9 @@ func (vio *MMIO) Store32(paddr uint64, v uint32) error {
 				(vio.queues[vio.queueSel].UsedPhys & 0x00000000ffffffff) |
 					(uint64(v) << 32)
 		}
+
+	case 0x0ac: // SHMSel
+		vio.shmSel = v
 	}
 	return nil
 }

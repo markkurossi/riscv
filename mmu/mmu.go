@@ -40,7 +40,7 @@ const (
 // MMIO implements a memory-mapped device.
 type MMIO interface {
 	Halt() error
-	Contains(paddr uint64) bool
+	Contains(paddr, size uint64) bool
 	Load8(paddr uint64) (uint8, error)
 	Load16(paddr uint64) (uint16, error)
 	Load32(paddr uint64) (uint32, error)
@@ -52,7 +52,7 @@ type MMIO interface {
 }
 
 type Overlay interface {
-	Contains(paddr uint64) bool
+	Contains(paddr, size uint64) bool
 	Load(paddr uint64) error
 	Store(paddr uint64) error
 }
@@ -818,7 +818,7 @@ func (mmu *MMU) Store32(vaddr uint64, v uint32) error {
 			return mmu.MMIO.Store32(paddr, v)
 		}
 		memory.PutUint32(mmu.Mem.RAM, mmu.Mem.Offset(paddr), uint32(v))
-		if mmu.Overlay != nil && mmu.Overlay.Contains(paddr) {
+		if mmu.Overlay != nil && mmu.Overlay.Contains(paddr, 4) {
 			return mmu.Overlay.Store(paddr)
 		}
 		return nil

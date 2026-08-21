@@ -51,8 +51,8 @@ func (syscon *Syscon) Halt() error {
 }
 
 // Contains implements MMIO.Contains.
-func (syscon *Syscon) Contains(paddr uint64) bool {
-	return paddr >= syscon.Start && paddr < syscon.End
+func (syscon *Syscon) Contains(paddr, size uint64) bool {
+	return paddr >= syscon.Start && paddr+size <= syscon.End
 }
 
 // Load8 implements MMIO.Load8.

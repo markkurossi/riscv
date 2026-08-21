@@ -25,8 +25,8 @@ func (rtc *GoldfishRTC) Halt() error {
 }
 
 // Contains implements MMIO.Contains.
-func (rtc *GoldfishRTC) Contains(paddr uint64) bool {
-	return paddr >= rtc.Start && paddr < rtc.End
+func (rtc *GoldfishRTC) Contains(paddr, size uint64) bool {
+	return paddr >= rtc.Start && paddr+size <= rtc.End
 }
 
 // Load8 implements MMIO.Load8.

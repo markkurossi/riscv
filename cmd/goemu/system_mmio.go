@@ -32,9 +32,9 @@ func (mmio *MMIO) Halt() error {
 	return nil
 }
 
-func (mmio *MMIO) Contains(paddr uint64) bool {
+func (mmio *MMIO) Contains(paddr, size uint64) bool {
 	for _, seg := range mmio.Segments {
-		if seg.Contains(paddr) {
+		if seg.Contains(paddr, size) {
 			return true
 		}
 	}
@@ -43,7 +43,7 @@ func (mmio *MMIO) Contains(paddr uint64) bool {
 
 func (mmio *MMIO) Load8(paddr uint64) (uint8, error) {
 	for _, seg := range mmio.Segments {
-		if seg.Contains(paddr) {
+		if seg.Contains(paddr, 1) {
 			return seg.Load8(paddr)
 		}
 	}
@@ -52,7 +52,7 @@ func (mmio *MMIO) Load8(paddr uint64) (uint8, error) {
 
 func (mmio *MMIO) Load16(paddr uint64) (uint16, error) {
 	for _, seg := range mmio.Segments {
-		if seg.Contains(paddr) {
+		if seg.Contains(paddr, 2) {
 			return seg.Load16(paddr)
 		}
 	}
@@ -61,7 +61,7 @@ func (mmio *MMIO) Load16(paddr uint64) (uint16, error) {
 
 func (mmio *MMIO) Load32(paddr uint64) (uint32, error) {
 	for _, seg := range mmio.Segments {
-		if seg.Contains(paddr) {
+		if seg.Contains(paddr, 4) {
 			return seg.Load32(paddr)
 		}
 	}
@@ -70,7 +70,7 @@ func (mmio *MMIO) Load32(paddr uint64) (uint32, error) {
 
 func (mmio *MMIO) Load64(paddr uint64) (uint64, error) {
 	for _, seg := range mmio.Segments {
-		if seg.Contains(paddr) {
+		if seg.Contains(paddr, 8) {
 			return seg.Load64(paddr)
 		}
 	}
@@ -79,7 +79,7 @@ func (mmio *MMIO) Load64(paddr uint64) (uint64, error) {
 
 func (mmio *MMIO) Store8(paddr uint64, v uint8) error {
 	for _, seg := range mmio.Segments {
-		if seg.Contains(paddr) {
+		if seg.Contains(paddr, 1) {
 			return seg.Store8(paddr, v)
 		}
 	}
@@ -88,7 +88,7 @@ func (mmio *MMIO) Store8(paddr uint64, v uint8) error {
 
 func (mmio *MMIO) Store16(paddr uint64, v uint16) error {
 	for _, seg := range mmio.Segments {
-		if seg.Contains(paddr) {
+		if seg.Contains(paddr, 2) {
 			return seg.Store16(paddr, v)
 		}
 	}
@@ -97,7 +97,7 @@ func (mmio *MMIO) Store16(paddr uint64, v uint16) error {
 
 func (mmio *MMIO) Store32(paddr uint64, v uint32) error {
 	for _, seg := range mmio.Segments {
-		if seg.Contains(paddr) {
+		if seg.Contains(paddr, 4) {
 			return seg.Store32(paddr, v)
 		}
 	}
@@ -106,7 +106,7 @@ func (mmio *MMIO) Store32(paddr uint64, v uint32) error {
 
 func (mmio *MMIO) Store64(paddr uint64, v uint64) error {
 	for _, seg := range mmio.Segments {
-		if seg.Contains(paddr) {
+		if seg.Contains(paddr, 8) {
 			return seg.Store64(paddr, v)
 		}
 	}

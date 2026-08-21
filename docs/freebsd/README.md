@@ -52,6 +52,8 @@ $ pkg install font-misc-misc fontconfig xorg-fonts
 
 - [ ] Check if we can detect framebuffer sync from FreeBSD kernel:
   - [ ] struct drm_mode_config_helper_funcs: atomic_commit{,_tail}
+- [ ] Use host allocated shm buffers `VIRTIO_GPU_F_RESOURCE_BLOB`
+  - [ ] Current host goemu CPU usage is around 35%, should decrease
 - [ ] Improve display reporting
   - [ ] Verify resolution handling
   - [ ] Investigate EDID support

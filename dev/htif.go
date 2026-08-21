@@ -45,9 +45,9 @@ func NewHTIF(hart isa.Hart, start, size, to, from uint64,
 	}
 }
 
-// Contains implements Overlay.Contains
-func (htif *HTIF) Contains(paddr uint64) bool {
-	return paddr >= htif.Start && paddr < htif.End
+// Contains implements Overlay.Contains.
+func (htif *HTIF) Contains(paddr, size uint64) bool {
+	return paddr >= htif.Start && paddr+size <= htif.End
 }
 
 // Load implements Overlay.Load.

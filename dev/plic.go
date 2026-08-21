@@ -87,8 +87,8 @@ func (plic *PLIC) Halt() error {
 }
 
 // Contains implements MMIO.Contains.
-func (plic *PLIC) Contains(paddr uint64) bool {
-	return paddr >= plic.Start && paddr < plic.End
+func (plic *PLIC) Contains(paddr, size uint64) bool {
+	return paddr >= plic.Start && paddr+size <= plic.End
 }
 
 // Load8 implements MMIO.Load8.

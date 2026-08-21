@@ -57,13 +57,36 @@ operating systems, and the RISC-V privileged architecture.
 
 ### Release 1.0
 
-- [x] VirtIO
-  - [x] virtio-blk
-  - [x] virtio-rng
-  - [x] virtio-net
-    - [x] fix NetBSD receive path
-  - [x] virtio-gpu
+- [ ] FreeBSD
+  - [ ] virtio_input.c
+    - [ ] cursor keys (and others) in framebuffer console (scancodes)
+    - [ ] clean detach and shutdown
+  - [ ] Implement memory mapped framebuffer for `virtio_gpu.c` and `gpu.go`
+- [ ] Reimplement DTB creation
 - [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
+
+``` diff
+--- a/cmd/goemu/system_emulation.go
++++ b/cmd/goemu/system_emulation.go
+@@ -457,7 +457,7 @@ func makeDTB(initrdSize uint64, mem *memory.Memory, plic *dev.PLIC,
+
+        // The legacy ISA string (Mandatory for many versions)
+        // Note: Use 'g' as an alias for 'imafd' to stay compatible
+-       fdt.PropStr("riscv,isa", "rv64gc_sstc")
++       fdt.PropStr("riscv,isa", "rv64gc_sstc_zknd_zkne")
+
+        // Modern granular ISA description
+        fdt.PropStr("riscv,isa-base", "rv64i")
+@@ -467,7 +467,7 @@ func makeDTB(initrdSize uint64, mem *memory.Memory, plic *dev.PLIC,
+        // blob.
+        fdt.PropTabStr("riscv,isa-extensions",
+                "i", "m", "a", "f", "d", "c", "zicsr", "zifencei", "zicntr", "zihpm",
+-               "sstc",
++               "sstc", "zknd", "zkne",
+        )
+
+        fdt.PropStr("mmu-type", "riscv,sv39")
+```
 
 ### MCP RISC-V
 

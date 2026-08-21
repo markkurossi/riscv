@@ -34,8 +34,9 @@ func (clint *CLINT) Halt() error {
 	return nil
 }
 
-func (clint *CLINT) Contains(paddr uint64) bool {
-	return paddr >= clint.Start && paddr < clint.End
+// Contains implements MMIO.Contains.
+func (clint *CLINT) Contains(paddr, size uint64) bool {
+	return paddr >= clint.Start && paddr+size <= clint.End
 }
 
 // Tick explicitly syncs the CLINT internal counter with the main engine clock
@@ -53,8 +54,8 @@ func (clint *CLINT) Tick(now uint64) {
 	}
 }
 
-func (clint *CLINT) load(paddr uint64) (uint64, error) {
-	if !clint.Contains(paddr) {
+func (clint *CLINT) load(paddr, size uint64) (uint64, error) {
+	if !clint.Contains(paddr, size) {
 		return 0, clint.Hart.Trap(isa.CauseLoadPageFault, paddr, nil)
 	}
 
@@ -99,8 +100,8 @@ func (clint *CLINT) load(paddr uint64) (uint64, error) {
 	return v, nil
 }
 
-func (clint *CLINT) store(paddr, v uint64) error {
-	if !clint.Contains(paddr) {
+func (clint *CLINT) store(paddr, size, v uint64) error {
+	if !clint.Contains(paddr, size) {
 		return clint.Hart.Trap(isa.CauseStorePageFault, paddr, nil)
 	}
 	ofs := paddr - clint.Start
@@ -152,7 +153,7 @@ func updateRegisterHalf(current uint64, offset uint64, val uint64) uint64 {
 }
 
 func (clint *CLINT) Load8(paddr uint64) (uint8, error) {
-	v, err := clint.load(paddr)
+	v, err := clint.load(paddr, 1)
 	if err != nil {
 		return 0, err
 	}
@@ -160,7 +161,7 @@ func (clint *CLINT) Load8(paddr uint64) (uint8, error) {
 }
 
 func (clint *CLINT) Load16(paddr uint64) (uint16, error) {
-	v, err := clint.load(paddr)
+	v, err := clint.load(paddr, 2)
 	if err != nil {
 		return 0, err
 	}
@@ -168,7 +169,7 @@ func (clint *CLINT) Load16(paddr uint64) (uint16, error) {
 }
 
 func (clint *CLINT) Load32(paddr uint64) (uint32, error) {
-	v, err := clint.load(paddr)
+	v, err := clint.load(paddr, 4)
 	if err != nil {
 		return 0, err
 	}
@@ -176,21 +177,21 @@ func (clint *CLINT) Load32(paddr uint64) (uint32, error) {
 }
 
 func (clint *CLINT) Load64(paddr uint64) (uint64, error) {
-	return clint.load(paddr)
+	return clint.load(paddr, 8)
 }
 
 func (clint *CLINT) Store8(paddr uint64, v uint8) error {
-	return clint.store(paddr, uint64(v))
+	return clint.store(paddr, 1, uint64(v))
 }
 
 func (clint *CLINT) Store16(paddr uint64, v uint16) error {
-	return clint.store(paddr, uint64(v))
+	return clint.store(paddr, 2, uint64(v))
 }
 
 func (clint *CLINT) Store32(paddr uint64, v uint32) error {
-	return clint.store(paddr, uint64(v))
+	return clint.store(paddr, 4, uint64(v))
 }
 
 func (clint *CLINT) Store64(paddr uint64, v uint64) error {
-	return clint.store(paddr, v)
+	return clint.store(paddr, 8, v)
 }

@@ -215,8 +215,8 @@ func (uart *UART) Halt() error {
 }
 
 // Contains implements MMIO.Contains.
-func (uart *UART) Contains(paddr uint64) bool {
-	return paddr >= uart.Start && paddr < uart.End
+func (uart *UART) Contains(paddr, size uint64) bool {
+	return paddr >= uart.Start && paddr+size <= uart.End
 }
 
 // Load8 implements MMIO.Load8.
