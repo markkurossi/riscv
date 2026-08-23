@@ -65,29 +65,6 @@ operating systems, and the RISC-V privileged architecture.
 - [ ] Reimplement DTB creation
 - [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
 
-``` diff
---- a/cmd/goemu/system_emulation.go
-+++ b/cmd/goemu/system_emulation.go
-@@ -457,7 +457,7 @@ func makeDTB(initrdSize uint64, mem *memory.Memory, plic *dev.PLIC,
-
-        // The legacy ISA string (Mandatory for many versions)
-        // Note: Use 'g' as an alias for 'imafd' to stay compatible
--       fdt.PropStr("riscv,isa", "rv64gc_sstc")
-+       fdt.PropStr("riscv,isa", "rv64gc_sstc_zknd_zkne")
-
-        // Modern granular ISA description
-        fdt.PropStr("riscv,isa-base", "rv64i")
-@@ -467,7 +467,7 @@ func makeDTB(initrdSize uint64, mem *memory.Memory, plic *dev.PLIC,
-        // blob.
-        fdt.PropTabStr("riscv,isa-extensions",
-                "i", "m", "a", "f", "d", "c", "zicsr", "zifencei", "zicntr", "zihpm",
--               "sstc",
-+               "sstc", "zknd", "zkne",
-        )
-
-        fdt.PropStr("mmu-type", "riscv,sv39")
-```
-
 ### MCP RISC-V
 
 The project is divided into two tracks:
@@ -250,6 +227,26 @@ Hello, RISC-V!
 ## Benchmarks
 
 ## Real Workloads
+
+### FreeBSD 15.1 (Port Builder Strain Test)
+
+- Sustained long-term execution as a automated ports package builder
+- Complete OS stability over 15+ days of in-guest uptime
+- High-stress VirtIO DMA throughput validation (370+ GB written)
+
+``` text
+Uptime: 15d 3h 15m 26s
+
+CPU:
+  instret : 129,725,158,326,644 instructions
+  runtime : 198h 19m 22s
+  MIPS    : 181.70
+
+I/O Telemetry:
+  virtio-blk : 1 GB read | 373 GB written
+  virtio-net : 492 MB rcvd | 51 MB sent
+  virtio-rng : 404 MB read
+```
 
 ### OpenBSD 7.9
 
