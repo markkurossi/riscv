@@ -65,7 +65,7 @@ operating systems, and the RISC-V privileged architecture.
 - [ ] Reimplement DTB creation
 - [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
 
-### MCP RISC-V
+### MPC RISC-V
 
 The project is divided into two tracks:
 
