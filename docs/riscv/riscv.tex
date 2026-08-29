@@ -1,0 +1,570 @@
+% ------------------------------------------------------------
+% Ephemelier technical reference style
+% Quiet, academic, infrastructure-first
+%
+% Designed to visually complement the Ephemelier website:
+%   - Inter-style body typography
+%   - Baskerville-style display typography
+%   - restrained black / gray palette
+%   - generous whitespace
+%   - understated technical notation
+%
+% pdfLaTeX compatible
+% ------------------------------------------------------------
+
+\documentclass[11pt,a4paper]{article}
+
+% ------------------------------------------------------------
+% Page geometry
+% ------------------------------------------------------------
+
+% The Ephemelier web design uses a deliberately narrow content
+% column with substantial whitespace to the right.  Preserve
+% that asymmetry in the printed document.
+\usepackage[
+  a4paper,
+  left=28mm,
+  right=45mm,
+  top=25mm,
+  bottom=28mm,
+  includehead,
+  includefoot
+]{geometry}
+
+% ------------------------------------------------------------
+% Encoding
+% ------------------------------------------------------------
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+% ------------------------------------------------------------
+% Typography
+% ------------------------------------------------------------
+
+% pdfLaTeX-compatible approximation of the website typography.
+%
+% The website uses:
+%   Libre Baskerville for display text
+%   Inter for body text
+%
+% We use TeX Gyre Heros for the Inter-like sans-serif body
+% and TeX Gyre Pagella for the Baskerville-like display face.
+%
+% The two families are deliberately kept distinct.
+
+\usepackage{tgheros}
+\usepackage{tgpagella}
+
+% Body text: sans-serif, matching the site's Inter character.
+\renewcommand{\familydefault}{\sfdefault}
+
+% Display / title font.
+\newcommand{\displayfont}{\fontfamily{qpl}\selectfont}
+
+% Instruction / machine syntax.
+\newcommand{\instr}[1]{\texttt{#1}}
+
+% ------------------------------------------------------------
+% Microtypography
+% ------------------------------------------------------------
+
+\usepackage[
+  tracking=true,
+  kerning=true,
+  spacing=true,
+  expansion=true
+]{microtype}
+
+% ------------------------------------------------------------
+% Colors
+% ------------------------------------------------------------
+
+\usepackage{xcolor}
+
+% Exact colors from the Ephemelier web design.
+\definecolor{ephemink}{HTML}{1A1A1A}
+\definecolor{ephemmuted}{HTML}{666666}
+\definecolor{ephembg}{HTML}{FAF9F7}
+
+\color{ephemink}
+
+% ------------------------------------------------------------
+% Mathematics
+% ------------------------------------------------------------
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% RISC-V semantic notation.
+
+% Integer register.
+\newcommand{\reg}[1]{x[#1]}
+
+% Common operands.
+\newcommand{\rd}{\reg{rd}}
+\newcommand{\rsone}{\reg{rs1}}
+\newcommand{\rstwo}{\reg{rs2}}
+
+% Signed multiplication and shift.
+%
+% The two "s" annotations belong visually to the multiplication
+% operator rather than appearing as detached operands.
+\newcommand{\signedmul}{%
+  {}_{\!\mathrm{s}}\!\times\!{}_{\!\mathrm{s}}%
+}
+
+\newcommand{\signedshift}{%
+  \gg_{\mathrm{s}}%
+}
+
+% ------------------------------------------------------------
+% Section formatting
+% ------------------------------------------------------------
+
+\usepackage{titlesec}
+
+% Major sections:
+% Same visual language as the web site's H2:
+% small, uppercase, tracked sans-serif.
+
+\titleformat{\section}
+  {\sffamily\small\bfseries\color{ephemink}}
+  {\thesection}
+  {0.9em}
+  {\MakeUppercase}
+
+\titlespacing*{\section}
+  {0pt}
+  {3.2ex plus 1ex minus .2ex}
+  {1.4ex}
+
+% Extension / major subsection:
+% Baskerville-like display type, semibold appearance.
+
+\titleformat{\subsection}
+  {\displayfont\large\bfseries\color{ephemink}}
+  {\thesubsection}
+  {0.8em}
+  {}
+
+\titlespacing*{\subsection}
+  {0pt}
+  {2.5ex plus .8ex minus .2ex}
+  {1.2ex}
+
+% Instruction-level headings.
+
+\titleformat{\subsubsection}
+  {\sffamily\normalsize\bfseries\color{ephemink}}
+  {\thesubsubsection}
+  {0.8em}
+  {}
+
+\titlespacing*{\subsubsection}
+  {0pt}
+  {2ex plus .6ex minus .2ex}
+  {0.8ex}
+
+% ------------------------------------------------------------
+% Header / footer
+% ------------------------------------------------------------
+
+\usepackage{fancyhdr}
+
+\pagestyle{fancy}
+\fancyhf{}
+
+% Ephemelier mark: Baskerville-like, lowercase, widely tracked.
+\lhead{%
+  \textcolor{ephemmuted}{%
+    \displayfont\textls[120]{ephemelier}%
+  }%
+}
+
+% Running document identifier.
+\rhead{%
+  \textcolor{ephemmuted}{%
+    \sffamily\footnotesize RISC-V ISA
+  }%
+}
+
+% Page number.
+\rfoot{%
+  \textcolor{ephemmuted}{%
+    \sffamily\footnotesize\thepage
+  }%
+}
+
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% Header spacing.
+\setlength{\headheight}{14pt}
+
+% ------------------------------------------------------------
+% Title block
+% ------------------------------------------------------------
+
+\usepackage{titling}
+
+\pretitle{%
+  \begin{flushleft}
+  \displayfont
+  \fontsize{24}{29}\selectfont
+  \bfseries
+  \color{ephemink}
+}
+
+\posttitle{%
+  \end{flushleft}
+  \vspace{0.8em}
+}
+
+\preauthor{%
+  \begin{flushleft}
+  \sffamily
+  \normalsize
+  \color{ephemink}
+}
+
+\postauthor{%
+  \end{flushleft}
+  \vspace{0.4em}
+}
+
+\predate{%
+  \begin{flushleft}
+  \sffamily
+  \small
+  \color{ephemmuted}
+}
+
+\postdate{%
+  \end{flushleft}
+}
+
+% ------------------------------------------------------------
+% Lists
+% ------------------------------------------------------------
+
+\usepackage{enumitem}
+
+% Match the website's understated en-dash lists.
+\setlist[itemize]{
+  label={\textcolor{ephemmuted}{--}},
+  leftmargin=1.5em,
+  itemsep=0.25em,
+  topsep=0.4em
+}
+
+\setlist[enumerate]{
+  leftmargin=1.5em,
+  itemsep=0.25em,
+  topsep=0.4em
+}
+
+% ------------------------------------------------------------
+% Tables
+% ------------------------------------------------------------
+
+\usepackage{booktabs}
+\usepackage{array}
+
+% ------------------------------------------------------------
+% Code
+% ------------------------------------------------------------
+
+\usepackage{listings}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  frame=none,
+  backgroundcolor=\color{ephembg},
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  xleftmargin=1em,
+  xrightmargin=1em,
+  aboveskip=0.8em,
+  belowskip=0.8em
+}
+
+% ------------------------------------------------------------
+% Hyperlinks
+% ------------------------------------------------------------
+
+\usepackage[
+  colorlinks=true,
+  linkcolor=ephemink,
+  citecolor=ephemink,
+  urlcolor=ephemmuted,
+  bookmarks=true,
+  pdfborder={0 0 0}
+]{hyperref}
+
+\usepackage{bookmark}
+
+% ------------------------------------------------------------
+% RISC-V instruction encoding diagrams
+% ------------------------------------------------------------
+\input{instr}
+
+% ------------------------------------------------------------
+% PDF metadata
+% ------------------------------------------------------------
+
+\hypersetup{
+  pdftitle={RISC-V ISA and Extensions},
+  pdfauthor={Markku Rossi},
+  pdfsubject={RISC-V Instruction Set Architecture},
+  pdfcreator={pdfLaTeX}
+}
+
+% ------------------------------------------------------------
+% Paragraph formatting
+% ------------------------------------------------------------
+
+% Match the website: paragraphs are separated by whitespace,
+% not by indentation.
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5em}
+
+% ------------------------------------------------------------
+% Instruction-specific environments
+% ------------------------------------------------------------
+
+% Small semantic labels such as SYNTAX, OPERATION, ENCODING.
+
+\newcommand{\metalabel}[1]{%
+  \par\vspace{0.8em}%
+  {\sffamily\small\bfseries\textls[100]{\MakeUppercase{#1}}}%
+  \par\vspace{0.35em}%
+}
+
+% Instruction syntax.
+\newcommand{\syntax}[1]{%
+  \begin{lstlisting}
+#1
+  \end{lstlisting}
+}
+
+% ------------------------------------------------------------
+% Document
+% ------------------------------------------------------------
+
+\begin{document}
+
+\title{RISC-V Instruction Set Architecture\\
+and Extensions}
+
+\author{Markku Rossi\\
+Ephemelier}
+
+\date{}
+
+\maketitle
+
+% ------------------------------------------------------------
+% Introduction
+% ------------------------------------------------------------
+
+\section{Introduction}
+
+The RISC-V instruction set architecture defines a family of
+open standard instruction set architectures for general-purpose
+computing.
+
+This document describes the RISC-V base instruction sets and
+extensions.
+
+The instruction descriptions are organized by architectural
+extension and use a common notation for operands, operations,
+and instruction encodings.
+
+\metalabel{Operation}
+
+\[
+\rd =
+\left(
+  \rsone\,
+  \;{}_{\!\mathrm{s}}\!\times\!{}_{\!\mathrm{s}}\;\,
+  \rstwo
+\right)
+\gg_{\mathrm{s}} XLEN
+\]
+
+% ------------------------------------------------------------
+% Base ISA
+% ------------------------------------------------------------
+
+\section{Base ISA}
+
+\subsection{I --- RV32I / RV64I / RV128I --- Base Integer ISA}
+
+The I extension defines the base integer instruction set.
+It is available in RV32I, RV64I, and RV128I variants.
+
+\subsection{E --- RV32E / RV64E --- Reduced Integer ISA, 16 Registers}
+
+The E extension defines a reduced integer instruction set with
+16 integer registers.
+
+% ------------------------------------------------------------
+% Extensions
+% ------------------------------------------------------------
+
+\section{Extensions}
+
+\subsection{M --- Integer Multiply/Divide}
+
+The M extension provides integer multiplication and division
+instructions.
+
+% ------------------------------------------------------------
+% Instruction: MULH
+% ------------------------------------------------------------
+
+\subsubsection{\instr{MULH} --- Multiply High Signed $\times$ Signed}
+
+\metalabel{Synopsis}
+
+\begin{lstlisting}
+mulh rd, rs1, rs2
+\end{lstlisting}
+
+\metalabel{Description}
+
+The \instr{MULH} instruction multiplies the values in the
+source registers \instr{rs1} and \instr{rs2}, treating both
+operands as signed two's-complement integers. The upper
+\mbox{\texttt{XLEN}} bits of the resulting $2\times\mbox{\texttt{XLEN}}$-bit
+product are written to the destination register \instr{rd}.
+
+The lower \mbox{\texttt{XLEN}} bits of the product are discarded.
+The operation therefore provides the high half of a signed
+integer multiplication without requiring the full product to
+be represented in a single integer register.
+
+\metalabel{Operation}
+
+\[
+\rd =
+\left(
+  \rsone\,
+  \;{}_{\!\mathrm{s}}\!\times\!{}_{\!\mathrm{s}}\;\,
+  \rstwo
+\right)
+\gg_{\mathrm{s}} XLEN
+\]
+
+Equivalently, if the signed values represented by
+\instr{rs1} and \instr{rs2} are denoted by $a$ and $b$, then
+\instr{rd} receives the upper \mbox{\texttt{XLEN}} bits of the
+$2\times\mbox{\texttt{XLEN}}$-bit signed product $a\times b$.
+
+\metalabel{Encoding}
+
+
+\begin{figure}[ht]
+  \centering
+
+  \begin{riscvencoding}[R-type]{MULH}{32}
+    \field{0000001}{7}
+    \field{rs2}{5}
+    \field{rs1}{5}
+    \field{001}{3}
+    \field{rd}{5}
+    \field{0110011}{7}
+  \end{riscvencoding}
+
+  \caption{MULH instruction encoding.}
+  \label{fig:mulh-encoding}
+\end{figure}
+
+\metalabel{Operands}
+
+\begin{tabular}{@{}ll@{}}
+\texttt{rd}  & Destination integer register. \\
+\texttt{rs1} & First source integer register. \\
+\texttt{rs2} & Second source integer register. \\
+\end{tabular}
+
+\metalabel{Availability}
+
+RV32M and RV64M.
+
+\subsection{A --- Atomic}
+
+\begin{figure}[ht]
+  \centering
+
+  \begin{riscvencoding}[C-type]{C.ADDI}{16}
+    \field{01}{2}
+    \field{000}{3}
+    \field{imm[5]}{1}
+    \field{rs1}{5}
+    \field{imm[4:0]}{5}
+  \end{riscvencoding}
+
+  \caption{C.ADDI instruction encoding.}
+  \label{fig:c-addi-encoding}
+\end{figure}
+
+
+The A extension provides atomic memory operations.
+
+\subsection{F --- Single-Precision Floating Point}
+
+The F extension provides single-precision floating-point
+instructions.
+
+\subsection{D --- Double-Precision Floating Point}
+
+The D extension provides double-precision floating-point
+instructions.
+
+\subsection{Q --- Quad-Precision Floating Point}
+
+The Q extension provides quad-precision floating-point
+instructions.
+
+\subsection{Zicsr --- CSR Instructions}
+
+The Zicsr extension provides instructions for accessing
+control and status registers.
+
+\subsection{Zifencei --- Instruction-Fetch Fence}
+
+The Zifencei extension provides instruction-fetch fence
+operations.
+
+\subsection{C --- Compressed}
+
+The C extension provides compressed instructions.
+
+\subsection{B --- Bit-Manipulation}
+
+The B extension provides bit-manipulation instructions.
+
+\subsection{J --- Dynamically Translated Languages}
+
+The J extension provides facilities for dynamically translated
+languages.
+
+\subsection{L --- Decimal Floating Point}
+
+The L extension provides decimal floating-point instructions.
+
+\subsection{P --- Packed-SIMD}
+
+The P extension provides packed SIMD instructions.
+
+\subsection{V --- Vector}
+
+The V extension provides vector instructions.
+
+% ------------------------------------------------------------
+
+\end{document}
