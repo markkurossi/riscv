@@ -1,14 +1,5 @@
 % ------------------------------------------------------------
-% Ephemelier technical reference style
-% Quiet, academic, infrastructure-first
-%
-% Designed to visually complement the Ephemelier website:
-%   - Inter-style body typography
-%   - Baskerville-style display typography
-%   - restrained black / gray palette
-%   - generous whitespace
-%   - understated technical notation
-%
+% Ephemelier RISC-V ISA reference -- compact layout
 % pdfLaTeX compatible
 % ------------------------------------------------------------
 
@@ -18,15 +9,12 @@
 % Page geometry
 % ------------------------------------------------------------
 
-% The Ephemelier web design uses a deliberately narrow content
-% column with substantial whitespace to the right.  Preserve
-% that asymmetry in the printed document.
 \usepackage[
   a4paper,
   left=28mm,
-  right=45mm,
+  right=28mm,
   top=25mm,
-  bottom=28mm,
+  bottom=27mm,
   includehead,
   includefoot
 ]{geometry}
@@ -42,32 +30,12 @@
 % Typography
 % ------------------------------------------------------------
 
-% pdfLaTeX-compatible approximation of the website typography.
-%
-% The website uses:
-%   Libre Baskerville for display text
-%   Inter for body text
-%
-% We use TeX Gyre Heros for the Inter-like sans-serif body
-% and TeX Gyre Pagella for the Baskerville-like display face.
-%
-% The two families are deliberately kept distinct.
-
 \usepackage{tgheros}
 \usepackage{tgpagella}
 
-% Body text: sans-serif, matching the site's Inter character.
 \renewcommand{\familydefault}{\sfdefault}
-
-% Display / title font.
 \newcommand{\displayfont}{\fontfamily{qpl}\selectfont}
-
-% Instruction / machine syntax.
 \newcommand{\instr}[1]{\texttt{#1}}
-
-% ------------------------------------------------------------
-% Microtypography
-% ------------------------------------------------------------
 
 \usepackage[
   tracking=true,
@@ -82,7 +50,6 @@
 
 \usepackage{xcolor}
 
-% Exact colors from the Ephemelier web design.
 \definecolor{ephemink}{HTML}{1A1A1A}
 \definecolor{ephemmuted}{HTML}{666666}
 \definecolor{ephembg}{HTML}{FAF9F7}
@@ -96,37 +63,31 @@
 \usepackage{amsmath}
 \usepackage{amssymb}
 
-% RISC-V semantic notation.
-
-% Integer register.
 \newcommand{\reg}[1]{x[#1]}
-
-% Common operands.
 \newcommand{\rd}{\reg{rd}}
 \newcommand{\rsone}{\reg{rs1}}
 \newcommand{\rstwo}{\reg{rs2}}
 
-% Signed multiplication and shift.
-%
-% The two "s" annotations belong visually to the multiplication
-% operator rather than appearing as detached operands.
-\newcommand{\signedmul}{%
-  {}_{\!\mathrm{s}}\!\times\!{}_{\!\mathrm{s}}%
+\newcommand{\smul}{%
+  \;{}_{\!\mathrm{s}}\!\mkern2mu\mathord{\times}\mkern2mu_{\!\mathrm{s}}\;%
+}
+\newcommand{\mul}{%
+  \;\mathord{\times}\;%
 }
 
-\newcommand{\signedshift}{%
-  \gg_{\mathrm{s}}%
-}
+\newcommand{\signedshift}{\gg_{\mathrm{s}}}
+
+% Compact display mathematics throughout instruction descriptions.
+\setlength{\abovedisplayskip}{0.7em plus 0.2em minus 0.2em}
+\setlength{\belowdisplayskip}{0.7em plus 0.2em minus 0.2em}
+\setlength{\abovedisplayshortskip}{0.5em plus 0.2em minus 0.1em}
+\setlength{\belowdisplayshortskip}{0.5em plus 0.2em minus 0.1em}
 
 % ------------------------------------------------------------
 % Section formatting
 % ------------------------------------------------------------
 
 \usepackage{titlesec}
-
-% Major sections:
-% Same visual language as the web site's H2:
-% small, uppercase, tracked sans-serif.
 
 \titleformat{\section}
   {\sffamily\small\bfseries\color{ephemink}}
@@ -136,11 +97,8 @@
 
 \titlespacing*{\section}
   {0pt}
-  {3.2ex plus 1ex minus .2ex}
-  {1.4ex}
-
-% Extension / major subsection:
-% Baskerville-like display type, semibold appearance.
+  {2.4ex plus .6ex minus .2ex}
+  {0.9ex}
 
 \titleformat{\subsection}
   {\displayfont\large\bfseries\color{ephemink}}
@@ -150,10 +108,8 @@
 
 \titlespacing*{\subsection}
   {0pt}
-  {2.5ex plus .8ex minus .2ex}
-  {1.2ex}
-
-% Instruction-level headings.
+  {1.8ex plus .5ex minus .2ex}
+  {0.7ex}
 
 \titleformat{\subsubsection}
   {\sffamily\normalsize\bfseries\color{ephemink}}
@@ -163,8 +119,8 @@
 
 \titlespacing*{\subsubsection}
   {0pt}
-  {2ex plus .6ex minus .2ex}
-  {0.8ex}
+  {1.4ex plus .4ex minus .2ex}
+  {0.5ex}
 
 % ------------------------------------------------------------
 % Header / footer
@@ -175,21 +131,18 @@
 \pagestyle{fancy}
 \fancyhf{}
 
-% Ephemelier mark: Baskerville-like, lowercase, widely tracked.
 \lhead{%
   \textcolor{ephemmuted}{%
     \displayfont\textls[120]{ephemelier}%
   }%
 }
 
-% Running document identifier.
 \rhead{%
   \textcolor{ephemmuted}{%
     \sffamily\footnotesize RISC-V ISA
   }%
 }
 
-% Page number.
 \rfoot{%
   \textcolor{ephemmuted}{%
     \sffamily\footnotesize\thepage
@@ -198,8 +151,6 @@
 
 \renewcommand{\headrulewidth}{0pt}
 \renewcommand{\footrulewidth}{0pt}
-
-% Header spacing.
 \setlength{\headheight}{14pt}
 
 % ------------------------------------------------------------
@@ -218,7 +169,7 @@
 
 \posttitle{%
   \end{flushleft}
-  \vspace{0.8em}
+  \vspace{0.45em}
 }
 
 \preauthor{%
@@ -230,7 +181,7 @@
 
 \postauthor{%
   \end{flushleft}
-  \vspace{0.4em}
+  \vspace{0.2em}
 }
 
 \predate{%
@@ -245,54 +196,50 @@
 }
 
 % ------------------------------------------------------------
-% Lists
+% Lists / tables / code
 % ------------------------------------------------------------
 
 \usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{listings}
 
-% Match the website's understated en-dash lists.
 \setlist[itemize]{
   label={\textcolor{ephemmuted}{--}},
   leftmargin=1.5em,
-  itemsep=0.25em,
-  topsep=0.4em
+  itemsep=0.15em,
+  topsep=0.25em
 }
 
 \setlist[enumerate]{
   leftmargin=1.5em,
-  itemsep=0.25em,
-  topsep=0.4em
+  itemsep=0.15em,
+  topsep=0.25em
 }
-
-% ------------------------------------------------------------
-% Tables
-% ------------------------------------------------------------
-
-\usepackage{booktabs}
-\usepackage{array}
-
-% ------------------------------------------------------------
-% Code
-% ------------------------------------------------------------
-
-\usepackage{listings}
 
 \lstset{
   basicstyle=\ttfamily\small,
   frame=none,
-  backgroundcolor=\color{ephembg},
   columns=fullflexible,
   keepspaces=true,
   showstringspaces=false,
-  xleftmargin=1em,
-  xrightmargin=1em,
-  aboveskip=0.8em,
-  belowskip=0.8em
+  xleftmargin=0.7em,
+  xrightmargin=0.7em,
+  aboveskip=0.35em,
+  belowskip=0.35em
 }
 
 % ------------------------------------------------------------
-% Hyperlinks
+% Figures / hyperlinks
 % ------------------------------------------------------------
+
+\usepackage{caption}
+\captionsetup{
+  font={sf,small},
+  labelfont={sf,small},
+  labelsep=colon,
+  skip=0.35em
+}
 
 \usepackage[
   colorlinks=true,
@@ -308,46 +255,348 @@
 % ------------------------------------------------------------
 % RISC-V instruction encoding diagrams
 % ------------------------------------------------------------
-\input{instr}
+
+% ------------------------------------------------------------
+% RISC-V instruction encoding diagrams
+% ------------------------------------------------------------
+
+\usepackage{tikz}
+
+% Width of one bit in the current encoding diagram.
+% The complete instruction occupies \linewidth.
+\newlength{\riscvbitwidth}
+\newlength{\riscvdiagramwidth}
+
+% Current position, measured from the MSB.
+\newcount\riscvencodingpos
+
+% Number of bits emitted so far.
+\newcount\riscvencodingbits
+
+% Width of the current instruction.
+\newcount\riscvinstructionbits
+
+
+% ------------------------------------------------------------
+% TikZ styles
+% ------------------------------------------------------------
+
+\tikzset{
+  riscv/encoding/.style={
+    x=\riscvbitwidth,
+    y=1cm,
+    font=\sffamily,
+    line cap=butt,
+    line join=miter
+  }
+}
+
+\tikzset{
+  riscv/field/.style={
+    draw=ephemink,
+    line width=0.35pt
+  }
+}
+
+\tikzset{
+  riscv/value/.style={
+    font=\ttfamily\small,
+    inner sep=0pt
+  }
+}
+
+\tikzset{
+  riscv/bits/.style={
+    font=\sffamily\scriptsize,
+    inner sep=0pt
+  }
+}
+
+\tikzset{
+  riscv/format/.style={
+    font=\sffamily\small,
+    anchor=west,
+    inner sep=0pt
+  }
+}
+
+
+% ------------------------------------------------------------
+% RISC-V encoding environment
+%
+% Usage:
+%
+%   \begin{riscvencoding}[R-type]{mulh}{32}
+%     \field{0000001}{7}
+%     \field{rs2}{5}
+%     \field{rs1}{5}
+%     \field{001}{3}
+%     \field{rd}{5}
+%     \field{0110011}{7}
+%   \end{riscvencoding}
+%
+%   \begin{riscvencoding}[C-type]{C.ADDI}{16}
+%     \field{01}{2}
+%     \field{000}{3}
+%     \field{imm[5]}{1}
+%     \field{rs1}{5}
+%     \field{imm[4:0]}{5}
+%   \end{riscvencoding}
+%
+% Arguments:
+%
+%   #1 = optional instruction format
+%   #2 = instruction name
+%   #3 = instruction width in bits
+%
+% The complete diagram occupies \linewidth.
+% ------------------------------------------------------------
+
+\newenvironment{riscvencoding}[3][]{%
+
+  % Save instruction width.
+  \riscvinstructionbits=#3\relax
+
+  % Reserve a small fixed column for the instruction format/name.
+  % The encoding itself uses the remaining width, so the diagram
+  % does not overrun the instruction content column.
+  \setlength{\riscvdiagramwidth}{%
+    \dimexpr\linewidth-4.8em\relax
+  }%
+
+  % One bit occupies an equal fraction of the encoding width.
+  \setlength{\riscvbitwidth}{%
+    \dimexpr\riscvdiagramwidth/#3\relax
+  }%
+
+  % Position of the format/name annotation, in bit coordinates.
+  \pgfmathsetmacro{\riscvformatpos}{\the\riscvinstructionbits+0.7}%
+
+  % Start at the most-significant bit.
+  \riscvencodingpos=0%
+
+  % No fields emitted yet.
+  \riscvencodingbits=0%
+
+  % Save format and instruction name.
+  \def\riscvformat{#1}%
+  \def\riscvinstruction{#2}%
+
+  \begin{center}
+  \begin{tikzpicture}[riscv/encoding]
+
+}{%
+
+  % Verify that the fields occupy the complete instruction.
+  \ifnum\riscvencodingbits=\riscvinstructionbits
+  \else
+    \PackageError{riscvencoding}
+      {Instruction encoding contains \the\riscvencodingbits\space bits}
+      {The encoding must contain exactly
+       \the\riscvinstructionbits\space bits.}%
+  \fi
+
+  % Optional instruction format and name.
+  \ifx\riscvformat\empty
+  \else
+    \node[
+      riscv/format
+    ] at (
+      \riscvformatpos,
+      0.52
+    ) {\riscvformat};
+
+    \node[
+      riscv/format
+    ] at (
+      \riscvformatpos,
+      0.16
+    ) {\instr{\riscvinstruction}};
+  \fi
+
+  \end{tikzpicture}
+  \end{center}
+}
+
+
+% ------------------------------------------------------------
+% \field{label}{width}
+%
+% #1 = field label / encoded value
+% #2 = field width in bits
+%
+% Examples:
+%
+%   \field{0000001}{7}
+%   \field{rs2}{5}
+%   \field{imm[4:0]}{5}
+%
+% The label is rendered exactly as supplied.
+% ------------------------------------------------------------
+
+\newcommand{\field}[2]{%
+
+  % ----------------------------------------------------------
+  % Calculate field boundaries
+  % ----------------------------------------------------------
+
+  % Position immediately after this field.
+  \pgfmathtruncatemacro{\riscvendpos}{%
+    \riscvencodingpos + #2%
+  }%
+
+  % Most-significant bit of this field.
+  \pgfmathtruncatemacro{\riscvstartbit}{%
+    \riscvinstructionbits - 1 - \riscvencodingpos
+  }%
+
+  % Least-significant bit of this field.
+  \pgfmathtruncatemacro{\riscvendbit}{%
+    \riscvinstructionbits - \riscvendpos
+  }%
+
+  % ----------------------------------------------------------
+  % Validate field
+  % ----------------------------------------------------------
+
+  \ifnum\riscvendpos>\riscvinstructionbits
+    \PackageError{riscvencoding}
+      {Encoding field exceeds instruction width}
+      {A field extends beyond the
+       \the\riscvinstructionbits-bit instruction.}%
+  \fi
+
+  % ----------------------------------------------------------
+  % Field rectangle
+  % ----------------------------------------------------------
+
+  \draw[
+    riscv/field
+  ]
+    (\riscvencodingpos,0)
+    rectangle
+    (\riscvendpos,0.72);
+
+  % ----------------------------------------------------------
+  % Field label
+  %
+  % The field is 0.72 units high, so 0.36 is its vertical
+  % center.
+  % ----------------------------------------------------------
+
+  \node[
+    riscv/value
+  ] at (
+    \riscvencodingpos + #2/2,
+    0.36
+  ) {#1};
+
+  % ----------------------------------------------------------
+  % Field bit numbers
+  %
+  % Both numbers are placed inside the field, slightly inset
+  % from its boundaries.
+  %
+  % Example:
+  %
+  %   31        25 24        20
+  %   ┌───────────┬────────────┐
+  %
+  % The left number uses south-west anchoring and the right
+  % number uses south-east anchoring, so adjacent numbers
+  % remain separated.
+  % ----------------------------------------------------------
+
+  % Most-significant bit.
+  \node[
+    riscv/bits,
+    anchor=south west,
+    xshift=2pt
+  ] at (
+    \riscvencodingpos,
+    0.98
+  ) {\riscvstartbit};
+
+  % Least-significant bit.
+  \node[
+    riscv/bits,
+    anchor=south east,
+    xshift=-2pt
+  ] at (
+    \riscvendpos,
+    0.98
+  ) {\riscvendbit};
+
+  % ----------------------------------------------------------
+  % Advance to next field
+  % ----------------------------------------------------------
+
+  \riscvencodingpos=\riscvendpos
+
+  \advance\riscvencodingbits by #2\relax
+}
+
+
+% ------------------------------------------------------------
+% Paragraph formatting
+% ------------------------------------------------------------
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.42em}
+
+% ------------------------------------------------------------
+% Compact instruction layout
+% ------------------------------------------------------------
+
+% Width of the section-label column and its separation from
+% the instruction content.  The label column deliberately stays
+% fixed so all instruction metadata aligns vertically.
+\newlength{\instrlabelwidth}
+\setlength{\instrlabelwidth}{10.8em}
+
+\newlength{\instrlabelsep}
+\setlength{\instrlabelsep}{1.4em}
+
+% Each instruction section is a two-column row.  A minipage is
+% used for the content so paragraphs, display mathematics,
+% listings, and diagrams can flow naturally inside the right
+% column.  Unlike a list-based implementation, this keeps the
+% section label aligned even when the content begins with a
+% display or centered figure.
+\newenvironment{instructionrow}[1]{%
+  \par\noindent
+  \begin{minipage}[t]{\instrlabelwidth}%
+    \vspace{0pt}%
+    \sffamily\small\bfseries\textls[100]{\MakeUppercase{#1}}%
+  \end{minipage}%
+  \hspace{\instrlabelsep}%
+  \begin{minipage}[t]{\dimexpr\linewidth-\instrlabelwidth-\instrlabelsep\relax}%
+    \vspace{0pt}%
+}{%
+  \end{minipage}%
+  \par\vspace{0.75em}%
+}
+
+% Compact operand entries.  The instruction-row content column
+% is used by the surrounding instructionrow environment.
+
+\newlength{\operandwidth}
+\setlength{\operandwidth}{3.8em}
+
+\newcommand{\operand}[2]{%
+  \makebox[\operandwidth][l]{\texttt{#1}}%
+  #2\par
+}
 
 % ------------------------------------------------------------
 % PDF metadata
 % ------------------------------------------------------------
 
 \hypersetup{
-  pdftitle={RISC-V ISA and Extensions},
+  pdftitle={RISC-V Instruction Set Architecture and Extensions},
   pdfauthor={Markku Rossi},
   pdfsubject={RISC-V Instruction Set Architecture},
   pdfcreator={pdfLaTeX}
-}
-
-% ------------------------------------------------------------
-% Paragraph formatting
-% ------------------------------------------------------------
-
-% Match the website: paragraphs are separated by whitespace,
-% not by indentation.
-
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{0.5em}
-
-% ------------------------------------------------------------
-% Instruction-specific environments
-% ------------------------------------------------------------
-
-% Small semantic labels such as SYNTAX, OPERATION, ENCODING.
-
-\newcommand{\metalabel}[1]{%
-  \par\vspace{0.8em}%
-  {\sffamily\small\bfseries\textls[100]{\MakeUppercase{#1}}}%
-  \par\vspace{0.35em}%
-}
-
-% Instruction syntax.
-\newcommand{\syntax}[1]{%
-  \begin{lstlisting}
-#1
-  \end{lstlisting}
 }
 
 % ------------------------------------------------------------
@@ -377,23 +626,9 @@ open standard instruction set architectures for general-purpose
 computing.
 
 This document describes the RISC-V base instruction sets and
-extensions.
-
-The instruction descriptions are organized by architectural
-extension and use a common notation for operands, operations,
-and instruction encodings.
-
-\metalabel{Operation}
-
-\[
-\rd =
-\left(
-  \rsone\,
-  \;{}_{\!\mathrm{s}}\!\times\!{}_{\!\mathrm{s}}\;\,
-  \rstwo
-\right)
-\gg_{\mathrm{s}} XLEN
-\]
+extensions. The instruction descriptions are organized by
+architectural extension and use a common notation for operands,
+operations, and instruction encodings.
 
 % ------------------------------------------------------------
 % Base ISA
@@ -419,58 +654,98 @@ The E extension defines a reduced integer instruction set with
 
 \subsection{M --- Integer Multiply/Divide}
 
-The M extension provides integer multiplication and division
-instructions.
+This chapter describes the standard integer multiplication and
+division instruction extension, which is named {\sf M} and contains
+instructions that multiply or divide values held in two integer
+registers.
+
+\subsubsection{\instr{mul} --- Multiply Integer $\times$ Integer}
+
+\begin{instructionrow}{Synopsis}
+
+\begin{lstlisting}
+mul rd, rs1, rs2
+\end{lstlisting}
+\end{instructionrow}
+
+\begin{instructionrow}{Description}
+The \instr{mul} instruction multiplies the values in the source
+registers \instr{rs1} and \instr{rs2} and stores the lower
+\texttt{XLEN} bit result to the description registers \instr{rd}.
+\end{instructionrow}
+
+\begin{instructionrow}{Operation}
+\[
+\rd = \rsone\,\mul\,\rstwo
+\]
+\end{instructionrow}
+
+\begin{instructionrow}{Encoding}
+
+\begin{center}
+  \begin{riscvencoding}[R-type]{mul}{32}
+    \field{0000001}{7}
+    \field{rs2}{5}
+    \field{rs1}{5}
+    \field{000}{3}
+    \field{rd}{5}
+    \field{0110011}{7}
+  \end{riscvencoding}
+  \captionof{figure}{mul instruction encoding.}
+  \label{fig:mulh-encoding}
+\end{center}
+\end{instructionrow}
+
 
 % ------------------------------------------------------------
-% Instruction: MULH
+% Instruction: mulh
 % ------------------------------------------------------------
 
-\subsubsection{\instr{MULH} --- Multiply High Signed $\times$ Signed}
+\subsubsection{\instr{mulh} --- Multiply High Signed $\times$ Signed}
 
-\metalabel{Synopsis}
+\begin{instructionrow}{Synopsis}
 
 \begin{lstlisting}
 mulh rd, rs1, rs2
 \end{lstlisting}
+\end{instructionrow}
 
-\metalabel{Description}
+\begin{instructionrow}{Description}
 
-The \instr{MULH} instruction multiplies the values in the
+The \instr{mulh} instruction multiplies the values in the
 source registers \instr{rs1} and \instr{rs2}, treating both
 operands as signed two's-complement integers. The upper
-\mbox{\texttt{XLEN}} bits of the resulting $2\times\mbox{\texttt{XLEN}}$-bit
-product are written to the destination register \instr{rd}.
+\mbox{\texttt{XLEN}} bits of the resulting
+$2\times\mbox{\texttt{XLEN}}$-bit product are written to the
+destination register \instr{rd}.
 
 The lower \mbox{\texttt{XLEN}} bits of the product are discarded.
 The operation therefore provides the high half of a signed
 integer multiplication without requiring the full product to
 be represented in a single integer register.
 
-\metalabel{Operation}
+\end{instructionrow}
+
+\begin{instructionrow}{Operation}
 
 \[
 \rd =
 \left(
-  \rsone\,
-  \;{}_{\!\mathrm{s}}\!\times\!{}_{\!\mathrm{s}}\;\,
-  \rstwo
+  \rsone\,\smul\,\rstwo
 \right)
-\gg_{\mathrm{s}} XLEN
+\signedshift XLEN
 \]
 
 Equivalently, if the signed values represented by
 \instr{rs1} and \instr{rs2} are denoted by $a$ and $b$, then
 \instr{rd} receives the upper \mbox{\texttt{XLEN}} bits of the
 $2\times\mbox{\texttt{XLEN}}$-bit signed product $a\times b$.
+\end{instructionrow}
 
-\metalabel{Encoding}
+\begin{instructionrow}{Encoding}
 
-
-\begin{figure}[ht]
-  \centering
-
-  \begin{riscvencoding}[R-type]{MULH}{32}
+\begin{center}
+  \begin{riscvencoding}[R-type]{mulh}{32}
     \field{0000001}{7}
     \field{rs2}{5}
     \field{rs1}{5}
@@ -478,40 +753,28 @@ $2\times\mbox{\texttt{XLEN}}$-bit signed product $a\times b$.
     \field{rd}{5}
     \field{0110011}{7}
   \end{riscvencoding}
-
-  \caption{MULH instruction encoding.}
+  \captionof{figure}{mulh instruction encoding.}
   \label{fig:mulh-encoding}
-\end{figure}
+\end{center}
+\end{instructionrow}
 
-\metalabel{Operands}
+\begin{instructionrow}{Operands}
 
-\begin{tabular}{@{}ll@{}}
-\texttt{rd}  & Destination integer register. \\
-\texttt{rs1} & First source integer register. \\
-\texttt{rs2} & Second source integer register. \\
-\end{tabular}
+\operand{rd}{Destination integer register.}
+\operand{rs1}{First source integer register.}
+\operand{rs2}{Second source integer register.}
+\end{instructionrow}
 
-\metalabel{Availability}
+\begin{instructionrow}{Availability}
 
 RV32M and RV64M.
+\end{instructionrow}
+
+% ------------------------------------------------------------
+% Further extension examples
+% ------------------------------------------------------------
 
 \subsection{A --- Atomic}
-
-\begin{figure}[ht]
-  \centering
-
-  \begin{riscvencoding}[C-type]{C.ADDI}{16}
-    \field{01}{2}
-    \field{000}{3}
-    \field{imm[5]}{1}
-    \field{rs1}{5}
-    \field{imm[4:0]}{5}
-  \end{riscvencoding}
-
-  \caption{C.ADDI instruction encoding.}
-  \label{fig:c-addi-encoding}
-\end{figure}
-
 
 The A extension provides atomic memory operations.
 
@@ -564,7 +827,5 @@ The P extension provides packed SIMD instructions.
 \subsection{V --- Vector}
 
 The V extension provides vector instructions.
-
-% ------------------------------------------------------------
 
 \end{document}
