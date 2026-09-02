@@ -92,9 +92,6 @@ The project is divided into two tracks:
   - [ ] virtio-net
     - [ ] HTTP proxy
     - [ ] NTP server
-    - [ ] Async send path
-  - [ ] virtio-blk
-    - [ ] Async I/O
   - [ ] virtio-console
 - [ ] SMP support
 - [ ] Parse Linux kernel PE32+ header: load address, symbols
