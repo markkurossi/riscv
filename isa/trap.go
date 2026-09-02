@@ -155,6 +155,21 @@ const (
 	RegDirty
 )
 
+var regStatuses = map[RegStatus]string{
+	RegOff:     "off",
+	RegInitial: "initial",
+	RegClean:   "clean",
+	RegDirty:   "dirty",
+}
+
+func (s RegStatus) String() string {
+	name, ok := regStatuses[s]
+	if ok {
+		return name
+	}
+	return fmt.Sprintf("{RegStatus %d}", s)
+}
+
 // VS returns the vector extension state.
 func (m Mstatus) VS() RegStatus {
 	return RegStatus(m >> MsVS & 0b11)
