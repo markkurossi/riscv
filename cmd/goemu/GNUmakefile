@@ -40,3 +40,7 @@ get-netbsd:
 	ls -l $(netbsd_kernel_dir)/netbsd
 	cp  $(netbsd_kernel_dir)/netbsd netbsd/
 	cp  $(netbsd_kernel_dir)/netbsd.map netbsd/
+
+get-linux:
+	scp builder:linux-7.2.2/arch/riscv/boot/Image linux-7.2.2/
+	scp builder:linux-7.2.2/System.map linux-7.2.2/
