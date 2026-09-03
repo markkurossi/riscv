@@ -65,6 +65,7 @@ operating systems, and the RISC-V privileged architecture.
     - [ ] clean detach and shutdown
   - [ ] Implement memory mapped framebuffer for `virtio_gpu.c` and `gpu.go`
 - [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
+- [ ] [Haiku boot](docs/haiku.md)
 
 ### MPC RISC-V
 
