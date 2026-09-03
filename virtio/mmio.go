@@ -105,7 +105,7 @@ type MMIO struct {
 	Handler  Handler
 
 	shmSel uint32
-	SHM    []*mmu.SHM
+	SHM    map[uint32]*mmu.SHM
 
 	deviceFeaturesSel uint32
 	driverFeaturesSel uint32
@@ -147,11 +147,15 @@ const (
 	DEVICE_NEEDS_RESET uint32 = 64
 )
 
-func (vio *MMIO) shm(idx uint32) *mmu.SHM {
-	if int(idx) >= len(vio.SHM) {
-		return nil
+func (vio *MMIO) AssignSHM(base uint64) uint64 {
+	for _, shm := range vio.SHM {
+		shm.Start += base
+		shm.End += base
+
+		base = shm.End
 	}
-	return vio.SHM[idx]
+
+	return base
 }
 
 func (vio *MMIO) DriverOK() bool {
@@ -260,20 +264,24 @@ func (vio *MMIO) Load32(paddr uint64) (uint32, error) {
 		// -1.
 
 	case 0x0b0: // SHMLenLow
-		shm := vio.shm(vio.shmSel)
-		if shm == nil {
+		shm, ok := vio.SHM[vio.shmSel]
+		if !ok {
 			return 0xffffffff, nil
 		}
 		l := shm.End - shm.Start
-		return uint32(l), nil
+		v := uint32(l)
+		vio.Debugf("Load32(%v) => %x\n", mmioReg(offset), v)
+		return v, nil
 
 	case 0x0b4: // SHMLenHigh
-		shm := vio.shm(vio.shmSel)
-		if shm == nil {
+		shm, ok := vio.SHM[vio.shmSel]
+		if !ok {
 			return 0xffffffff, nil
 		}
 		l := shm.End - shm.Start
-		return uint32(l >> 32), nil
+		v := uint32(l >> 32)
+		vio.Debugf("Load32(%v) => %x\n", mmioReg(offset), v)
+		return v, nil
 
 		// Shared memory region 64 bit long physical address
 		//
@@ -287,18 +295,22 @@ func (vio *MMIO) Load32(paddr uint64) (uint32, error) {
 		// address of 0xffffffffffffffff.
 
 	case 0x0b8: // SHMBaseLow
-		shm := vio.shm(vio.shmSel)
-		if shm == nil {
+		shm, ok := vio.SHM[vio.shmSel]
+		if !ok {
 			return 0xffffffff, nil
 		}
-		return uint32(shm.Start), nil
+		v := uint32(shm.Start)
+		vio.Debugf("Load32(%v) => %x\n", mmioReg(offset), v)
+		return v, nil
 
 	case 0x0bc: // SHMBaseHigh
-		shm := vio.shm(vio.shmSel)
-		if shm == nil {
+		shm, ok := vio.SHM[vio.shmSel]
+		if !ok {
 			return 0xffffffff, nil
 		}
-		return uint32(shm.Start >> 32), nil
+		v := uint32(shm.Start >> 32)
+		vio.Debugf("Load32(%v) => %x\n", mmioReg(offset), v)
+		return v, nil
 	}
 	return 0, nil
 }
@@ -679,6 +691,7 @@ var mmioRegs = map[uint64]string{
 	0x094: "QueueDriverHigh",
 	0x0a0: "QueueDeviceLow",
 	0x0a4: "QueueDeviceHigh",
+	0x0ac: "SHMSel",
 	0x0b0: "SHMLenLow",
 	0x0b4: "SHMLenHigh",
 	0x0b8: "SHMBaseLow",

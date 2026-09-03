@@ -30,26 +30,28 @@ const (
 	OfsDTB    = 0x8220_0000
 	OfsInitrd = 0x8800_0000
 
-	UARTBase = 0x10000000
+	PLICBase = 0x0c00_0000
+
+	CLINTBase = 0x200_0000
+	CLINTSize = 0x10000
+
+	UARTBase = 0x1000_0000
 	UARTIRQ  = 10
 
-	SysconBase = 0x10000100
+	SysconBase = 0x1000_0100
 	SysconSize = 256
 
-	NMEABase = 0x10000200
+	NMEABase = 0x1000_0200
 	NMEAIRQ  = 11
 
-	RTCBase = 0x10100000
+	VirtioRAMBase = 0x1000_8000
+	VirtioIRQBase = 1
+
+	RTCBase = 0x1010_0000
 	RTCSize = 0x1000
 	RTCIRQ  = 12
 
-	VirtioROMBase = 0x10008000
-	VirtioIRQBase = 1
-
-	CLINTBase = 0x2000000
-	CLINTSize = 0x10000
-
-	PLICBase = 0x0c000000
+	SHMBase = 0x4000_0000
 )
 
 func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
@@ -104,13 +106,15 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 	// Create VirtIO devices.
 	var virtioDevices []*virtio.MMIO
 
-	var virtioROM uint64 = VirtioROMBase
+	var virtioRAM uint64 = VirtioRAMBase
 	var virtioIRQ uint32 = VirtioIRQBase
 
+	var shmBase uint64 = SHMBase
+
 	// Entropy Source / RNG.
-	rng := virtio.NewRng(hart, virtioROM, plic, virtioIRQ, mem)
+	rng := virtio.NewRng(hart, virtioRAM, plic, virtioIRQ, mem)
 	mmio.Segments = append(mmio.Segments, rng)
-	virtioROM = rng.End
+	virtioRAM = rng.End
 	virtioIRQ++
 	virtioDevices = append(virtioDevices, rng.Device())
 
@@ -137,7 +141,7 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 				return err
 			}
 
-			blk := virtio.NewBlk(hart, virtioROM, plic, virtioIRQ, mem, fs)
+			blk := virtio.NewBlk(hart, virtioRAM, plic, virtioIRQ, mem, fs)
 			mmio.Segments = append(mmio.Segments, blk)
 
 			deviceID := dev.ID
@@ -154,7 +158,7 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 			if netdev == nil {
 				return fmt.Errorf("unknown netdev: %v", dev.Netdev)
 			}
-			net, err := virtio.NewNet(hart, virtioROM, plic, virtioIRQ, mem,
+			net, err := virtio.NewNet(hart, virtioRAM, plic, virtioIRQ, mem,
 				netdev.IP, netdev.GW, netdev.Hostname, netdev.Domainname)
 			if err != nil {
 				return err
@@ -174,11 +178,17 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 			if err != nil {
 				return err
 			}
-			gpu, err = virtio.NewGPU(hart, virtioROM, plic, virtioIRQ, mem,
+			gpu, err = virtio.NewGPU(hart, virtioRAM, plic, virtioIRQ, mem,
 				gpudev.Title, gpudev.Width, gpudev.Height, pointer)
 			if err != nil {
 				return err
 			}
+			shmBase = gpu.AssignSHM(shmBase)
+			for id, shm := range gpu.SHM {
+				fmt.Printf("GPU.SHM[%v]: [%x-%x[\n", id, shm.Start, shm.End)
+				mmio.Segments = append(mmio.Segments, shm)
+			}
+
 			mmio.Segments = append(mmio.Segments, gpu)
 			vio = gpu.Device()
 
@@ -186,30 +196,30 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 			return fmt.Errorf("invalid device type: %v", dev.Type)
 		}
 
-		virtioROM = vio.End
+		virtioRAM = vio.End
 		virtioIRQ++
 		virtioDevices = append(virtioDevices, vio)
 	}
 
 	// If gpu is configured, add its input devices.
 	if gpu != nil {
-		input := virtio.NewInput(hart, virtioROM, plic, virtioIRQ, mem,
+		input := virtio.NewInput(hart, virtioRAM, plic, virtioIRQ, mem,
 			gpu.Width, gpu.Height, virtio.InputKeyboard)
 		mmio.Segments = append(mmio.Segments, input)
 		gpu.KeyboardListener = input
 
 		vio := input.Device()
-		virtioROM = vio.End
+		virtioRAM = vio.End
 		virtioIRQ++
 		virtioDevices = append(virtioDevices, vio)
 
-		input = virtio.NewInput(hart, virtioROM, plic, virtioIRQ, mem,
+		input = virtio.NewInput(hart, virtioRAM, plic, virtioIRQ, mem,
 			gpu.Width, gpu.Height, gpu.Pointer)
 		mmio.Segments = append(mmio.Segments, input)
 		gpu.MouseListener = input
 
 		vio = input.Device()
-		virtioROM = vio.End
+		virtioRAM = vio.End
 		virtioIRQ++
 		virtioDevices = append(virtioDevices, vio)
 	}
@@ -220,12 +230,12 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 		if err != nil {
 			return fmt.Errorf("failed to open disk file %v: %v", arg, err)
 		}
-		blk := virtio.NewBlk(hart, virtioROM, plic, virtioIRQ, mem, fs)
+		blk := virtio.NewBlk(hart, virtioRAM, plic, virtioIRQ, mem, fs)
 		mmio.Segments = append(mmio.Segments, blk)
 		blk.SetID(fmt.Sprintf("arg-disk-%d", idx))
 
 		vio := blk.Device()
-		virtioROM = vio.End
+		virtioRAM = vio.End
 		virtioIRQ++
 		virtioDevices = append(virtioDevices, vio)
 	}
@@ -457,7 +467,7 @@ func makeDTB(initrdSize uint64, mem *memory.Memory, plic *dev.PLIC,
 
 	// The legacy ISA string (Mandatory for many versions)
 	// Note: Use 'g' as an alias for 'imafd' to stay compatible
-	fdt.PropStr("riscv,isa", "rv64gc_sstc")
+	fdt.PropStr("riscv,isa", "rv64gcv_sstc")
 
 	// Modern granular ISA description
 	fdt.PropStr("riscv,isa-base", "rv64i")
@@ -466,7 +476,8 @@ func makeDTB(initrdSize uint64, mem *memory.Memory, plic *dev.PLIC,
 	// PropStr function so they are encoded as a string list in the
 	// blob.
 	fdt.PropTabStr("riscv,isa-extensions",
-		"i", "m", "a", "f", "d", "c", "zicsr", "zifencei", "zicntr", "zihpm",
+		"i", "m", "a", "f", "d", "c", "v",
+		"zicsr", "zifencei", "zicntr", "zihpm",
 		"sstc",
 	)
 
@@ -603,7 +614,7 @@ func makeDTB(initrdSize uint64, mem *memory.Memory, plic *dev.PLIC,
 	// ---------------------------------------------------------------------
 
 	for _, uart := range uarts {
-		fdt.BeginNodeNum("uart", UARTBase)
+		fdt.BeginNodeNum("uart", uart.Start)
 
 		fdt.PropStr("compatible", "ns16550a")
 

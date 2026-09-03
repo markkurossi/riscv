@@ -24,6 +24,13 @@ make run
 cd own/linux-7.0.11
 ```
 
+### Preparing Debian build host
+
+```shell
+$ sudo apt install gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf gcc-riscv64-linux-gnu libc6-dev-riscv64-cross
+$ sudo apt install flex bison bc
+```
+
 ### Configure
 
 ``` shell

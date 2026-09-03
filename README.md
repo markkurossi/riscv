@@ -57,12 +57,13 @@ operating systems, and the RISC-V privileged architecture.
 
 ### Release 1.0
 
+- [ ] V extension
+- [ ] Reimplement DTB creation
 - [ ] FreeBSD
   - [ ] virtio_input.c
     - [ ] cursor keys (and others) in framebuffer console (scancodes)
     - [ ] clean detach and shutdown
   - [ ] Implement memory mapped framebuffer for `virtio_gpu.c` and `gpu.go`
-- [ ] Reimplement DTB creation
 - [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
 
 ### MPC RISC-V
