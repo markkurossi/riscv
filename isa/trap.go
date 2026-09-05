@@ -10,254 +10,8 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"strings"
 )
-
-// Mstatus implements the machine status register.
-type Mstatus uint64
-
-// WPRI = Reserved Writes Preserve, Reads Ignore
-const (
-	MsSIE   = 1
-	MsMIE   = 3
-	MsSPIE  = 5
-	MsUBE   = 6
-	MsMPIE  = 7
-	MsSPP   = 8
-	MsVS    = 9
-	MsMPP   = 11
-	MsFS    = 13
-	MsXS    = 15
-	MsMPRV  = 17
-	MsSUM   = 18
-	MsMXR   = 19
-	MsTVM   = 20
-	MsTW    = 21
-	MsTSR   = 22
-	MsSPELP = 23
-	MsSDT   = 24
-	MsUXL   = 32
-	MsSXL   = 34
-	MsSBE   = 36
-	MsMBE   = 37
-	MsGVA   = 38
-	MsMPV   = 39
-	MsMPELP = 41
-	MsMDT   = 42
-	MsSD    = 63
-)
-
-const (
-	// SstatusMask defines the Sstatus bits that are stored in the
-	// Mstatus.
-	SstatusMask = Mstatus(0) |
-		Mstatus(1)<<MsSIE |
-		Mstatus(1)<<MsSPIE |
-		Mstatus(1)<<MsUBE |
-		Mstatus(1)<<MsSPP |
-		Mstatus(3)<<MsVS |
-		Mstatus(3)<<MsFS |
-		Mstatus(3)<<MsXS |
-		Mstatus(1)<<MsSUM |
-		Mstatus(1)<<MsMXR |
-		Mstatus(1)<<MsSPELP |
-		Mstatus(1)<<MsSDT |
-		Mstatus(3)<<MsUXL |
-		Mstatus(1)<<MsSD
-
-	MConstMask = Mstatus(0) |
-		Mstatus(3)<<MsUXL
-)
-
-// SIE returns the global supervisor interrupt enable flag.
-func (m Mstatus) SIE() bool {
-	return m&(1<<MsSIE) != 0
-}
-
-// SetSIE sets the global supervisor interrupt enable flag.
-func (m *Mstatus) SetSIE(v bool) {
-	if v {
-		*m |= 1 << MsSIE
-	} else {
-		*m &^= 1 << MsSIE
-	}
-}
-
-// MIE returns the global machine interrupt enable flag.
-func (m Mstatus) MIE() bool {
-	return m&(1<<MsMIE) != 0
-}
-
-// SetMIE sets the global machine interrupt enable flag.
-func (m *Mstatus) SetMIE(v bool) {
-	if v {
-		*m |= 1 << MsMIE
-	} else {
-		*m &^= 1 << MsMIE
-	}
-}
-
-// SPIE returns the saved global supervisor interrupt enable flag.
-func (m Mstatus) SPIE() bool {
-	return m&(1<<MsSPIE) != 0
-}
-
-// SetSPIE sets the saved global supervisor interrupt enable flag.
-func (m *Mstatus) SetSPIE(v bool) {
-	if v {
-		*m |= 1 << MsSPIE
-	} else {
-		*m &^= 1 << MsSPIE
-	}
-}
-
-// MPIE returns the saved global machine interrupt enable flag.
-func (m Mstatus) MPIE() bool {
-	return m&(1<<MsMPIE) != 0
-}
-
-// SetMPIE sets the saved global machine interrupt enable flag.
-func (m *Mstatus) SetMPIE(v bool) {
-	if v {
-		*m |= 1 << MsMPIE
-	} else {
-		*m &^= 1 << MsMPIE
-	}
-}
-
-// SPP returns the saved supervisor privilege mode.
-func (m Mstatus) SPP() PrivilegeMode {
-	return PrivilegeMode(m >> MsSPP & 0b1)
-}
-
-// SetSPP sets the saved supervisor privilege mode.
-func (m *Mstatus) SetSPP(mode PrivilegeMode) {
-	if mode > ModeS {
-		panic("SetSPP: invalid mode")
-	}
-	*m &^= 1 << MsSPP
-	*m |= Mstatus(mode&0b1) << MsSPP
-}
-
-// TSR returns the TSR (Trap Supervisor Return) flag.
-func (m Mstatus) TSR() bool {
-	return m&(1<<MsTSR) != 0
-}
-
-// RegStatus defines the register status. This is used floating point
-// and vector extensions.
-type RegStatus uint8
-
-// Register statuses.
-const (
-	RegOff = iota
-	RegInitial
-	RegClean
-	RegDirty
-)
-
-var regStatuses = map[RegStatus]string{
-	RegOff:     "off",
-	RegInitial: "initial",
-	RegClean:   "clean",
-	RegDirty:   "dirty",
-}
-
-func (s RegStatus) String() string {
-	name, ok := regStatuses[s]
-	if ok {
-		return name
-	}
-	return fmt.Sprintf("{RegStatus %d}", s)
-}
-
-// VS returns the vector extension state.
-func (m Mstatus) VS() RegStatus {
-	return RegStatus(m >> MsVS & 0b11)
-}
-
-// SetVS sets the vector extension state.
-func (m *Mstatus) SetVS(s RegStatus) {
-	*m &^= 0b11 << MsVS
-	*m |= Mstatus(s&0b11) << MsVS
-}
-
-// MPP returns the saved machine privilege mode.
-func (m Mstatus) MPP() PrivilegeMode {
-	return PrivilegeMode(m >> MsMPP & 0b11)
-}
-
-// SetMPP sets the saved machine privilege mode.
-func (m *Mstatus) SetMPP(mode PrivilegeMode) {
-	*m &^= 0b11 << MsMPP
-	*m |= Mstatus(mode&0b11) << MsMPP
-}
-
-// FS returns the floating point extension state.
-func (m Mstatus) FS() RegStatus {
-	return RegStatus(m >> MsFS & 0b11)
-}
-
-// SetFS sets the floating point extension state.
-func (m *Mstatus) SetFS(s RegStatus) {
-	*m &^= 0b11 << MsFS
-	*m |= Mstatus(s&0b11) << MsFS
-}
-
-// SUM returns the permit Supervisor User Memory access flag.
-func (m Mstatus) SUM() bool {
-	return m&(1<<MsSUM) != 0
-}
-
-// SetSUM sets the permit Supervisor User Memory access flag.
-func (m *Mstatus) SetSUM(v bool) {
-	if v {
-		*m |= 1 << MsSUM
-	} else {
-		*m &^= 1 << MsSUM
-	}
-}
-
-// MXR returns the Make eXecutable Readable flag.
-func (m Mstatus) MXR() bool {
-	return m&(1<<MsMXR) != 0
-}
-
-// SetMXR sets the Make eXecutable Readable flag.
-func (m *Mstatus) SetMXR(v bool) {
-	if v {
-		*m |= 1 << MsMXR
-	} else {
-		*m &^= 1 << MsMXR
-	}
-}
-
-// TVM returns the Trap Virtual Memory flag.
-func (m Mstatus) TVM() bool {
-	return m&(1<<MsTVM) != 0
-}
-
-// SetTVM sets the Trap Virtual Memory flag.
-func (m *Mstatus) SetTVM(v bool) {
-	if v {
-		*m |= 1 << MsTVM
-	} else {
-		*m &^= 1 << MsTVM
-	}
-}
-
-// SD returns the combined dirty status flag.
-func (m Mstatus) SD() bool {
-	return m&(1<<MsSD) != 0
-}
-
-// SetSD sets the combined dirty status flag.
-func (m *Mstatus) SetSD(v bool) {
-	if v {
-		*m |= 1 << MsSD
-	} else {
-		*m &^= 1 << MsSD
-	}
-}
 
 // Exception cause codes.
 const (
@@ -310,6 +64,75 @@ var exceptionCauses = map[uint64]string{
 	CauseLoadGuestPageFault:  "Load guest-page fault",
 	CauseVirtualInst:         "Virtual instruction",
 	CauseStoreGuestPageFault: "Store/AMO guest-page fault",
+}
+
+// Interrupt causes. For interrupts, these are 1<<cause.
+//
+//	Bit  Name   Meaning
+//	─────────────────────────────────────────
+//
+//	 0   USIP   User Software Interrupt (mip only, pending)
+//	 1   SSIP   Supervisor Software Interrupt
+//	 2   —      reserved
+//	 3   MSIP   Machine Software Interrupt
+//	 4   UTIP   User Timer Interrupt
+//	 5   STIP   Supervisor Timer Interrupt
+//	 6   —      reserved
+//	 7   MTIP   Machine Timer Interrupt
+//	 8   UEIP   User External Interrupt
+//	 9   SEIP   Supervisor External Interrupt
+//	10   —      reserved
+//	11   MEIP   Machine External Interrupt
+//	12   —      reserved (SGEIP in hypervisor ext)
+//	13+  —      platform-defined / reserved
+const (
+	IntUSIP = 1 << iota
+	IntSSIP
+	_
+	IntMSIP
+	IntUTIP
+	IntSTIP
+	_
+	IntMTIP
+	IntUEIP
+	IntSEIP
+	_
+	IntMEIP
+)
+
+// IntString returns a string description of the pending interrupts in
+// v.
+func IntString(v uint64) string {
+	var result []string
+	if v&IntMEIP != 0 {
+		result = append(result, "MEIP")
+	}
+	if v&IntSEIP != 0 {
+		result = append(result, "SEIP")
+	}
+	if v&IntUEIP != 0 {
+		result = append(result, "UEIP")
+	}
+	if v&IntMTIP != 0 {
+		result = append(result, "MTIP")
+	}
+
+	if v&IntSTIP != 0 {
+		result = append(result, "STIP")
+	}
+	if v&IntUTIP != 0 {
+		result = append(result, "UTIP")
+	}
+	if v&IntMSIP != 0 {
+		result = append(result, "MSIP")
+	}
+	if v&IntSSIP != 0 {
+		result = append(result, "SSIP")
+	}
+	if v&IntUSIP != 0 {
+		result = append(result, "USIP")
+	}
+	return strings.Join(result, ",")
 }
 
 // Interrupt cause codes.
