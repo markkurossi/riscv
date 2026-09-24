@@ -36,33 +36,54 @@ const (
 )
 
 const (
-	DeviceStatusAcknowledge      = 1
-	DeviceStatusDriver           = 2
-	DeviceStatusFailed           = 128
-	DeviceStatusFeaturesOK       = 8
-	DeviceStatusDriverOK         = 4
-	DeviceStatusDeviceNeedsReset = 64
+	// Indicates that the guest OS has found the device and recognized
+	// it as a valid virtio device.
+	ACKNOWLEDGE uint32 = 1
+
+	// Indicates that the guest OS knows how to drive the
+	// device. Note: There could be a significant (or infinite) delay
+	// before setting this bit. For example, under Linux, drivers can
+	// be loadable modules.
+	DRIVER uint32 = 2
+
+	// Indicates that something went wrong in the guest, and it has
+	// given up on the device. This could be an internal error, or the
+	// driver didn’t like the device for some reason, or even a fatal
+	// error during device operation.
+	FAILED uint32 = 128
+
+	// Indicates that the driver has acknowledged all the features it
+	// understands, and feature negotiation is complete.
+	FEATURES_OK uint32 = 8
+
+	// Indicates that the driver is set up and ready to drive the
+	// device.
+	DRIVER_OK uint32 = 4
+
+	// Indicates that the device has experienced an error from which
+	// it can’t recover.
+	DEVICE_NEEDS_RESET uint32 = 64
 )
 
 func statusString(status uint32) string {
 	var result []string
 
-	if status&DeviceStatusAcknowledge != 0 {
+	if status&ACKNOWLEDGE != 0 {
 		result = append(result, "ACKNOWLEDGE")
 	}
-	if status&DeviceStatusDriver != 0 {
+	if status&DRIVER != 0 {
 		result = append(result, "DRIVER")
 	}
-	if status&DeviceStatusFailed != 0 {
+	if status&FAILED != 0 {
 		result = append(result, "FAILED")
 	}
-	if status&DeviceStatusFeaturesOK != 0 {
+	if status&FEATURES_OK != 0 {
 		result = append(result, "FEATURES_OK")
 	}
-	if status&DeviceStatusDriverOK != 0 {
+	if status&DRIVER_OK != 0 {
 		result = append(result, "DRIVER_OK")
 	}
-	if status&DeviceStatusDeviceNeedsReset != 0 {
+	if status&DEVICE_NEEDS_RESET != 0 {
 		result = append(result, "DEVICE_NEEDS_RESET")
 	}
 
@@ -116,36 +137,6 @@ type MMIO struct {
 	queueSel uint32
 	queues   []*Queue
 }
-
-const (
-	// Indicates that the guest OS has found the device and recognized
-	// it as a valid virtio device.
-	ACKNOWLEDGE uint32 = 1
-
-	// Indicates that the guest OS knows how to drive the
-	// device. Note: There could be a significant (or infinite) delay
-	// before setting this bit. For example, under Linux, drivers can
-	// be loadable modules.
-	DRIVER uint32 = 2
-
-	// Indicates that something went wrong in the guest, and it has
-	// given up on the device. This could be an internal error, or the
-	// driver didn’t like the device for some reason, or even a fatal
-	// error during device operation.
-	FAILED uint32 = 128
-
-	// Indicates that the driver has acknowledged all the features it
-	// understands, and feature negotiation is complete.
-	FEATURES_OK uint32 = 8
-
-	// Indicates that the driver is set up and ready to drive the
-	// device.
-	DRIVER_OK uint32 = 4
-
-	// Indicates that the device has experienced an error from which
-	// it can’t recover.
-	DEVICE_NEEDS_RESET uint32 = 64
-)
 
 func (vio *MMIO) AssignSHM(base uint64) uint64 {
 	for _, shm := range vio.SHM {
@@ -253,7 +244,7 @@ func (vio *MMIO) Load32(paddr uint64) (uint32, error) {
 			statusString(vio.status), vio.status)
 		return vio.status, nil
 
-		// Shared memory region 64 bit long length
+		// Shared memory region 64 bit long length.
 		//
 		// These registers return the length of the shared memory
 		// region in bytes, as defined by the device for the region
@@ -417,7 +408,7 @@ func (vio *MMIO) Store32(paddr uint64, v uint32) error {
 			if (vio.driverFeatures[1] & 1) == 0 {
 				// If driver rejected version 1, clear the FEATURES_OK
 				// bit to signal failure
-				vio.status &= ^uint32(8)
+				vio.status &= ^FEATURES_OK
 			}
 		}
 		if v&DRIVER_OK != 0 {
