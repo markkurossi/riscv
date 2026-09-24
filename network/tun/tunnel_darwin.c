@@ -39,39 +39,50 @@
 #include <sys/kern_control.h>
 #include <sys/sys_domain.h>
 
-static int tun_create_by_id(char if_name[IFNAMSIZ], unsigned int id)
+static int
+tun_create_darwin(char if_name[IFNAMSIZ], int *errno_return)
 {
-    struct ctl_info     ci;
+    struct ctl_info ci;
     struct sockaddr_ctl sc;
-    int                 err;
-    int                 fd;
+    int fd;
+    socklen_t len = IFNAMSIZ;
 
-    if ((fd = socket(PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL)) == -1) {
+    if ((fd = socket(PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL)) == -1)
+      {
+        *errno_return = errno;
         return -1;
-    }
+      }
+
     memset(&ci, 0, sizeof(ci));
-    snprintf(ci.ctl_name, sizeof(ci.ctl_name), "%s", UTUN_CONTROL_NAME);
-    if (ioctl(fd, CTLIOCGINFO, &ci)) {
-        err = errno;
-        (void) close(fd);
-        errno = err;
+    strlcpy(ci.ctl_name, UTUN_CONTROL_NAME, sizeof(ci.ctl_name));
+    if (ioctl(fd, CTLIOCGINFO, &ci) == -1)
+      {
+        *errno_return = errno;
+        close(fd);
         return -1;
-    }
+      }
+
     memset(&sc, 0, sizeof(sc));
     sc = (struct sockaddr_ctl){
         .sc_id      = ci.ctl_id,
         .sc_len     = sizeof(sc),
         .sc_family  = AF_SYSTEM,
         .ss_sysaddr = AF_SYS_CONTROL,
-        .sc_unit    = id + 1,
+        .sc_unit    = 0,        /* Let kernel allocate an unused utun unit. */
     };
-    if (connect(fd, (struct sockaddr *) &sc, sizeof(sc)) != 0) {
-        err = errno;
-        (void) close(fd);
-        errno = err;
+    if (connect(fd, (struct sockaddr *) &sc, sizeof(sc)) != 0)
+      {
+        *errno_return = errno;
+        close(fd);
         return -1;
     }
-    snprintf(if_name, IFNAMSIZ, "utun%u", id);
+
+    if (getsockopt(fd, SYSPROTO_CONTROL, UTUN_OPT_IFNAME, if_name, &len) != 0)
+      {
+        *errno_return = errno;
+        close(fd);
+        return -1;
+      }
 
     return fd;
 }
@@ -79,8 +90,8 @@ static int tun_create_by_id(char if_name[IFNAMSIZ], unsigned int id)
 int
 tun_create(char **name_return, int *errno_return)
 {
-  unsigned int id;
   char *if_name;
+  int fd;
 
   *name_return = NULL;
   *errno_return = 0;
@@ -92,20 +103,14 @@ tun_create(char **name_return, int *errno_return)
       return -1;
     }
 
-  for (id = 0; id < 32; id++)
+  fd = tun_create_darwin(if_name, errno_return);
+  if (fd != -1)
     {
-      int fd;
-
-      fd = tun_create_by_id(if_name, id);
-      if (fd != -1)
-        {
-          *name_return = if_name;
-          return fd;
-        }
+      *name_return = if_name;
+      return fd;
     }
 
   free(if_name);
-  *errno_return = errno;
 
   return -1;
 }
