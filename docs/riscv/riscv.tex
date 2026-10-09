@@ -828,4 +828,34 @@ The P extension provides packed SIMD instructions.
 
 The V extension provides vector instructions.
 
+
+\begin{center}
+  \begin{riscvencoding}[]{vtype}{32}
+    \field{vill}{1}
+    \field{reserved}{23}
+    \field{vma}{1}
+    \field{vta}{1}
+    \field{vsew[2:0]}{3}
+    \field{vlmul[2:0]}{3}
+  \end{riscvencoding}
+\end{center}
+
+\begin{table}[htbp]
+  \centering
+  \caption{{\tt vtype} register layout}
+  \label{tab:vtype_register_layout}
+  \begin{tabular}{rll}
+    \toprule
+    Bits & Name & Description \\
+    \midrule
+      XLEN-1 & vill       & Illegal value if set \\
+    XLEN-2:8 & 0          & Reserved if non-zero \\
+           7 & vma        & Vector mask agnostic \\
+           6 & vta        & Vector tail agnostic \\
+         5:3 & vsew[2:0]  & Selected element width (SEW) setting \\
+         2:0 & vlmul[2:0] & Vector register group multiplier (LMUL) setting \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
 \end{document}
