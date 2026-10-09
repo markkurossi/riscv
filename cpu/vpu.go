@@ -8,9 +8,15 @@ package cpu
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/memory"
+)
+
+const (
+	ELEN     = 64
+	vpuDebug = false
 )
 
 type VPU struct {
@@ -46,7 +52,9 @@ func NewVPU(cpu *CPU) *VPU {
 func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	// Vector extension.
 
-	vpu.cpu.tracef(raw, instr, "")
+	if vpuDebug {
+		vpu.cpu.tracef(raw, instr, "")
+	}
 
 	if vpu.cpu.mstatus.VS() == isa.RegOff {
 		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
@@ -64,40 +72,11 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 	switch instr.Op {
 	case isa.Vsetvli:
-		vtype := isa.VType(instr.Imm)
-		vpu.VType = vtype
-		maxVL := uint64(float32(vpu.VLEN)*vtype.VLMUL()) /
-			uint64(vtype.VSEW())
-
-		requestedVL := vpu.cpu.X[instr.Rs1]
-		if requestedVL > maxVL {
-			vpu.VL = maxVL
-		} else {
-			vpu.VL = requestedVL
-		}
-		vpu.cpu.X[instr.Rd] = vpu.VL
-		vpu.VStart = 0
+		vpu.setVL(instr.Rd, instr.Rs1, vpu.cpu.X[instr.Rs1],
+			isa.VType(instr.Imm))
 
 	case isa.Vsetivli:
-		vtype := isa.VType(instr.Imm)
-		vpu.VType = vtype
-		maxVL := uint64(float32(vpu.VLEN)*vtype.VLMUL()) /
-			uint64(vtype.VSEW())
-
-		var requestedVL uint64
-		if instr.Rs1 == 0 {
-			requestedVL = maxVL
-		} else {
-			requestedVL = vpu.cpu.X[instr.Rs1]
-		}
-
-		if requestedVL > maxVL {
-			vpu.VL = maxVL
-		} else {
-			vpu.VL = requestedVL
-		}
-		vpu.cpu.X[instr.Rd] = vpu.VL
-		vpu.VStart = 0
+		vpu.setVL(instr.Rd, 0xff, uint64(instr.Rs1), isa.VType(instr.Imm))
 
 	case isa.VmvVX:
 		vl := vpu.VL
@@ -132,33 +111,31 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		vpu.VStart = 0
 
 	case isa.VmvVI:
-		vl := vpu.VL
+		vlmul := vpu.VType.VLMUL()
+		if vlmul > 1 {
+			requireAlign(uint64(instr.Rd), uint64(vlmul))
+			requireAlign(uint64(instr.Rs2), uint64(vlmul))
+		}
 		sew := vpu.VType.VSEW()
-		dest := vpu.VRegs[instr.Rd]
+		if sew < isa.E8 || sew > isa.E64 {
+			return fmt.Errorf("SEW=%v", sew)
+		}
 
-		switch sew {
-		case 8:
-			val8 := uint8(instr.Imm)
-			for i := vpu.VStart; i < vl; i++ {
-				dest[i] = val8
-			}
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
 
-		case 16:
-			val16 := uint16(instr.Imm)
-			for i := vpu.VStart; i < vl; i++ {
-				memory.PutUint16(dest, i*2, val16)
-			}
+			switch sew {
+			case isa.E8:
+				reg[ofs] = uint8(instr.Imm)
 
-		case 32:
-			val32 := uint32(instr.Imm)
-			for i := vpu.VStart; i < vl; i++ {
-				memory.PutUint32(dest, i*4, val32)
-			}
+			case isa.E16:
+				memory.PutUint16(reg, ofs, uint16(instr.Imm))
 
-		case 64:
-			val64 := uint64(instr.Imm)
-			for i := vpu.VStart; i < vl; i++ {
-				memory.PutUint64(dest, i*8, val64)
+			case isa.E32:
+				memory.PutUint32(reg, ofs, uint32(instr.Imm))
+
+			case isa.E64:
+				memory.PutUint64(reg, ofs, uint64(instr.Imm))
 			}
 		}
 		vpu.VStart = 0
@@ -174,7 +151,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 
 		baseAddr := vpu.cpu.X[instr.Rs1]
-		vl := vpu.VL / 8
+		vl := vpu.VL
 		dstVec := vpu.VRegs[instr.Rd]
 
 		for i := vpu.VStart; i < vl; i++ {
@@ -199,7 +176,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 
 		baseAddr := vpu.cpu.X[instr.Rs1]
-		vl := vpu.VL / 8
+		vl := vpu.VL
 		srcVec := vpu.VRegs[instr.Rd]
 
 		for i := vpu.VStart; i < vl; i++ {
@@ -230,7 +207,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 
 		baseAddr := vpu.cpu.X[instr.Rs1]
-		vl := vpu.VL / 64
+		vl := vpu.VL
 		srcVec := vpu.VRegs[instr.Rd]
 
 		for i := vpu.VStart; i < vl; i++ {
@@ -254,4 +231,71 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	vpu.cpu.mstatus.SetSD(true)
 
 	return nil
+}
+
+func requireAlign(val, pos uint64) error {
+	if pos == 0 || val&(pos-1) == 0 {
+		return nil
+	}
+	return fmt.Errorf("value %v not aligned at %v", val, pos)
+}
+
+func (vpu *VPU) setVL(rd, rs1 isa.Register, reqVL uint64, newType isa.VType) {
+
+	var vl uint64
+
+	if vpu.VType != newType {
+		vlmul := newType.VLMUL()
+		vsew := isa.SEW(math.Min(float64(vlmul), 1.0) * ELEN)
+		vl = uint64(float32(vpu.VLEN/uint64(newType.VSEW())) * vlmul)
+
+		vill := !(vlmul >= 0.125 && vlmul <= 8) ||
+			newType.VSEW() > vsew ||
+			(newType>>9) != 0 ||
+			newType.AltFmt() ||
+			(rd == 0 && rs1 == 0 && vpu.VL != vl)
+
+		if vill {
+			vl = 0
+			vpu.VType = -1
+		} else {
+			vpu.VType = newType
+		}
+	} else {
+		vlmul := newType.VLMUL()
+		vl = uint64(float32(vpu.VLEN/uint64(newType.VSEW())) * vlmul)
+	}
+
+	// XXX clear mtype
+
+	if vl == 0 {
+		vpu.VL = 0
+	} else if rd == 0 && rs1 == 0 {
+		// Retain current VL.
+	} else if rd != 0 && rs1 == 0 {
+		vpu.VL = vl
+	} else if rs1 != 0 {
+		if vl > reqVL {
+			vl = reqVL
+		}
+		vpu.VL = vl
+	}
+
+	vpu.cpu.X[rd] = vpu.VL
+	vpu.VStart = 0
+}
+
+func (vpu *VPU) elt(sew isa.SEW, vreg, n uint64) ([]byte, uint64) {
+	if vpu.VType.VSEW() == 0 {
+		panic("VSEW == 0")
+	}
+	if vpu.VLEN/sew.Len() == 0 {
+		panic("VLEN / SEW == 0")
+	}
+	eltsPerReg := (vpu.VLEN >> 3) / sew.Len()
+
+	vreg += n / eltsPerReg
+	n = n % eltsPerReg
+
+	return vpu.VRegs[vreg], n
 }

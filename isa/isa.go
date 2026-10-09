@@ -342,9 +342,26 @@ func (vt VType) VLMUL() float32 {
 	}
 }
 
+type SEW uint8
+
+const (
+	E8 SEW = 8 << iota
+	E16
+	E32
+	E64
+)
+
+func (sew SEW) String() string {
+	return fmt.Sprintf("e%d", sew)
+}
+
+func (sew SEW) Len() uint64 {
+	return uint64(sew) / 8
+}
+
 // VSEW returns the selected element width (SEW).
-func (vt VType) VSEW() uint8 {
-	return uint8(8 << ((vt >> 3) & 0b111))
+func (vt VType) VSEW() SEW {
+	return SEW(8 << ((vt >> 3) & 0b111))
 }
 
 // VTA returns the vector tail agnostic (VTA) flag.
@@ -357,8 +374,13 @@ func (vt VType) VMA() bool {
 	return vt&(1<<7) != 0
 }
 
+// AltFmt returns the alternate format (altfmt) flag.
+func (vt VType) AltFmt() bool {
+	return vt&(1<<8) != 0
+}
+
 func (vt VType) String() string {
-	result := fmt.Sprintf("e%v", vt.VSEW())
+	result := vt.VSEW().String()
 
 	var lmul string
 	switch vt & 0b111 {

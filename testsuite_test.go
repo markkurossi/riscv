@@ -21,7 +21,7 @@ import (
 	"github.com/markkurossi/riscv/memory"
 )
 
-var skip = map[string]uint64{
+var skipISA = map[string]uint64{
 	"Makefile":                         0,
 	"hypervisor-p-2-stage_translation": 0,
 	"hypervisor-p-2-stage_translation_implicit_load_error":           0,
@@ -47,7 +47,14 @@ var skip = map[string]uint64{
 }
 
 func TestISA(t *testing.T) {
-	dir := "testdata/isa"
+	testSuite(t, "testdata/isa", skipISA)
+}
+
+func TestVPU(t *testing.T) {
+	testSuite(t, "testdata/vpu", nil)
+}
+
+func testSuite(t *testing.T, dir string, skip map[string]uint64) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatalf("ReadDir: %v", err)

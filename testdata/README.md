@@ -57,3 +57,18 @@ Each test:
    - Value 1 = pass
    - Other non-zero = fail (encodes test number that failed)
 3. Uses HTIF (Host Target Interface) protocol for communication
+
+# RISC-V Vector Tests
+
+## Source
+
+- Repository: https://github.com/chipsalliance/riscv-vector-tests
+
+## Building
+
+- install Spike
+
+``` bash
+make all -j$(nproc) --environment-overrides MARCH=rv64gcv PATTERN='^v.*'
+make all -j$(nproc) --environment-overrides VLEN=128 MARCH=rv64gcv PATTERN='^v.*'
+```
