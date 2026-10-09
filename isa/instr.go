@@ -1199,11 +1199,11 @@ func (instr Instr) String() string {
 
 			// CSR mappings.
 		case Csrrs, Csrrc, Csrrw:
-			return fmt.Sprintf("%v %v,%x,%v",
-				pad(instr.Op), instr.Rd, instr.Imm, instr.Rs1)
+			return fmt.Sprintf("%v %v,%v,%v",
+				pad(instr.Op), instr.Rd, CSR(instr.Imm), instr.Rs1)
 		case Csrrwi, Csrrsi, Csrrci:
-			return fmt.Sprintf("%v %v,%x,%d",
-				pad(instr.Op), instr.Rd, instr.Imm, uint32(instr.Rs1))
+			return fmt.Sprintf("%v %v,%b,%d",
+				pad(instr.Op), instr.Rd, CSR(instr.Imm), uint32(instr.Rs1))
 
 			// GroupOPV
 

@@ -42,18 +42,18 @@ func (cpu *CPU) trap(epc, cause, tval uint64, err error) error {
 	// Handler is determined by the medeleg (Machine Exception
 	// Delegation) register.
 	var tvec uint64
-	medeleg := cpu.CSR[CsrMedeleg].Load()
+	medeleg := cpu.CSR[isa.CsrMedeleg].Load()
 	if medeleg&(1<<cause) == 0 || cpu.Mode() == isa.ModeM {
 		// Trap to M-mode.
 		cpu.mstatus.SetMPP(cpu.Mode())
 		cpu.mstatus.SetMPIE(cpu.mstatus.MIE())
 		cpu.mstatus.SetMIE(false)
 
-		cpu.CSR[CsrMepc].Store(epc)
-		cpu.CSR[CsrMcause].Store(cause)
-		cpu.CSR[CsrMtval].Store(tval)
+		cpu.CSR[isa.CsrMepc].Store(epc)
+		cpu.CSR[isa.CsrMcause].Store(cause)
+		cpu.CSR[isa.CsrMtval].Store(tval)
 
-		tvec = cpu.CSR[CsrMtvec].Load()
+		tvec = cpu.CSR[isa.CsrMtvec].Load()
 		cpu.SetMode(isa.ModeM)
 	} else {
 		// Delegated to S-mode.
@@ -61,11 +61,11 @@ func (cpu *CPU) trap(epc, cause, tval uint64, err error) error {
 		cpu.mstatus.SetSPIE(cpu.mstatus.SIE())
 		cpu.mstatus.SetSIE(false)
 
-		cpu.CSR[CsrSepc].Store(epc)
-		cpu.CSR[CsrScause].Store(cause)
-		cpu.CSR[CsrStval].Store(tval)
+		cpu.CSR[isa.CsrSepc].Store(epc)
+		cpu.CSR[isa.CsrScause].Store(cause)
+		cpu.CSR[isa.CsrStval].Store(tval)
 
-		tvec = cpu.CSR[CsrStvec].Load()
+		tvec = cpu.CSR[isa.CsrStvec].Load()
 		cpu.SetMode(isa.ModeS)
 	}
 
@@ -99,11 +99,11 @@ func (cpu *CPU) Interrupt(target isa.PrivilegeMode, cause uint64) {
 		cpu.mstatus.SetMPIE(cpu.mstatus.MIE())
 		cpu.mstatus.SetMIE(false)
 
-		cpu.CSR[CsrMepc].Store(epc)
-		cpu.CSR[CsrMcause].Store(cause)
-		cpu.CSR[CsrMtval].Store(0)
+		cpu.CSR[isa.CsrMepc].Store(epc)
+		cpu.CSR[isa.CsrMcause].Store(cause)
+		cpu.CSR[isa.CsrMtval].Store(0)
 
-		tvec = cpu.CSR[CsrMtvec].Load()
+		tvec = cpu.CSR[isa.CsrMtvec].Load()
 		cpu.SetMode(isa.ModeM)
 
 	case isa.ModeS:
@@ -111,11 +111,11 @@ func (cpu *CPU) Interrupt(target isa.PrivilegeMode, cause uint64) {
 		cpu.mstatus.SetSPIE(cpu.mstatus.SIE())
 		cpu.mstatus.SetSIE(false)
 
-		cpu.CSR[CsrSepc].Store(epc)
-		cpu.CSR[CsrScause].Store(cause)
-		cpu.CSR[CsrStval].Store(0)
+		cpu.CSR[isa.CsrSepc].Store(epc)
+		cpu.CSR[isa.CsrScause].Store(cause)
+		cpu.CSR[isa.CsrStval].Store(0)
 
-		tvec = cpu.CSR[CsrStvec].Load()
+		tvec = cpu.CSR[isa.CsrStvec].Load()
 		cpu.SetMode(isa.ModeS)
 
 	default:
