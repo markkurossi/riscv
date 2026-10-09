@@ -271,6 +271,8 @@ func (cfg *SystemConfig) Merge(o *SystemConfig) *SystemConfig {
 		cfg.NoGraphic = true
 	}
 	cfg.Drives = append(cfg.Drives, o.Drives...)
+	cfg.Netdevs = append(cfg.Netdevs, o.Netdevs...)
+	cfg.GPUs = append(cfg.GPUs, o.GPUs...)
 	cfg.Devices = append(cfg.Devices, o.Devices...)
 
 	return cfg
