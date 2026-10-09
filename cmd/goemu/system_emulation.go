@@ -161,7 +161,7 @@ func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
 			net, err := virtio.NewNet(hart, virtioRAM, plic, virtioIRQ, mem,
 				netdev.IP, netdev.GW, netdev.Hostname, netdev.Domainname)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to create virtio-net-device: %w", err)
 			}
 			mmio.Segments = append(mmio.Segments, net)
 			vio = net.Device()
