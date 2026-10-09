@@ -1342,6 +1342,9 @@ dispatch:
 				err := cpu.vpu.execute(instr, raw)
 				if err != nil {
 					cpu.tracef(raw, instr, "failed: %v", err)
+					if trap, ok := errors.AsType[*isa.Trap](err); ok {
+						log.Printf("  caused by %v\n", trap.Err)
+					}
 					return err
 				}
 			} else {

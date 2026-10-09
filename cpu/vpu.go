@@ -57,7 +57,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	}
 
 	if vpu.cpu.mstatus.VS() == isa.RegOff {
-		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
+		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+			fmt.Errorf("VS=%v", vpu.cpu.mstatus.VS()))
 	}
 
 	// Load and store instructions:
@@ -181,7 +182,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 		for i := vpu.VStart; i < vl; i++ {
 			if i+1 > uint64(len(srcVec)) {
-				return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
+				return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+					fmt.Errorf("vl=%v > len(srcVec)=%v", i+1, len(srcVec)))
 			}
 			v := srcVec[i]
 
