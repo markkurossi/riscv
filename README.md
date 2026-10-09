@@ -59,13 +59,16 @@ operating systems, and the RISC-V privileged architecture.
 
 - [ ] V extension
 - [ ] Reimplement DTB creation
+  - [ ] `soc {interrupt-parent = <&plic>;}` instead of `interrupts-extended`
 - [ ] FreeBSD
   - [ ] virtio_input.c
     - [ ] cursor keys (and others) in framebuffer console (scancodes)
     - [ ] clean detach and shutdown
   - [ ] Implement memory mapped framebuffer for `virtio_gpu.c` and `gpu.go`
+- [ ] Dropping privileges
 - [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
 - [ ] [Haiku boot](docs/haiku.md)
+- [ ] [Xv6](docs/xv6.md)
 
 ### MPC RISC-V
 
