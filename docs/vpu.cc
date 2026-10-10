@@ -173,6 +173,142 @@ vmv_v_i()
   P.VU.vstart->write(0)
 }
 
+int
+vle8_v()
+{
+  // vle8.v and vlseg[2-8]e8.v
+  // VI_LD(0, (i * nf + fn), int8, false);
+  vi_ld(0, "(i * nf + fn)", int8, false);
+}
+
+/* #define VI_LD(stride, offset, elt_width, is_mask_ldst) */
+void
+vi_ld(int stride, block offset, int elt_width, bool is_mask_ldst)
+{
+  const reg_t nf = insn.v_nf() + 1;
+
+  /* VI_CHECK_LOAD(elt_width, is_mask_ldst); */
+  require_vector(false);
+  reg_t veew = is_mask_ldst ? 1 : sizeof(uint8_t) * 8;
+  float vemul = is_mask_ldst ? 1 : ((float)veew / P.VU.vsew * P.VU.vflmul);
+  reg_t emul = vemul < 1 ? 1 : vemul;
+  require(vemul >= 0.125 && vemul <= 8);
+  require_align(insn.rd(), vemul);
+  require((nf * emul) <= (NVPR / 4)
+          && (insn.rd() + nf * emul) <= NVPR);
+  require(veew <= P.VU.ELEN); \
+  require_vm;
+
+  const reg_t vl = is_mask_ldst
+    ? ((P.VU.vl->read() + 7) / 8)
+    : P.VU.vl->read();
+  const reg_t baseAddr = RS1;
+  const reg_t vd = insn.rd();
+
+  for (reg_t i = 0; i < vl; ++i)
+    {
+      /* VI_ELEMENT_SKIP; */
+      if (i >= vl)
+        {
+          continue;
+        }
+      else if (i < P.VU.vstart->read())
+        {
+          continue;
+        }
+      else
+        {
+          /* VI_LOOP_ELEMENT_SKIP(BODY); */
+          if (insn.v_vm() == 0)
+            {
+              /* BODY; */
+              if (!P.VU.mask_elt(0, i))
+                continue;
+            }
+        }
+
+      /* VI_STRIP(i); */
+      reg_t vreg_inx = inx;
+
+      P.VU.vstart->write(i);
+
+      for (reg_t fn = 0; fn < nf; ++fn)
+        {
+          elt_width##_t val =
+            MMU.load<elt_width##_t>(baseAddr + (stride)
+                                    + (offset) * sizeof(elt_width##_t));
+          P.VU.elt<elt_width##_t>(vd + fn * emul, vreg_inx, true) = val;
+        }
+    }
+
+  P.VU.vstart->write(0)
+}
+
+int
+vse8_v()
+{
+  vi_st(0, "(i * nf + fn)", uint8, false)
+}
+
+/* #define VI_ST(stride, offset, elt_width, is_mask_ldst) */
+void
+vi_st(int stride, block offset, int elt_width, bool is_mask_ldst)
+{
+  const reg_t nf = insn.v_nf() + 1;
+
+  /* VI_CHECK_STORE(elt_width, is_mask_ldst); */
+  require_vector(false);
+  reg_t veew = is_mask_ldst ? 1 : sizeof(uint8_t) * 8;
+  float vemul = is_mask_ldst ? 1 : ((float)veew / P.VU.vsew * P.VU.vflmul);
+  reg_t emul = vemul < 1 ? 1 : vemul;
+  require(vemul >= 0.125 && vemul <= 8);
+  require_align(insn.rd(), vemul);
+  require((nf * emul) <= (NVPR / 4)
+          && (insn.rd() + nf * emul) <= NVPR);
+  require(veew <= P.VU.ELEN); \
+
+  const reg_t vl = is_mask_ldst
+    ? ((P.VU.vl->read() + 7) / 8)
+    : P.VU.vl->read();
+  const reg_t baseAddr = RS1;
+  const reg_t vs3 = insn.rd();
+
+  for (reg_t i = 0; i < vl; ++i)
+    {
+      reg_t vreg_inx = i;
+
+      if (i >= vl)
+        {
+          continue;
+        }
+      else if (i < P.VU.vstart->read())
+        {
+          continue;
+        }
+      else
+        {
+          /* VI_LOOP_ELEMENT_SKIP(BODY); */
+          if (insn.v_vm() == 0)
+            {
+              BODY;
+              if (!P.VU.mask_elt(0, i))
+                continue;
+            }
+        }
+
+      P.VU.vstart->write(i);
+      for (reg_t fn = 0; fn < nf; ++fn)
+        {
+          uint8_t val = P.VU.elt<uint8_t>(vs3 + fn * emul, vreg_inx);
+          MMU.store<uint8_t>(baseAddr + (stride) + (offset) * sizeof(uint8_t),
+                             val);
+        }
+    }
+
+  P.VU.vstart->write(0)
+}
+
+
 // vector element for various SEW
 template<typename T> T& elt(reg_t vReg, reg_t n, bool is_write = false) {
   assert(vsew != 0);
