@@ -1902,6 +1902,12 @@ func (cpu *CPU) tracef(raw uint32, instr isa.Instr,
 	cpu.trace(raw, instr, fmt.Sprintf(format, args...))
 }
 
+func (cpu *CPU) pctracef(pc uint64, raw uint32, instr isa.Instr,
+	format string, args ...interface{}) {
+
+	cpu.pctrace(pc, raw, instr, fmt.Sprintf(format, args...))
+}
+
 func (cpu *CPU) ColorOn() string {
 	if !cpuColor {
 		return ""
@@ -1955,9 +1961,13 @@ const (
 )
 
 func (cpu *CPU) trace(raw uint32, instr isa.Instr, msg string) {
+	cpu.pctrace(cpu.PC, raw, instr, msg)
+}
+
+func (cpu *CPU) pctrace(pc uint64, raw uint32, instr isa.Instr, msg string) {
 	var line string
 
-	addr := fmtAddr(cpu.PC)
+	addr := fmtAddr(pc)
 	if raw&0b11 == 0b11 {
 		line = fmt.Sprintf("%s:  %08x   %v", addr, raw, instr)
 	} else {

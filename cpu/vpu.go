@@ -53,7 +53,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	// Vector extension.
 
 	if vpuDebug {
-		vpu.cpu.tracef(raw, instr, "")
+		vpu.cpu.tracef(raw, instr, "pc=%x", vpu.cpu.PC)
 		vpu.cpu.DebugTrace = true
 	}
 
@@ -171,8 +171,12 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 			for fn := uint64(0); fn < nf; fn++ {
 				memAddr := baseAddr + (i*nf+fn)*eltSize
+				pc := vpu.cpu.PC
 				val, err := vpu.cpu.MMU.Load8(memAddr)
 				if err != nil {
+					vpu.cpu.pctracef(pc, raw, instr,
+						"load: addr=%x, i=%v, vl=%v",
+						memAddr, i, vpu.VL)
 					return err
 				}
 				reg, ofs := vpu.elt(isa.E8, vd+fn*emul, i)
@@ -331,10 +335,12 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				val := reg[ofs]
 
 				memAddr := baseAddr + (i*nf+fn)*eltSize
+				pc := vpu.cpu.PC
 				err := vpu.cpu.MMU.Store8(memAddr, val)
 				if err != nil {
-					vpu.cpu.tracef(raw, instr, "store: base=%x, i=%v, vl=%v",
-						baseAddr, i, vpu.VL)
+					vpu.cpu.pctracef(pc, raw, instr,
+						"store: base=%x, addr=%x, i=%v, vl=%v",
+						baseAddr, memAddr, i, vpu.VL)
 					return err
 				}
 			}
