@@ -1199,7 +1199,7 @@ func Decode(raw uint32) (Instr, error) {
 		case 0b011:
 			switch funct7 >> 1 {
 			case 0b010111:
-				instr.Imm = int32(raw<<7) >> 27
+				instr.Imm = int32(raw<<12) >> 27
 				instr.Op = VmvVI
 
 			default:
