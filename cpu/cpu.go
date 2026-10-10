@@ -8,6 +8,7 @@
 package cpu
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"log"
@@ -86,6 +87,8 @@ type CPU struct {
 	lastDescOp isa.Op
 	DebugTrace bool
 	LastSymbol *SymEntry
+
+	regTrace *regTrace
 }
 
 func New(mem *memory.Memory) *CPU {
@@ -322,6 +325,7 @@ dispatch:
 				}
 			}
 			if cpuDebug || cpu.DebugTrace {
+				cpu.traceRegs()
 				cpu.trace(raw, instr, "")
 			}
 		}
@@ -1945,6 +1949,11 @@ func fmtAddr(addr uint64) string {
 	return fmt.Sprintf("%10x", addr)
 }
 
+const (
+	commentColumn = 48
+	tracePrefix   = "                                                 # "
+)
+
 func (cpu *CPU) trace(raw uint32, instr isa.Instr, msg string) {
 	var line string
 
@@ -1987,10 +1996,52 @@ func (cpu *CPU) trace(raw uint32, instr isa.Instr, msg string) {
 		}
 	}
 	if len(msg) > 0 {
-		for len(line) < 46 {
+		for len(line) < commentColumn {
 			line += " "
 		}
 		line += fmt.Sprintf(" # %s", msg)
 	}
 	log.Printf("%s%s%s", cpu.ColorOn(), line, cpu.ColorOff())
+}
+
+func (cpu *CPU) traceRegs() {
+	if cpu.regTrace == nil {
+		cpu.regTrace = new(regTrace)
+		copy(cpu.regTrace.x[:], cpu.X[:])
+		copy(cpu.regTrace.f[:], cpu.F[:])
+
+		for i := 0; i < 32; i++ {
+			cpu.regTrace.v[i] = make([]byte, len(cpu.vpu.VRegs[i]))
+			copy(cpu.regTrace.v[i], cpu.vpu.VRegs[i])
+		}
+		return
+	}
+
+	for i := 0; i < 32; i++ {
+		if cpu.X[i] != cpu.regTrace.x[i] {
+			fmt.Print(tracePrefix)
+			fmt.Printf("%v=%016x\n", isa.Register(i), cpu.X[i])
+			cpu.regTrace.x[i] = cpu.X[i]
+		}
+	}
+	for i := 0; i < 32; i++ {
+		if cpu.F[i] != cpu.regTrace.f[i] {
+			fmt.Print(tracePrefix)
+			fmt.Printf("F%d=%016v\n", i, cpu.F[i])
+			cpu.regTrace.f[i] = cpu.F[i]
+		}
+	}
+	for i := 0; i < 32; i++ {
+		if !bytes.Equal(cpu.vpu.VRegs[i], cpu.regTrace.v[i]) {
+			fmt.Print(tracePrefix)
+			fmt.Printf("v%d=%016x\n", i, cpu.vpu.VRegs[i])
+			copy(cpu.regTrace.v[i], cpu.vpu.VRegs[i])
+		}
+	}
+}
+
+type regTrace struct {
+	x [32]uint64
+	f [32]float64
+	v [32][]byte
 }
