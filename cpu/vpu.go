@@ -73,46 +73,45 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	// 	 4:6 nf - number of fields = nf+1
 
 	switch instr.Op {
-	case isa.Vsetvli: // ok
+	case isa.Vsetvli:
 		vpu.setVL(instr.Rd, instr.Rs1, vpu.cpu.X[instr.Rs1],
 			isa.VType(instr.Imm))
 
-	case isa.Vsetivli: // ok
+	case isa.Vsetivli:
 		vpu.setVL(instr.Rd, 0xff, uint64(instr.Rs1), isa.VType(instr.Imm))
 
 	case isa.VmvVX:
-		vl := vpu.VL
+		vlmul := vpu.VType.VLMUL()
+		if vlmul > 1 {
+			requireAlign(uint64(instr.Rd), uint64(vlmul))
+			requireAlign(uint64(instr.Rs2), uint64(vlmul))
+		}
 		sew := vpu.VType.VSEW()
-		scalarVal := vpu.cpu.X[instr.Rs1]
-		dest := vpu.VRegs[instr.Rd]
+		if sew < isa.E8 || sew > isa.E64 {
+			return fmt.Errorf("SEW=%v", sew)
+		}
 
-		switch sew {
-		case 8:
-			val8 := uint8(scalarVal)
-			for i := uint64(0); i < vl; i++ {
-				dest[i] = val8
-			}
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+			rs1 := vpu.cpu.X[instr.Rs1]
 
-		case 16:
-			val16 := uint16(scalarVal)
-			for i := uint64(0); i < vl; i++ {
-				memory.PutUint16(dest, i*2, val16)
-			}
+			switch sew {
+			case isa.E8:
+				reg[ofs] = uint8(rs1)
 
-		case 32:
-			val32 := uint32(scalarVal)
-			for i := uint64(0); i < vl; i++ {
-				memory.PutUint32(dest, i*4, val32)
-			}
+			case isa.E16:
+				memory.PutUint16(reg, ofs, uint16(rs1))
 
-		case 64:
-			for i := uint64(0); i < vl; i++ {
-				memory.PutUint64(dest, i*8, scalarVal)
+			case isa.E32:
+				memory.PutUint32(reg, ofs, uint32(rs1))
+
+			case isa.E64:
+				memory.PutUint64(reg, ofs, uint64(rs1))
 			}
 		}
 		vpu.VStart = 0
 
-	case isa.VmvVI: // ok
+	case isa.VmvVI:
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {
 			requireAlign(uint64(instr.Rd), uint64(vlmul))
@@ -142,7 +141,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.Vle8V: // ok
+	case isa.Vle8V:
 		vm := instr.Imm & 0b1
 		mop := instr.Imm >> 1 & 0b111
 		nf := uint64(instr.Imm>>4&0b111) + 1
@@ -191,7 +190,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.Vle16V: // ok
+	case isa.Vle16V:
 		vm := instr.Imm & 0b1
 		mop := instr.Imm >> 1 & 0b111
 		nf := uint64(instr.Imm>>4&0b111) + 1
@@ -236,7 +235,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.Vle32V: // ok
+	case isa.Vle32V:
 		vm := instr.Imm & 0b1
 		mop := instr.Imm >> 1 & 0b111
 		nf := uint64(instr.Imm>>4&0b111) + 1
@@ -281,7 +280,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.Vle64V: // ok
+	case isa.Vle64V:
 		vm := instr.Imm & 0b1
 		mop := instr.Imm >> 1 & 0b111
 		nf := uint64(instr.Imm>>4&0b111) + 1
@@ -326,7 +325,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.Vse8V: // ok
+	case isa.Vse8V:
 		vm := instr.Imm & 0b1
 		mop := instr.Imm >> 1 & 0b111
 		nf := uint64(instr.Imm>>4&0b111) + 1
@@ -376,7 +375,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.Vse16V: // ok
+	case isa.Vse16V:
 		vm := instr.Imm & 0b1
 		mop := instr.Imm >> 1 & 0b111
 		nf := uint64(instr.Imm>>4&0b111) + 1
@@ -423,7 +422,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.Vse32V: // ok
+	case isa.Vse32V:
 		vm := instr.Imm & 0b1
 		mop := instr.Imm >> 1 & 0b111
 		nf := uint64(instr.Imm>>4&0b111) + 1
@@ -470,7 +469,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.Vse64V: // ok
+	case isa.Vse64V:
 		vm := instr.Imm & 0b1
 		mop := instr.Imm >> 1 & 0b111
 		nf := uint64(instr.Imm>>4&0b111) + 1

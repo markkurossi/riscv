@@ -174,6 +174,58 @@ vmv_v_i()
 }
 
 int
+vmv_v_x()
+{
+  require_vm;
+  if (P.VU.vflmul > 1)
+    {
+      require_align(insn.rd(), P.VU.vflmul);
+      require_align(insn.rs2(), P.VU.vflmul);
+      if (false) {
+        require_align(insn.rs1(), P.VU.vflmul);
+      }
+    }
+  require(P.VU.vsew >= e8 && P.VU.vsew <= e64);
+  require_vector(true);
+  reg_t vl = P.VU.vl->read();
+  reg_t sew = P.VU.vsew;
+  reg_t rd_num = insn.rd();
+  reg_t rs1_num = insn.rs1();
+  reg_t rs2_num = insn.rs2();
+  for (reg_t i = P.VU.vstart->read(); i < vl; ++i)
+    {
+      bool use_first = P.VU.mask_elt(0, i);
+
+      if (sew == e8)
+        {
+          type_sew_t<e8>::type &vd = P.VU.elt<type_sew_t<e8>::type>(rd_num, i, true);
+          type_sew_t<x>::type rs1 = (type_sew_t<x>::type)RS1;
+          vd = rs1;
+        }
+      else if (sew == e16)
+        {
+          type_sew_t<e16>::type &vd = P.VU.elt<type_sew_t<e16>::type>(rd_num, i, true);
+          type_sew_t<x>::type rs1 = (type_sew_t<x>::type)RS1;
+          vd = rs1;
+        }
+      else if (sew == e32)
+        {
+          type_sew_t<e32>::type &vd = P.VU.elt<type_sew_t<e32>::type>(rd_num, i, true);
+          type_sew_t<x>::type rs1 = (type_sew_t<x>::type)RS1;
+          vd = rs1;
+        }
+      else if (sew == e64)
+        {
+          type_sew_t<e64>::type &vd = P.VU.elt<type_sew_t<e64>::type>(rd_num, i, true);
+          type_sew_t<x>::type rs1 = (type_sew_t<x>::type)RS1;
+          vd = rs1;
+        }
+    }
+
+  P.VU.vstart->write(0)
+}
+
+int
 vle8_v()
 {
   // vle8.v and vlseg[2-8]e8.v
