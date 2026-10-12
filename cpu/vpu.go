@@ -142,14 +142,15 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.Vle8V: // XXX ok?
+	case isa.Vle8V: // ok
 		vm := instr.Imm & 0b1
 		mop := instr.Imm >> 1 & 0b111
 		nf := uint64(instr.Imm>>4&0b111) + 1
 
-		if vm != 1 || mop != 0 || nf != 1 {
+		if mop != 0 || nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("instruction %v not implemented yet", instr))
+				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
+					instr, mop, nf))
 		}
 
 		var eltSize uint64 = 1 // sizeof(uint8)
@@ -167,6 +168,11 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		vd := uint64(instr.Rd)
 
 		for i := vpu.VStart; i < vl; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
 			vpu.VStart = i
 
 			for fn := uint64(0); fn < nf; fn++ {
@@ -185,14 +191,15 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.Vle16V: // XXX ok?
+	case isa.Vle16V: // ok
 		vm := instr.Imm & 0b1
 		mop := instr.Imm >> 1 & 0b111
 		nf := uint64(instr.Imm>>4&0b111) + 1
 
-		if vm != 1 || mop != 0 || nf != 1 {
+		if mop != 0 || nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("instruction %v not implemented yet", instr))
+				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
+					instr, mop, nf))
 		}
 
 		var eltSize uint64 = 2 // sizeof(uint16)
@@ -210,6 +217,11 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		vd := uint64(instr.Rd)
 
 		for i := vpu.VStart; i < vl; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
 			vpu.VStart = i
 
 			for fn := uint64(0); fn < nf; fn++ {
@@ -224,14 +236,15 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.Vle32V: // XXX ok?
+	case isa.Vle32V: // ok
 		vm := instr.Imm & 0b1
 		mop := instr.Imm >> 1 & 0b111
 		nf := uint64(instr.Imm>>4&0b111) + 1
 
-		if vm != 1 || mop != 0 || nf != 1 {
+		if mop != 0 || nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("instruction %v not implemented yet", instr))
+				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
+					instr, mop, nf))
 		}
 
 		var eltSize uint64 = 4 // sizeof(uint32)
@@ -249,6 +262,11 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		vd := uint64(instr.Rd)
 
 		for i := vpu.VStart; i < vl; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
 			vpu.VStart = i
 
 			for fn := uint64(0); fn < nf; fn++ {
@@ -263,14 +281,15 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.Vle64V: // XXX ok?
+	case isa.Vle64V: // ok
 		vm := instr.Imm & 0b1
 		mop := instr.Imm >> 1 & 0b111
 		nf := uint64(instr.Imm>>4&0b111) + 1
 
-		if vm != 1 || mop != 0 || nf != 1 {
+		if mop != 0 || nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("instruction %v not implemented yet", instr))
+				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
+					instr, mop, nf))
 		}
 
 		var eltSize uint64 = 8 // sizeof(uint64)
@@ -288,6 +307,11 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		vd := uint64(instr.Rd)
 
 		for i := vpu.VStart; i < vl; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
 			vpu.VStart = i
 
 			for fn := uint64(0); fn < nf; fn++ {
@@ -309,7 +333,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 		if mop != 0 || nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("not implemented yet: mop=%v, nf=%v", mop, nf))
+				fmt.Errorf("%v not implemented yet: mop=%v, nf=%v",
+					instr, mop, nf))
 		}
 
 		var eltSize uint64 = 1 // sizeof(uint8)
