@@ -37,3 +37,8 @@ cmd/goemu/goemu
 cmd/rtime/rtime
 
 ,*
+
+# TeX documentation.
+docs/riscv/*.aux
+docs/riscv/*.log
+docs/riscv/*.pdf

@@ -38,7 +38,6 @@ total 9200
 drwxr-xr-x 4 root root     128 Jun 19 08:49 payloads
 ```
 
-
 ## Das U-Boot
 
 Download [U-Boot](https://u-boot.org/)
@@ -123,4 +122,41 @@ $ qemu-system-riscv64 -machine virt -m 2048 -nographic \
 ``` shell
 $ XLEN=64 RISCV_PREFIX=riscv64-linux-gnu- ./configure --prefix=/workspace/riscv-tests/out
 $ XLEN=64 RISCV_PREFIX=riscv64-linux-gnu- make -i install
+```
+
+## Buildroot Root Filesystem
+
+``` shell
+$ git clone https://github.com/buildroot/buildroot
+$ cd buildroot
+```
+
+Load QEMU RISC-V config
+
+``` shell
+$ make qemu_riscv64_virt_defconfig
+```
+
+Use external toolchain:
+
+``` shell
+$ make menuconfig
+```
+
+``` shell
+Toolchain →
+  Toolchain type → External toolchain
+```
+
+Build:
+
+``` shell
+$ make -j$(nproc)
+```
+
+Output files:
+
+``` shell
+output/images/rootfs.ext4
+output/images/Image        (optional, but you can ignore)
 ```

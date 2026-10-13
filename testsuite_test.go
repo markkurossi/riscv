@@ -66,6 +66,14 @@ func testSuite(t *testing.T, dir string, skip map[string]uint64) {
 		if strings.HasSuffix(file, ".dump") {
 			continue
 		}
+		fi, err := os.Stat(file)
+		if err != nil {
+			t.Errorf("%v: %v", name, err)
+			continue
+		}
+		if fi.IsDir() {
+			continue
+		}
 		expect, ok := skip[name]
 		if ok && expect == 0 {
 			continue
