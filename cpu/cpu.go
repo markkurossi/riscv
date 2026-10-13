@@ -1343,10 +1343,12 @@ dispatch:
 				}
 			} else if isa.Vsetvli <= instr.Op && instr.Op <= isa.Vse64V {
 				// Vector extension.
+				pc := cpu.PC
 				err := cpu.vpu.execute(instr, raw)
 				if err != nil {
-					cpu.tracef(raw, instr, "failed: %v", err)
-					if trap, ok := errors.AsType[*isa.Trap](err); ok {
+					cpu.pctrace(pc, raw, instr, err.Error())
+					trap, ok := errors.AsType[*isa.Trap](err)
+					if ok && trap.Err != nil {
 						log.Printf("  caused by %v\n", trap.Err)
 					}
 					return err
