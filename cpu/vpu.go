@@ -84,11 +84,41 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	case isa.Vsetivli:
 		vpu.setVL(instr.Rd, 0xff, uint64(instr.Rs1), isa.VType(instr.Imm))
 
+	case isa.VmvVV:
+		vlmul := vpu.VType.VLMUL()
+		if vlmul > 1 {
+			requireAlign(uint64(instr.Rd), uint64(vlmul))
+			requireAlign(uint64(instr.Rs1), uint64(vlmul))
+		}
+		sew := vpu.VType.VSEW()
+		if sew < isa.E8 || sew > isa.E64 {
+			return fmt.Errorf("SEW=%v", sew)
+		}
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+			vs1reg, vs1ofs := vpu.elt(sew, uint64(instr.Rs1), i)
+
+			switch sew {
+			case isa.E8:
+				reg[ofs] = vs1reg[vs1ofs]
+
+			case isa.E16:
+				memory.PutUint16(reg, ofs, memory.Uint16(vs1reg, vs1ofs))
+
+			case isa.E32:
+				memory.PutUint32(reg, ofs, memory.Uint32(vs1reg, vs1ofs))
+
+			case isa.E64:
+				memory.PutUint64(reg, ofs, memory.Uint64(vs1reg, vs1ofs))
+			}
+		}
+		vpu.VStart = 0
+
 	case isa.VmvVX:
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {
 			requireAlign(uint64(instr.Rd), uint64(vlmul))
-			requireAlign(uint64(instr.Rs2), uint64(vlmul))
 		}
 		sew := vpu.VType.VSEW()
 		if sew < isa.E8 || sew > isa.E64 {
@@ -119,7 +149,6 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {
 			requireAlign(uint64(instr.Rd), uint64(vlmul))
-			requireAlign(uint64(instr.Rs2), uint64(vlmul))
 		}
 		sew := vpu.VType.VSEW()
 		if sew < isa.E8 || sew > isa.E64 {

@@ -332,6 +332,7 @@ const (
 	Vsetivli
 	Vsetvl
 	VmvVX
+	VmvVV
 	VmvVI
 	Vle8V
 	Vle16V
@@ -914,6 +915,9 @@ var Operands = map[Op]OpInfo{
 	VmvVX: OpInfo{
 		Name: "vmv.v.x",
 	},
+	VmvVV: OpInfo{
+		Name: "vmv.v.v",
+	},
 	VmvVI: OpInfo{
 		Name: "vmv.v.i",
 	},
@@ -1224,6 +1228,10 @@ func (instr Instr) String() string {
 				result += fmt.Sprintf(",v%d.t", int(instr.Rs2))
 			}
 			return result
+
+		case VmvVV:
+			return fmt.Sprintf("%v v%v,%v",
+				pad(instr.Op), int(instr.Rd), int(instr.Rs1))
 
 		case VmvVI:
 			return fmt.Sprintf("%v v%v,%v",

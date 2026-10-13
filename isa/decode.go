@@ -1196,7 +1196,17 @@ func Decode(raw uint32) (Instr, error) {
 
 	case GroupOPV:
 		switch funct3 {
-		case 0b011:
+		case 0b000: // OPIVV
+			switch funct7 >> 1 {
+			case 0b010111:
+				instr.Op = VmvVV
+
+			default:
+				return instr, fmt.Errorf("%v: funct3=%03b, funct6=%06b",
+					group, funct3, funct7>>1)
+			}
+
+		case 0b011: // OPIVI
 			switch funct7 >> 1 {
 			case 0b010111:
 				instr.Imm = int32(raw<<12) >> 27
@@ -1207,7 +1217,7 @@ func Decode(raw uint32) (Instr, error) {
 					group, funct3, funct7>>1)
 			}
 
-		case 0b100:
+		case 0b100: // OPIVX
 			switch funct7 >> 1 {
 			case 0b010111:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
