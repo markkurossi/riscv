@@ -1212,6 +1212,26 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Imm = int32(raw<<12) >> 27
 				instr.Op = VmvVI
 
+			case 0b100101:
+				vm := funct7 & 1
+				imm := uint32(instr.Rs1)
+				// We store vm bit to bit 31.
+				if vm != 0 {
+					imm |= 1 << 31
+				}
+				instr.Imm = int32(imm)
+				instr.Op = VsllVI
+
+			case 0b101001:
+				vm := funct7 & 1
+				imm := uint32(instr.Rs1)
+				// We store vm bit to bit 31.
+				if vm != 0 {
+					imm |= 1 << 31
+				}
+				instr.Imm = int32(imm)
+				instr.Op = VsraVI
+
 			default:
 				return instr, fmt.Errorf("%v: funct3=%03b, funct6=%06b",
 					group, funct3, funct7>>1)

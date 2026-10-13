@@ -342,6 +342,8 @@ const (
 	Vse16V
 	Vse32V
 	Vse64V
+	VsllVI
+	VsraVI
 
 	// Zicond Extension (Conditional Integer Operations).
 	CzeroEqz
@@ -944,6 +946,12 @@ var Operands = map[Op]OpInfo{
 	},
 	Vse64V: OpInfo{
 		Name: "vse64.v",
+	},
+	VsllVI: OpInfo{
+		Name: "vsll.vi",
+	},
+	VsraVI: OpInfo{
+		Name: "vsra.vi",
 	},
 
 	CzeroEqz: OpInfo{
