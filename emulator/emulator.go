@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/markkurossi/riscv"
 	"github.com/markkurossi/riscv/cpu"
 	"github.com/markkurossi/riscv/emulator/linux"
 	"github.com/markkurossi/riscv/isa"
@@ -41,7 +42,7 @@ type Emulator struct {
 	Process *kernel.Process
 }
 
-func New(params kernel.Params) (*Emulator, error) {
+func New(params riscv.Params) (*Emulator, error) {
 	mem := memory.New(memory.RAMBase, 2048*memory.PageSize) // 8 MB
 
 	// Skip page 0. XXX remove this

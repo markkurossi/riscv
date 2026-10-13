@@ -4,7 +4,7 @@
 // All rights reserved.
 //
 
-package kernel
+package riscv
 
 import (
 	"path/filepath"

@@ -7,8 +7,12 @@
 // Package kernel implements the emulator kernel.
 package kernel
 
+import (
+	"github.com/markkurossi/riscv"
+)
+
 type Kernel struct {
-	Params
+	riscv.Params
 
 	NextPID uint64
 

@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/markkurossi/gofdt"
+	"github.com/markkurossi/riscv"
 	"github.com/markkurossi/riscv/cpu"
 	"github.com/markkurossi/riscv/dev"
 	"github.com/markkurossi/riscv/isa"
-	"github.com/markkurossi/riscv/kernel"
 	"github.com/markkurossi/riscv/memory"
 	"github.com/markkurossi/riscv/mmu"
 	"github.com/markkurossi/riscv/virtio"
@@ -54,7 +54,7 @@ const (
 	SHMBase = 0x4000_0000
 )
 
-func systemEmulation(htif bool, params kernel.Params, cfg *SystemConfig,
+func systemEmulation(htif bool, params riscv.Params, cfg *SystemConfig,
 	args []string) error {
 
 	ramSize, err := ParseMem(cfg.Memory)

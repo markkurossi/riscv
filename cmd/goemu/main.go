@@ -14,9 +14,9 @@ import (
 	"runtime/pprof"
 	"strings"
 
+	"github.com/markkurossi/riscv"
 	"github.com/markkurossi/riscv/emulator"
 	"github.com/markkurossi/riscv/isa"
-	"github.com/markkurossi/riscv/kernel"
 	"github.com/markkurossi/trace"
 )
 
@@ -97,7 +97,7 @@ func main() {
 		fmt.Println("Remote logger enabled")
 	}
 
-	params := kernel.Params{
+	params := riscv.Params{
 		Verbose:  *verbose,
 		Ktrace:   *ktrace,
 		CPUtrace: *cputrace,
