@@ -73,6 +73,10 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	// 	 4:6 nf - number of fields = nf+1
 
 	switch instr.Op {
+	case isa.Vsetvl:
+		vpu.setVL(instr.Rd, instr.Rs1, vpu.cpu.X[instr.Rs1],
+			isa.VType(vpu.cpu.X[instr.Rs2]))
+
 	case isa.Vsetvli:
 		vpu.setVL(instr.Rd, instr.Rs1, vpu.cpu.X[instr.Rs1],
 			isa.VType(instr.Imm))
@@ -517,10 +521,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		vpu.VStart = 0
 
 	default:
-		if false {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v not implemented yet", instr))
-		}
+		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+			fmt.Errorf("%v not implemented yet", instr))
 	}
 
 	vpu.cpu.mstatus.SetVS(isa.RegDirty)
