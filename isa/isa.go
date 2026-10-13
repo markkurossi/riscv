@@ -318,7 +318,7 @@ func (m *Mstatus) SetSD(v bool) {
 }
 
 // VType implements the vector type register.
-type VType int32
+type VType uint64
 
 // VLMUL returns the group multiplier (LMUL).
 func (vt VType) VLMUL() float32 {

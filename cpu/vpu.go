@@ -555,7 +555,7 @@ func (vpu *VPU) setVL(rd, rs1 isa.Register, reqVL uint64, newType isa.VType) {
 
 		if vill {
 			vl = 0
-			vpu.VType = -1
+			vpu.VType = isa.VType(1 << 63)
 		} else {
 			vpu.VType = newType
 		}
