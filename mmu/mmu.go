@@ -522,18 +522,22 @@ func (mmu *MMU) mapLeaf(pte PTE, pteAddr, vaddr uint64, level, access int) (
 	}
 	if pte.Writable() && !readable {
 		// W=1, R=0
-		return 0, 0, 0, mmu.Hart.Trap(isa.CauseStorePageFault, vaddr, ac)
+		return 0, 0, 0, mmu.Hart.Trap(isa.CauseStorePageFault, vaddr,
+			acWithDesc(ac, "W=1, R=0"))
 	}
 
 	// Check permissions.
 	if access&AccessRead != 0 && !readable {
-		return 0, 0, 0, mmu.Hart.Trap(isa.CauseLoadPageFault, vaddr, ac)
+		return 0, 0, 0, mmu.Hart.Trap(isa.CauseLoadPageFault, vaddr,
+			acWithDesc(ac, "!readable"))
 	}
 	if access&AccessWrite != 0 && !pte.Writable() {
-		return 0, 0, 0, mmu.Hart.Trap(isa.CauseStorePageFault, vaddr, ac)
+		return 0, 0, 0, mmu.Hart.Trap(isa.CauseStorePageFault, vaddr,
+			acWithDesc(ac, "!writable"))
 	}
 	if access&AccessExec != 0 && !pte.Executable() {
-		return 0, 0, 0, mmu.Hart.Trap(isa.CauseInstPageFault, vaddr, ac)
+		return 0, 0, 0, mmu.Hart.Trap(isa.CauseInstPageFault, vaddr,
+			acWithDesc(ac, "!executable"))
 	}
 
 	isUserPage := pte.User()
