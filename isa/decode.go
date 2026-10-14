@@ -526,11 +526,21 @@ func Decode(raw uint32) (Instr, error) {
 	case GroupOPIMM32:
 		instr.typeI(raw)
 		switch funct3 {
-		case 0:
+		case 0b000:
 			instr.Op = Addiw
-		case 1:
-			instr.Op = Slliw
-		case 5:
+		case 0b001:
+			funct6 := raw >> 26
+			instr.Imm &= 0b111111
+			switch funct6 {
+			case 0b000000:
+				instr.Op = Slliw
+			case 0b000010:
+				instr.Op = SlliUW
+			default:
+				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
+					group, funct3, funct6, raw)
+			}
+		case 0b101:
 			switch funct7 {
 			case 0:
 				instr.Op = Srliw

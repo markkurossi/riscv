@@ -130,6 +130,7 @@ const (
 
 	Addiw
 	Slliw
+	SlliUW
 	Srliw
 	Sraiw
 
@@ -470,6 +471,9 @@ var Operands = map[Op]OpInfo{
 	},
 	Slliw: OpInfo{
 		Name: "slliw",
+	},
+	SlliUW: OpInfo{
+		Name: "slli.uw",
 	},
 	Srliw: OpInfo{
 		Name: "srliw",

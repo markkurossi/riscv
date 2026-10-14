@@ -812,6 +812,10 @@ dispatch:
 			cpu.X[instr.Rd] = uint64(int64(int32(cpu.X[instr.Rs1]) <<
 				instr.Imm))
 
+		case isa.SlliUW:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] & 0xffffffff <<
+				(instr.Imm & 0x3f)
+
 		case isa.Slt:
 			if int64(cpu.X[instr.Rs1]) < int64(cpu.X[instr.Rs2]) {
 				cpu.X[instr.Rd] = 1
