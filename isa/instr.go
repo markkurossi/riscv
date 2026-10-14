@@ -346,6 +346,7 @@ const (
 	Vse16V
 	Vse32V
 	Vse64V
+	VaddVI
 	VsllVI
 	VsraVI
 
@@ -962,6 +963,9 @@ var Operands = map[Op]OpInfo{
 	},
 	Vse64V: OpInfo{
 		Name: "vse64.v",
+	},
+	VaddVI: OpInfo{
+		Name: "vadd.vi",
 	},
 	VsllVI: OpInfo{
 		Name: "vsll.vi",

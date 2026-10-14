@@ -1229,6 +1229,19 @@ func Decode(raw uint32) (Instr, error) {
 
 		case 0b011: // OPIVI
 			switch funct7 >> 1 {
+			case 0b000000:
+				vm := funct7 & 1
+				// Imm is sign-extented and shifted one bit left.
+				imm := uint32(int32(raw<<12) >> 26)
+				// We store vm bit to bit 0.
+				if vm != 0 {
+					imm |= 1
+				} else {
+					imm &^= 1
+				}
+				instr.Imm = int32(imm)
+				instr.Op = VaddVI
+
 			case 0b010111:
 				instr.Imm = int32(raw<<12) >> 27
 				instr.Op = VmvVI
