@@ -87,12 +87,19 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	case isa.VmvVV:
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {
-			requireAlign(uint64(instr.Rd), uint64(vlmul))
-			requireAlign(uint64(instr.Rs1), uint64(vlmul))
+			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
+			if err != nil {
+				return err
+			}
+			err = vpu.requireAlign(raw, uint64(instr.Rs1), uint64(vlmul))
+			if err != nil {
+				return err
+			}
 		}
 		sew := vpu.VType.VSEW()
 		if sew < isa.E8 || sew > isa.E64 {
-			return fmt.Errorf("SEW=%v", sew)
+			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("SEW=%v", sew))
 		}
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
@@ -118,11 +125,15 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	case isa.VandVX:
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {
-			requireAlign(uint64(instr.Rd), uint64(vlmul))
+			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
+			if err != nil {
+				return err
+			}
 		}
 		sew := vpu.VType.VSEW()
 		if sew < isa.E8 || sew > isa.E64 {
-			return fmt.Errorf("SEW=%v", sew)
+			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("SEW=%v", sew))
 		}
 		vm := instr.Imm & 1
 
@@ -159,11 +170,15 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	case isa.VxorVV:
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {
-			requireAlign(uint64(instr.Rd), uint64(vlmul))
+			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
+			if err != nil {
+				return err
+			}
 		}
 		sew := vpu.VType.VSEW()
 		if sew < isa.E8 || sew > isa.E64 {
-			return fmt.Errorf("SEW=%v", sew)
+			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("SEW=%v", sew))
 		}
 		vm := instr.Imm & 1
 
@@ -204,11 +219,15 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	case isa.VmvVX:
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {
-			requireAlign(uint64(instr.Rd), uint64(vlmul))
+			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
+			if err != nil {
+				return err
+			}
 		}
 		sew := vpu.VType.VSEW()
 		if sew < isa.E8 || sew > isa.E64 {
-			return fmt.Errorf("SEW=%v", sew)
+			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("SEW=%v", sew))
 		}
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
@@ -234,11 +253,15 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	case isa.VmvVI:
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {
-			requireAlign(uint64(instr.Rd), uint64(vlmul))
+			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
+			if err != nil {
+				return err
+			}
 		}
 		sew := vpu.VType.VSEW()
 		if sew < isa.E8 || sew > isa.E64 {
-			return fmt.Errorf("SEW=%v", sew)
+			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("SEW=%v", sew))
 		}
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
@@ -295,7 +318,6 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 			for fn := uint64(0); fn < nf; fn++ {
 				memAddr := baseAddr + (i*nf+fn)*eltSize
-				pc := vpu.cpu.PC
 				val, err := vpu.cpu.MMU.Load8(memAddr)
 				if err != nil {
 					return err
@@ -479,7 +501,6 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				val := reg[ofs]
 
 				memAddr := baseAddr + (i*nf+fn)*eltSize
-				pc := vpu.cpu.PC
 				err := vpu.cpu.MMU.Store8(memAddr, val)
 				if err != nil {
 					return err
@@ -632,11 +653,15 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	case isa.VsllVI:
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {
-			requireAlign(uint64(instr.Rd), uint64(vlmul))
+			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
+			if err != nil {
+				return err
+			}
 		}
 		sew := vpu.VType.VSEW()
 		if sew < isa.E8 || sew > isa.E64 {
-			return fmt.Errorf("SEW=%v", sew)
+			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("SEW=%v", sew))
 		}
 		imm := uint32(instr.Imm)
 
@@ -677,11 +702,15 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	case isa.VsraVI:
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {
-			requireAlign(uint64(instr.Rd), uint64(vlmul))
+			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
+			if err != nil {
+				return err
+			}
 		}
 		sew := vpu.VType.VSEW()
 		if sew < isa.E8 || sew > isa.E64 {
-			return fmt.Errorf("SEW=%v", sew)
+			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("SEW=%v", sew))
 		}
 		imm := uint32(instr.Imm)
 
@@ -730,11 +759,12 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	return nil
 }
 
-func requireAlign(val, pos uint64) error {
+func (vpu *VPU) requireAlign(raw uint32, val, pos uint64) error {
 	if pos == 0 || val&(pos-1) == 0 {
 		return nil
 	}
-	return fmt.Errorf("value %v not aligned at %v", val, pos)
+	return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+		fmt.Errorf("value %v not aligned at %v", val, pos))
 }
 
 func (vpu *VPU) setVL(rd, rs1 isa.Register, reqVL uint64, newType isa.VType) {
