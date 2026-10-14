@@ -26,11 +26,12 @@ Tests are built using the riscv64-linux-gnu toolchain (available on Fedora):
 # Install toolchain (Fedora)
 sudo dnf install gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu
 
-# Initialize submodule
-git submodule update --init --recursive external/riscv-tests
+# Get tests
+git clone https://github.com/riscv-software-src/riscv-tests.git
+cd riscv-tests
+git submodule update --init --recursive
 
 # Build tests
-cd external/riscv-tests
 mkdir -p build && cd build
 make -f ../isa/Makefile src_dir=../isa XLEN=64 RISCV_PREFIX=riscv64-linux-gnu- rv64ui rv64um rv64ua
 
