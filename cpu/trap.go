@@ -16,14 +16,14 @@ import (
 func (cpu *CPU) Trap(cause, tval uint64, err error) error {
 	epc := cpu.PC
 
-	if ierr := cpu.trap(epc, cause, tval, err); ierr != nil {
+	if ierr := cpu.trap(epc, cause, tval); ierr != nil {
 		return ierr
 	}
 
 	return isa.NewTrap(epc, cause, tval, err)
 }
 
-func (cpu *CPU) trap(epc, cause, tval uint64, err error) error {
+func (cpu *CPU) trap(epc, cause, tval uint64) error {
 
 	cpu.ReservationValid = false
 

@@ -512,7 +512,7 @@ dispatch:
 					cpu.X[isa.A0], cpu.X[isa.A1])
 			}
 
-			err = cpu.trap(cpu.PC, cause, 0, nil)
+			err = cpu.trap(cpu.PC, cause, 0)
 			if err != nil {
 				return err
 			}
