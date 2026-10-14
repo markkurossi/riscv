@@ -1220,6 +1220,13 @@ func Decode(raw uint32) (Instr, error) {
 					group, funct3, funct7>>1)
 			}
 
+		case 0b010: // OPMVV
+			switch funct7 >> 1 {
+			case 0b010100:
+				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
+				instr.Op = VidV
+			}
+
 		case 0b011: // OPIVI
 			switch funct7 >> 1 {
 			case 0b010111:

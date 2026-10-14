@@ -216,6 +216,45 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
+	case isa.VidV:
+		vlmul := vpu.VType.VLMUL()
+		if vlmul > 1 {
+			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
+			if err != nil {
+				return err
+			}
+		}
+		sew := vpu.VType.VSEW()
+		if sew < isa.E8 || sew > isa.E64 {
+			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("SEW=%v", sew))
+		}
+		vm := instr.Imm & 1
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+
+			switch sew {
+			case isa.E8:
+				reg[ofs] = uint8(i)
+
+			case isa.E16:
+				memory.PutUint16(reg, ofs, uint16(i))
+
+			case isa.E32:
+				memory.PutUint32(reg, ofs, uint32(i))
+
+			case isa.E64:
+				memory.PutUint64(reg, ofs, uint64(i))
+			}
+		}
+		vpu.VStart = 0
+
 	case isa.VmvVX:
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {
