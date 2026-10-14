@@ -37,4 +37,7 @@ type Hart interface {
 
 	// ColorOff turns off color logging.
 	ColorOff() string
+
+	// Dump CPU instruction lossage.
+	ViewLossage()
 }

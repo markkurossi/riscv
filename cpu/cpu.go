@@ -32,11 +32,17 @@ var (
 )
 
 const (
-	cpuDebug = false
-	cpuColor = false
+	cpuDebug     = true
+	cpuColor     = false
+	debugLossage = false
 )
 
 type TrapHandler func(cpu *CPU, trap *isa.Trap) (bool, error)
+
+type lossage struct {
+	pc    uint64
+	instr isa.Instr
+}
 
 type CPU struct {
 	Trace bool
@@ -89,6 +95,9 @@ type CPU struct {
 	LastSymbol *SymEntry
 
 	regTrace *regTrace
+
+	lossage    []lossage
+	lossageIdx int
 }
 
 func New(mem *memory.Memory) *CPU {
@@ -102,6 +111,10 @@ func New(mem *memory.Memory) *CPU {
 	cpu.mstatus.SetFS(isa.RegInitial)
 	cpu.c = sync.NewCond(&cpu.m)
 	cpu.MMU.Hart = cpu
+
+	if debugLossage {
+		cpu.lossage = make([]lossage, 512)
+	}
 
 	return cpu
 }
@@ -297,6 +310,11 @@ dispatch:
 		} else {
 			size = 2
 			instr = isa.DecodeCFast(uint16(raw))
+		}
+		if debugLossage {
+			cpu.lossage[cpu.lossageIdx].pc = cpu.PC
+			cpu.lossage[cpu.lossageIdx].instr = instr
+			cpu.lossageIdx = (cpu.lossageIdx + 1) % len(cpu.lossage)
 		}
 
 		cpu.Instret++
@@ -1942,6 +1960,16 @@ func (cpu *CPU) ColorOff() string {
 		return ""
 	}
 	return "\x1b[0m"
+}
+
+func (cpu *CPU) ViewLossage() {
+	if !debugLossage {
+		return
+	}
+	i := (cpu.lossageIdx + 1) % len(cpu.lossage)
+	for ; i != cpu.lossageIdx; i = (i + 1) % len(cpu.lossage) {
+		log.Printf("%08x: %v\n", cpu.lossage[i].pc, cpu.lossage[i].instr)
+	}
 }
 
 func fmtAddr(addr uint64) string {

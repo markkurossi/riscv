@@ -76,6 +76,9 @@ func (hart hart) ColorOff() string {
 	return ""
 }
 
+func (hart hart) ViewLossage() {
+}
+
 func makeTestMMU() (*MMU, uint64) {
 	mem, satp, count := makeMem()
 	return &MMU{
