@@ -298,9 +298,6 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				pc := vpu.cpu.PC
 				val, err := vpu.cpu.MMU.Load8(memAddr)
 				if err != nil {
-					vpu.cpu.pctracef(pc, raw, instr,
-						"load: addr=%x, i=%v, vl=%v",
-						memAddr, i, vpu.VL)
 					return err
 				}
 				reg, ofs := vpu.elt(isa.E8, vd+fn*emul, i)
@@ -485,9 +482,6 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				pc := vpu.cpu.PC
 				err := vpu.cpu.MMU.Store8(memAddr, val)
 				if err != nil {
-					vpu.cpu.pctracef(pc, raw, instr,
-						"store: base=%x, addr=%x, i=%v, vl=%v",
-						baseAddr, memAddr, i, vpu.VL)
 					return err
 				}
 			}
