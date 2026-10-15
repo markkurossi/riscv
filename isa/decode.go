@@ -1220,15 +1220,27 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = VmsneVV
 
 			default:
-				return instr, fmt.Errorf("%v: funct3=%03b, funct6=%06b",
-					group, funct3, funct7>>1)
+				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
+					group, funct3, funct7>>1, raw)
 			}
 
 		case 0b010: // OPMVV
 			switch funct7 >> 1 {
+			case 0b010000:
+				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
+				instr.Op = VfirstM
+
 			case 0b010100:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
 				instr.Op = VidV
+
+			case 0b011010:
+				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
+				instr.Op = VmorMM
+
+			default:
+				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
+					group, funct3, funct7>>1, raw)
 			}
 
 		case 0b011: // OPIVI
@@ -1284,8 +1296,8 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = VmseqVI
 
 			default:
-				return instr, fmt.Errorf("%v: funct3=%03b, funct6=%06b",
-					group, funct3, funct7>>1)
+				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
+					group, funct3, funct7>>1, raw)
 			}
 
 		case 0b100: // OPIVX
@@ -1299,8 +1311,19 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = VmvVX
 
 			default:
-				return instr, fmt.Errorf("%v: funct3=%03b, funct6=%06b",
-					group, funct3, funct7>>1)
+				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
+					group, funct3, funct7>>1, raw)
+			}
+
+		case 0b110: // OPMVX
+			switch funct7 >> 1 {
+			case 0b010000:
+				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
+				instr.Op = VmvSX
+
+			default:
+				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
+					group, funct3, funct7>>1, raw)
 			}
 
 		case 0b111:
@@ -1314,9 +1337,9 @@ func Decode(raw uint32) (Instr, error) {
 			} else {
 				instr.Op = Vsetvl
 			}
+
 		default:
-			return instr, fmt.Errorf("%v: funct3=%03b, raw=%08x",
-				group, funct3, raw)
+			return instr, fmt.Errorf("%v/%03b: raw=%x", group, funct3, raw)
 		}
 
 	case GroupMSUB:
