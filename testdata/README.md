@@ -33,7 +33,8 @@ git submodule update --init --recursive
 
 # Build tests
 mkdir -p build && cd build
-make -f ../isa/Makefile src_dir=../isa XLEN=64 RISCV_PREFIX=riscv64-linux-gnu- rv64ui rv64um rv64ua
+
+make -f ../isa/Makefile src_dir=../isa XLEN=64 RISCV_PREFIX=riscv64-unknown-elf- rv64ui rv64um rv64ua rv64uzba
 
 # Build floating point tests individually (make target tries -v- tests which fail)
 for f in ../isa/rv64uf/*.S; do

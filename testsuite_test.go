@@ -31,6 +31,50 @@ var skipISA = map[string]uint64{
 	"rv64si-p-dirty":       0,
 	"rv64ssvnapot-p-napot": 0,
 
+	// Zbb - basic bit manipulation.
+	"rv64uzbb-p-clz":    0,
+	"rv64uzbb-p-clzw":   0,
+	"rv64uzbb-p-cpop":   0,
+	"rv64uzbb-p-cpopw":  0,
+	"rv64uzbb-p-ctz":    0,
+	"rv64uzbb-p-ctzw":   0,
+	"rv64uzbb-p-max":    0,
+	"rv64uzbb-p-min":    0,
+	"rv64uzbb-p-minu":   0,
+	"rv64uzbb-p-orc_b":  0,
+	"rv64uzbb-p-orn":    0,
+	"rv64uzbb-p-rev8":   0,
+	"rv64uzbb-p-rol":    0,
+	"rv64uzbb-p-rolw":   0,
+	"rv64uzbb-p-ror":    0,
+	"rv64uzbb-p-rori":   0,
+	"rv64uzbb-p-roriw":  0,
+	"rv64uzbb-p-rorw":   0,
+	"rv64uzbb-p-sext_b": 0,
+	"rv64uzbb-p-sext_h": 0,
+	"rv64uzbb-p-xnor":   0,
+	"rv64uzbb-p-zext_h": 0,
+
+	// Zbc - carry-less multiplication
+	"rv64uzbc-p-clmul":  0,
+	"rv64uzbc-p-clmulh": 0,
+	"rv64uzbc-p-clmulr": 0,
+
+	// Zbs - single-bit instructions.
+	"rv64uzbs-p-bclr": 0,
+	"rv64uzbs-p-binv": 0,
+	"rv64uzbs-p-bset": 0,
+
+	// Zbkb - bit-manipulation for Cryptography
+	"rv64uzbkb-p-brev8": 0,
+	"rv64uzbkb-p-pack":  0,
+	"rv64uzbkb-p-packh": 0,
+	"rv64uzbkb-p-packw": 0,
+
+	// Zbkx - crossbar permutations
+	"rv64uzbkx-p-xperm4": 0,
+	"rv64uzbkx-p-xperm8": 0,
+
 	// Zfh extension - 16 bit floating points.
 
 	"rv64uzfh-p-fadd":     0,
