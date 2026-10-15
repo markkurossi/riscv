@@ -334,6 +334,7 @@ const (
 	Vsetvl
 	VandVX
 	VxorVV
+	VmsneVV
 	VidV
 	VmvVX
 	VmvVV
@@ -347,6 +348,7 @@ const (
 	Vse32V
 	Vse64V
 	VaddVI
+	VmseqVI
 	VsllVI
 	VsraVI
 
@@ -928,6 +930,9 @@ var Operands = map[Op]OpInfo{
 	VxorVV: OpInfo{
 		Name: "vxor.vv",
 	},
+	VmsneVV: OpInfo{
+		Name: "vmne.vv",
+	},
 	VidV: OpInfo{
 		Name: "vid.v",
 	},
@@ -966,6 +971,9 @@ var Operands = map[Op]OpInfo{
 	},
 	VaddVI: OpInfo{
 		Name: "vadd.vi",
+	},
+	VmseqVI: OpInfo{
+		Name: "vmseq.vi",
 	},
 	VsllVI: OpInfo{
 		Name: "vsll.vi",

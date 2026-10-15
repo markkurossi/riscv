@@ -360,6 +360,58 @@ vi_st(int stride, block offset, int elt_width, bool is_mask_ldst)
   P.VU.vstart->write(0)
 }
 
+int
+vmsne_vv()
+{
+  // VI_VV_LOOP_CMP(BODY)
+
+  //  - VI_CHECK_MSS(true);
+  if (insn.rd() != insn.rs2())
+    require_noover(insn.rd(), 1, insn.rs2(), P.VU.vflmul);
+  require_align(insn.rs2(), P.VU.vflmul);
+  if (is_vs1) {
+    if (insn.rd() != insn.rs1())
+      require_noover(insn.rd(), 1, insn.rs1(), P.VU.vflmul);
+    require_align(insn.rs1(), P.VU.vflmul);
+  }
+
+  //  - VI_LOOP_CMP_BODY(VV_CMP_PARAMS, BODY)
+  //    - VI_LOOP_CMP_BASE
+  require(P.VU.vsew >= e8 && P.VU.vsew <= e64);
+  require_vector(true);
+  reg_t vl = P.VU.vl->read();
+  reg_t sew = P.VU.vsew;
+  reg_t UNUSED rd_num = insn.rd();
+  reg_t UNUSED rs1_num = insn.rs1();
+  reg_t rs2_num = insn.rs2();
+  for (reg_t i = P.VU.vstart->read(); i < vl; ++i) {
+    VI_LOOP_ELEMENT_SKIP();
+    bool res = false;
+
+    //    - INSNS_BASE(PARAMS, BODY)
+    if (sew == e8) {
+      // PARAMS(e8);
+      type_sew_t<x>::type vs1 = P.VU.elt<type_sew_t<x>::type>(rs1_num, i);
+      type_sew_t<x>::type vs2 = P.VU.elt<type_sew_t<x>::type>(rs2_num, i);
+
+      // BODY;
+      res = vs2 != vs1;
+    } else if (sew == e16) {
+      PARAMS(e16);
+      BODY;
+    } else if (sew == e32) {
+      PARAMS(e32);
+      BODY;
+    } else if (sew == e64) {
+      PARAMS(e64);
+      BODY;
+    }
+    //    - VI_LOOP_CMP_END
+    P.VU.set_mask_elt(insn.rd(), i, res);
+  }
+  P.VU.vstart->write(0)
+}
+
 
 // vector element for various SEW
 template<typename T> T& elt(reg_t vReg, reg_t n, bool is_write = false) {

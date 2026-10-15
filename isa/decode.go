@@ -1215,6 +1215,10 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b010111:
 				instr.Op = VmvVV
 
+			case 0b011001:
+				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
+				instr.Op = VmsneVV
+
 			default:
 				return instr, fmt.Errorf("%v: funct3=%03b, funct6=%06b",
 					group, funct3, funct7>>1)
@@ -1265,6 +1269,19 @@ func Decode(raw uint32) (Instr, error) {
 				}
 				instr.Imm = int32(imm)
 				instr.Op = VsraVI
+
+			case 0b011000:
+				vm := funct7 & 1
+				// Imm is sign-extented and shifted one bit left.
+				imm := uint32(int32(raw<<12) >> 26)
+				// We store vm bit to bit 0.
+				if vm != 0 {
+					imm |= 1
+				} else {
+					imm &^= 1
+				}
+				instr.Imm = int32(imm)
+				instr.Op = VmseqVI
 
 			default:
 				return instr, fmt.Errorf("%v: funct3=%03b, funct6=%06b",

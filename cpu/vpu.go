@@ -216,6 +216,66 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
+	case isa.VmsneVV:
+		// if (insn.rd() != insn.rs2())
+		//   requiire_nooever(insn.rd(), 1, insn.rs2(), P.VU.vflmul)
+		// #define require_noover(astart, asize, bstart, bsize) \
+		//   require(!is_overlapped(astart, asize, bstart, bsize))
+
+		vlmul := vpu.VType.VLMUL()
+		if vlmul > 1 {
+			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
+			if err != nil {
+				return err
+			}
+			err = vpu.requireAlign(raw, uint64(instr.Rs1), uint64(vlmul))
+			if err != nil {
+				return err
+			}
+		}
+		sew := vpu.VType.VSEW()
+		if sew < isa.E8 || sew > isa.E64 {
+			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("SEW=%v", sew))
+		}
+		vm := instr.Imm & 1
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			vs1reg, vs1ofs := vpu.elt(sew, uint64(instr.Rs1), i)
+			vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), i)
+			var res bool
+
+			switch sew {
+			case isa.E8:
+				vs1 := vs1reg[vs1ofs]
+				vs2 := vs2reg[vs2ofs]
+				res = vs1 != vs2
+
+			case isa.E16:
+				vs1 := memory.Uint16(vs1reg, vs1ofs)
+				vs2 := memory.Uint16(vs2reg, vs2ofs)
+				res = vs1 != vs2
+
+			case isa.E32:
+				vs1 := memory.Uint32(vs1reg, vs1ofs)
+				vs2 := memory.Uint32(vs2reg, vs2ofs)
+				res = vs1 != vs2
+
+			case isa.E64:
+				vs1 := memory.Uint64(vs1reg, vs1ofs)
+				vs2 := memory.Uint64(vs2reg, vs2ofs)
+				res = vs1 != vs2
+			}
+			vpu.setMaskElt(uint64(instr.Rd), i, res)
+
+		}
+		vpu.VStart = 0
+
 	case isa.VidV:
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {
@@ -919,4 +979,16 @@ func (vpu *VPU) maskElt(vreg, n uint64) bool {
 	reg, ofs := vpu.elt(isa.E8, vreg, n/8)
 
 	return (reg[ofs]>>(n%8))&1 == 1
+}
+
+func (vpu *VPU) setMaskElt(vreg, n uint64, v bool) {
+	reg, ofs := vpu.elt(isa.E8, vreg, n/8)
+
+	bit := byte(1 << (n % 8))
+
+	if v {
+		reg[ofs] |= bit
+	} else {
+		reg[ofs] &^= bit
+	}
 }
