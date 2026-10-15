@@ -510,12 +510,21 @@ func Decode(raw uint32) (Instr, error) {
 			instr.Op = Xori
 
 		case 0b101:
-			if funct7&0b100000 == 0 {
+			switch funct7 >> 1 {
+			case 0b000000:
 				instr.Op = Srli
-			} else {
+
+			case 0b010000:
 				instr.Op = Srai
+
+			case 0b010010:
+				instr.Op = Bexti
+
+			default:
+				return instr, fmt.Errorf("%v/%03b/%07b: raw=%x",
+					group, funct3, funct7, raw)
 			}
-			instr.Imm &= 0b111111
+			instr.Imm &= 0b1111111
 
 		case 0b110:
 			instr.Op = Ori
@@ -717,6 +726,18 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = Sra
 			case 0b111:
 				instr.Op = Andn
+			default:
+				return instr,
+					fmt.Errorf("%v/%07b/%03b: raw=%08x",
+						group, funct7, funct3, raw)
+			}
+
+			// Zbs Extension for Single-bit instructions.
+		case 0b0100100:
+			switch funct3 {
+			case 0b101:
+				instr.Op = Bext
+
 			default:
 				return instr,
 					fmt.Errorf("%v/%07b/%03b: raw=%08x",

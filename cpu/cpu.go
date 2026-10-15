@@ -1320,6 +1320,14 @@ dispatch:
 		case isa.Bclri:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] &^ (uint64(1) << instr.Imm)
 
+		case isa.Bext:
+			shmat := cpu.X[instr.Rs2] & 0b111111
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> shmat & 1
+
+		case isa.Bexti:
+			shmat := uint32(instr.Imm)
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> shmat & 1
+
 		case isa.Binvi:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] ^ uint64(1)<<instr.Imm
 
