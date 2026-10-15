@@ -1373,14 +1373,8 @@ dispatch:
 				}
 			} else if isa.Vsetvli <= instr.Op && instr.Op <= isa.VsraVI {
 				// Vector extension.
-				pc := cpu.PC
 				err := cpu.vpu.execute(instr, raw)
 				if err != nil {
-					cpu.pctrace(pc, raw, instr, err.Error())
-					trap, ok := errors.AsType[*isa.Trap](err)
-					if ok && trap.Err != nil {
-						log.Printf("  caused by %v\n", trap.Err)
-					}
 					return err
 				}
 			} else {
