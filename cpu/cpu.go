@@ -1345,7 +1345,7 @@ dispatch:
 		case isa.Bseti:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] | uint64(1)<<instr.Imm
 
-			// Zba (Address Generation Instructions) extensions.
+			// Zba (Address Generation Instructions) extension.
 
 		case isa.AddUw:
 			cpu.X[instr.Rd] = uint64(uint32(cpu.X[instr.Rs1])) +
@@ -1374,6 +1374,18 @@ dispatch:
 		case isa.Sh3addUw:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs2] +
 				(uint64(uint32(cpu.X[instr.Rs1])) << 3)
+
+			// Zbb (Basic bit-manipulation) extension.
+		case isa.OrcB:
+			var result uint64
+			for i := 0; i < 8; i++ {
+				var v uint64
+				if cpu.X[instr.Rs1]>>(i*8)&0xff != 0 {
+					v = 0xff
+				}
+				result |= v << (i * 8)
+			}
+			cpu.X[instr.Rd] = result
 
 		default:
 			if isa.Flw <= instr.Op && instr.Op <= isa.FmaddD {

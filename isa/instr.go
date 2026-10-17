@@ -119,6 +119,7 @@ const (
 	Andi
 	Slli
 	Srli
+	OrcB
 	Srai
 
 	// 32-bit (RV64).
@@ -453,6 +454,9 @@ var Operands = map[Op]OpInfo{
 	},
 	Srli: OpInfo{
 		Name: "srli",
+	},
+	OrcB: OpInfo{
+		Name: "orc.b",
 	},
 	Srai: OpInfo{
 		Name: "srai",

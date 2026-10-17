@@ -521,6 +521,9 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b000000:
 				instr.Op = Srli
 
+			case 0b001010:
+				instr.Op = OrcB
+
 			case 0b010000:
 				instr.Op = Srai
 
