@@ -370,9 +370,10 @@ const (
 	Bset
 	Bseti
 
-	// Zba & Zbb Bit-Manipulation Extensions.
+	// Zba & Zbb Bit-Manipulation Extensions and Zcb extensions.
 	AddUw
 	Andn
+	Ctz
 	Maxu
 	Sh1add
 	Sh2add
@@ -1035,6 +1036,9 @@ var Operands = map[Op]OpInfo{
 	},
 	Andn: OpInfo{
 		Name: "andn",
+	},
+	Ctz: OpInfo{
+		Name: "ctz",
 	},
 	Maxu: OpInfo{
 		Name: "maxu",

@@ -265,11 +265,25 @@ func DecodeC(raw uint16) (Instr, error) {
 						instr.Imm = 0xff
 						instr.Op = Andi
 
+					case 0b010: // c.zext.h
+						instr.Rd = compressedRegisters[raw>>7&0b111]
+						instr.Rs1 = instr.Rd
+						instr.Rs2 = Zero
+						instr.Imm = 0xffff
+						instr.Op = Andi
+
 					case 0b100: // c.zext.w
 						instr.Rd = compressedRegisters[raw>>7&0b111]
 						instr.Rs1 = instr.Rd
 						instr.Rs2 = Zero
 						instr.Op = AddUw
+
+					case 0b101: // c.not
+						instr.Rd = compressedRegisters[raw>>7&0b111]
+						instr.Rs1 = instr.Rd
+						instr.Rs2 = Zero
+						instr.Imm = -1
+						instr.Op = Xori
 
 					default:
 						return instr,
@@ -501,6 +515,8 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = Bseti
 			case 0b010010:
 				instr.Op = Bclri
+			case 0b011000:
+				instr.Op = Ctz
 			case 0b011010:
 				instr.Op = Binvi
 			default:
@@ -806,10 +822,13 @@ func Decode(raw uint32) (Instr, error) {
 					group, funct7, raw)
 			}
 
-		case 4:
+		case 0b0000100:
 			switch funct3 {
-			case 0:
+			case 0b000:
 				instr.Op = AddUw
+			case 0b100: // ZextH: X(rsdc) = EXTZ(X(rsdc)[15..0])
+				instr.Imm = 0xffff
+				instr.Op = Andi
 			default:
 				return instr, fmt.Errorf("group %v: funct7=%v, raw=%x",
 					group, funct7, raw)

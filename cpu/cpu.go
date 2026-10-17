@@ -1354,6 +1354,16 @@ dispatch:
 		case isa.Andn:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] & ^cpu.X[instr.Rs2]
 
+		case isa.Ctz:
+			v := cpu.X[instr.Rs1]
+			var i uint64
+			for i = 0; i < 64; i++ {
+				if v&(1<<i) != 0 {
+					break
+				}
+			}
+			cpu.X[instr.Rd] = i
+
 		case isa.Sh1add:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs2] + (cpu.X[instr.Rs1] << 1)
 
