@@ -42,6 +42,7 @@ type TrapHandler func(cpu *CPU, trap *isa.Trap) (bool, error)
 // Maybe: Interrupt, Breakpoint, SingleStep, GuestException, Diagnostics.
 
 type GDB interface {
+	Start()
 	Breakpoint()
 }
 
@@ -464,6 +465,9 @@ dispatch:
 			if cpu.Trace {
 				cpu.traceFunc(cpu.PC)
 				cpu.tracef(raw, instr, "")
+			}
+			if cpu.GDB != nil {
+				cpu.GDB.Breakpoint()
 			}
 			return cpu.Trap(isa.CauseBreakpoint, 0, nil)
 

@@ -253,7 +253,7 @@ func systemEmulation(htif bool, gdbStub string, params riscv.Params,
 	}
 
 	var data []byte
-	var entrypoint, entry uint64
+	var entrypoint, kernelEntry uint64
 	var htifDev *dev.HTIF
 
 	if len(cfg.BIOS) > 0 {
@@ -266,12 +266,12 @@ func systemEmulation(htif bool, gdbStub string, params riscv.Params,
 	}
 
 	if len(cfg.Kernel) > 0 {
-		htifDev, entry, err = loadKernel(hart, mem, cfg.Kernel)
+		htifDev, kernelEntry, err = loadKernel(hart, mem, cfg.Kernel)
 		if err != nil {
 			return fmt.Errorf("failed to read kernel: %w", err)
 		}
 		if len(cfg.BIOS) == 0 {
-			entrypoint = entry
+			entrypoint = kernelEntry
 		}
 		if htif {
 			if htifDev == nil {
@@ -304,7 +304,7 @@ func systemEmulation(htif bool, gdbStub string, params riscv.Params,
 	}
 
 	if len(gdbStub) > 0 {
-		stub, err := gdb.New(hart, gdbStub)
+		stub, err := gdb.New(hart, kernelEntry, gdbStub)
 		if err != nil {
 			return err
 		}
@@ -312,7 +312,7 @@ func systemEmulation(htif bool, gdbStub string, params riscv.Params,
 
 		go stub.Run()
 
-		stub.Breakpoint()
+		stub.Start()
 	}
 
 	if gpu != nil {

@@ -43,6 +43,26 @@ We could also tune the kernel parameters with:
 make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- menuconfig
 ```
 
+And optionally enable kernel debugging:
+
+```shell
+scripts/config --enable DEBUG_KERNEL
+scripts/config --enable DEBUG_INFO
+scripts/config --enable DEBUG_INFO_DWARF4
+scripts/config --disable DEBUG_INFO_REDUCED
+
+scripts/config --enable FRAME_POINTER
+scripts/config --enable KALLSYMS
+scripts/config --enable KALLSYMS_ALL
+
+scripts/config --enable DEBUG_FS
+scripts/config --enable MAGIC_SYSRQ
+scripts/config --enable DEBUG_STACK_USAGE
+scripts/config --enable SCHED_STACK_END_CHECK
+
+make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- olddefconfig
+```
+
 ### Build
 
 ``` shell

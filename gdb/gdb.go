@@ -46,15 +46,25 @@ type Stub struct {
 	cond          *sync.Cond
 	listener      net.Listener
 	cpu           *cpu.CPU
+	kernelEntry   uint64
+	kernelDelta   uint64
 	conn          *Conn
 	state         State
 	signal        int
 	fErrorMessage bool
+
+	bps map[uint64]*Breakpoint
+}
+
+type Breakpoint struct {
+	vaddr uint64
+	paddr uint64
+	code  []byte
 }
 
 // New creates a new GDB remote debugging stub for the cpu and listen
 // address.
-func New(cpu *cpu.CPU, listen string) (*Stub, error) {
+func New(cpu *cpu.CPU, kernelEntry uint64, listen string) (*Stub, error) {
 	var proto, addr string
 
 	idx := strings.IndexByte(listen, ':')
@@ -74,10 +84,12 @@ func New(cpu *cpu.CPU, listen string) (*Stub, error) {
 	}
 
 	stub := &Stub{
-		listener: l,
-		cpu:      cpu,
-		state:    Start,
-		signal:   5,
+		listener:    l,
+		cpu:         cpu,
+		kernelEntry: kernelEntry,
+		state:       Start,
+		signal:      5,
+		bps:         make(map[uint64]*Breakpoint),
 	}
 	stub.cond = sync.NewCond(&stub.m)
 
@@ -118,13 +130,12 @@ func (stub *Stub) setConnection(conn *Conn) {
 	stub.cond.Broadcast()
 }
 
-// Breakpoint implements GDB.Breakpoint.
-func (stub *Stub) Breakpoint() {
+func (stub *Stub) breakpoint() {
 	first := true
 	stub.m.Lock()
 	for stub.conn == nil {
 		if first {
-			fmt.Printf("waiting for debugger...\n")
+			fmt.Printf("gdb: waiting for debugger...\n")
 			first = false
 		}
 		stub.cond.Wait()
@@ -134,7 +145,7 @@ func (stub *Stub) Breakpoint() {
 	stub.signal = 5
 
 	stub.m.Unlock()
-	fmt.Printf("debugger connected\n")
+	fmt.Printf("gdb: debugger connected\n")
 
 	err := conn.process()
 	if err != nil {
@@ -144,11 +155,42 @@ func (stub *Stub) Breakpoint() {
 	}
 }
 
+// Start implements GDB.Start.
+func (stub *Stub) Start() {
+	stub.breakpoint()
+}
+
+// Breakpoint implements GDB.Breakpoint.
+func (stub *Stub) Breakpoint() {
+	// Check if this is our breakpoint.
+	pc := stub.cpu.PC
+	found := false
+
+	stub.m.Lock()
+	for _, bp := range stub.bps {
+		if bp.vaddr == pc || bp.paddr == pc {
+			found = true
+			break
+		}
+	}
+	stub.m.Unlock()
+	if !found {
+		fmt.Printf("gdb: not our breakpoint\n")
+		return
+	}
+
+	stub.breakpoint()
+}
+
+// unsupported: Mffffffff806941b2,2:5d71
+// unsupported: vKill;a410
+// unsupported: k
+
 var wellKnown = map[string]string{
-	"Hg0":                "OK",
-	"qAttached":          "1",
-	"qC":                 "QC1",
-	"qSymbol::":          "OK",
+	"Hg0":       "OK",
+	"qAttached": "1",
+	"qC":        "QC1",
+	// "qSymbol::":          "OK",
 	"qThreadExtraInfo,1": fmt.Sprintf("%x", []byte("RISC-V hart 0")),
 	"qfThreadInfo":       "m1", // Thread list contains thread ID 1.
 	"qsThreadInfo":       "l",  // No more thread IDs to report.
@@ -205,14 +247,46 @@ func (conn *Conn) process() error {
 			case cmd == "g":
 				err = conn.readGeneralRegisters()
 
+			case cmd == "k":
+				fmt.Printf("gdb: kill: terminating\n")
+				conn.stub.cpu.Shutdown()
+				_ = conn.response("OK")
+				return nil
+
 			case strings.HasPrefix(cmd, "m"):
 				err = conn.readMemory(cmd[1:])
+
+			case strings.HasPrefix(cmd, "vKill;"):
+				err = conn.response("")
 
 			case strings.HasPrefix(cmd, "qSupported:"):
 				err = conn.handleSupported(cmd[11:])
 
+			case cmd == "qSymbol::":
+				err = conn.resolveSymbols()
+
+			case strings.HasPrefix(cmd, "z"):
+				err = conn.deleteBreak(cmd)
+
+			case strings.HasPrefix(cmd, "Z"):
+				// Zt,addr,length: t is type:
+				//   `0' - software breakpoint,
+				//   `1' - hardware breakpoint,
+				//   `2' - write watchpoint,
+				//   `3' - read watchpoint,
+				//   `4' - access watchpoint;
+				//
+				// addr is address; length is in bytes. For a software
+				// breakpoint, length specifies the size of the
+				// instruction to be patched. For hardware breakpoints
+				// and watchpoints length specifies the memory region
+				// to be monitored. To avoid potential problems with
+				// duplicate packets, the operations should be
+				// implemented in an idempotent way.
+				err = conn.insertBreak(cmd)
+
 			default:
-				fmt.Printf("unsupported: %v\n", cmd)
+				fmt.Printf("gdb: unsupported: %v\n", cmd)
 				err = conn.response("")
 			}
 		}
@@ -220,6 +294,134 @@ func (conn *Conn) process() error {
 			return err
 		}
 	}
+}
+
+var symbols = []string{"_start", "not_here"}
+
+func (conn *Conn) resolveSymbols() error {
+	fmt.Printf("gdb: resolving symbols\n")
+	for _, sym := range symbols {
+		q := fmt.Sprintf("qSymbol:%x", []byte(sym))
+		err := conn.response(q)
+		if err != nil {
+			return err
+		}
+		r, err := conn.readCommand()
+		if err != nil {
+			return err
+		}
+		parts := strings.Split(r, ":")
+		if len(parts) != 3 {
+			fmt.Printf("gdb: ignoring invalid qSymbol response %v\n", r)
+			continue
+		}
+		if len(parts[1]) == 0 {
+			fmt.Printf("gdb: symbol %v not found\n", sym)
+			continue
+		}
+		addr, err := strconv.ParseUint(parts[1], 16, 64)
+		if err != nil {
+			fmt.Printf("gdb: invalid symbol address: %v\n", err)
+			continue
+		}
+		fmt.Printf(" - %v => %x\n", sym, addr)
+		switch sym {
+		case "_start":
+			conn.stub.kernelDelta = addr - conn.stub.kernelEntry
+			fmt.Printf(" - \u0394: %x\n", conn.stub.kernelDelta)
+		}
+	}
+	return conn.response("OK")
+}
+
+func (conn *Conn) deleteBreak(cmd string) error {
+	parts := strings.Split(cmd, ",")
+	if len(parts) != 3 || parts[0] != "z0" {
+		fmt.Printf("gdb: breakpoint %v not supported\n", cmd)
+		return conn.response("")
+	}
+
+	addr, err := strconv.ParseUint(parts[1], 16, 64)
+	if err != nil {
+		fmt.Printf("gdb: invalid address: %v\n", err)
+		return conn.response("")
+	}
+	length, err := strconv.ParseUint(parts[2], 16, 64)
+	if err != nil {
+		fmt.Printf("gdb: invalid length: %v\n", err)
+		return conn.response("")
+	}
+
+	bp, ok := conn.stub.bps[addr]
+	if !ok || length != uint64(len(bp.code)) {
+		fmt.Printf("unknown breakpoint %x\n", addr)
+		return conn.response("E01")
+	}
+
+	err = conn.write(addr, bp.code)
+	if err != nil {
+		fmt.Printf("write failed: %v\n", err)
+		return conn.response("E01")
+	}
+
+	fmt.Printf("%v: deleted breakpoint with %x\n", cmd, bp.code)
+
+	delete(conn.stub.bps, addr)
+
+	return conn.response("OK")
+}
+
+func (conn *Conn) insertBreak(cmd string) error {
+	parts := strings.Split(cmd, ",")
+	if len(parts) != 3 || parts[0] != "Z0" {
+		fmt.Printf("breakpoint %v not supported\n", cmd)
+		return conn.response("")
+	}
+
+	addr, err := strconv.ParseUint(parts[1], 16, 64)
+	if err != nil {
+		fmt.Printf("invalid address: %v\n", err)
+		return conn.response("")
+	}
+	length, err := strconv.ParseUint(parts[2], 16, 64)
+	if err != nil {
+		fmt.Printf("invalid length: %v\n", err)
+		return conn.response("")
+	}
+
+	code, err := conn.read(addr, length)
+	if err != nil {
+		fmt.Printf("read failed: %v\n", err)
+		return conn.response("")
+	}
+
+	bp := &Breakpoint{
+		vaddr: addr,
+		code:  code,
+	}
+
+	switch length {
+	case 2:
+		// c.ebreak: 0x0902
+		err = conn.write(addr, []byte{0x02, 0x09})
+
+	case 4:
+		// ebreak: 0x00100073
+		err = conn.write(addr, []byte{0x73, 0x00, 0x10, 0x00})
+
+	default:
+		err = fmt.Errorf("invalid instruction length %v", length)
+	}
+	if err != nil {
+		fmt.Printf("write failed: %v\n", err)
+		return conn.response("")
+	}
+
+	fmt.Printf("%v: inserted breakpoint to replace %x\n", cmd, code)
+
+	conn.stub.bps[addr] = bp
+
+	return conn.response("OK")
 }
 
 func (conn *Conn) handleLastSignal() error {
@@ -251,26 +453,47 @@ func (conn *Conn) readMemory(cmd string) error {
 		return err
 	}
 
+	data, err := conn.read(addr, length)
+	if err != nil {
+		fmt.Printf("read failed: %v\n", err)
+		return conn.response("E01")
+	}
+
+	return conn.response(fmt.Sprintf("%x", data))
+}
+
+func (conn *Conn) read(addr, length uint64) ([]byte, error) {
 	mem := conn.stub.cpu.MMU
 
-	var result string
+	var result []byte
 
 	if mem.Satp() == mmu.SatpModeBare {
+		// MMU off. Check if it is an upper virtual address.
+		if addr >= mem.Mem.RAMEnd && addr > conn.stub.kernelDelta {
+			addr -= conn.stub.kernelDelta
+			fmt.Printf("read: mapped virtual %x to %x\n",
+				addr+conn.stub.kernelDelta, addr)
+		}
+
 		// MMU off, check that the address is valid.
 		if mem.Mem.Contains(addr) && mem.Mem.Contains(addr+length-1) {
 			offset := mem.Mem.Offset(addr)
-			result = fmt.Sprintf("%x", mem.Mem.RAM[offset:offset+length])
+			result = make([]byte, length)
+			copy(result, mem.Mem.RAM[offset:offset+length])
+
+			fmt.Printf("read, memory at %x:\n%s", addr,
+				hex.Dump(mem.Mem.RAM[offset:offset+256]))
+
 		} else if mem.MMIO.Contains(addr, length) {
 			for i := uint64(0); i < length; i++ {
 				b, err := mem.MMIO.Load8(addr + i)
 				if err != nil {
 					break
 				}
-				result += fmt.Sprintf("%02x", b)
+				result = append(result, b)
 			}
 		} else {
-			fmt.Printf("invalid physical memory read %x\n", addr)
-			return conn.response("E01")
+			return nil, fmt.Errorf("invalid physical address %x", addr)
 		}
 	} else {
 		// MMU on.
@@ -278,16 +501,56 @@ func (conn *Conn) readMemory(cmd string) error {
 			b, err := mem.Load8(addr + i)
 			if err != nil {
 				if i == 0 {
-					fmt.Printf("invalid virtual memory read %x\n", addr+i)
-					return conn.response("E01")
+					return nil,
+						fmt.Errorf("invalid virtual address %x", addr+i)
 				}
 				break
 			}
-			result += fmt.Sprintf("%02x", b)
+			result = append(result, b)
 		}
 	}
 
-	return conn.response(result)
+	return result, nil
+}
+
+func (conn *Conn) write(addr uint64, data []byte) error {
+	mem := conn.stub.cpu.MMU
+
+	length := uint64(len(data))
+
+	if mem.Satp() == mmu.SatpModeBare {
+		// MMU off. Check if it is an upper virtual address.
+		if addr >= mem.Mem.RAMEnd && addr > conn.stub.kernelDelta {
+			addr -= conn.stub.kernelDelta
+			fmt.Printf("write: mapped virtual %x to %x\n",
+				addr+conn.stub.kernelDelta, addr)
+		}
+
+		// MMU off, check that the address is valid.
+		if mem.Mem.Contains(addr) && mem.Mem.Contains(addr+length-1) {
+			offset := mem.Mem.Offset(addr)
+			copy(mem.Mem.RAM[offset:offset+length], data)
+		} else if mem.MMIO.Contains(addr, length) {
+			for i, b := range data {
+				err := mem.MMIO.Store8(addr+uint64(i), b)
+				if err != nil {
+					break
+				}
+			}
+		} else {
+			return fmt.Errorf("invalid physical address %x", addr)
+		}
+	} else {
+		// MMU on.
+		for i, b := range data {
+			err := mem.Store8(addr+uint64(i), b)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func encodeUint64(v uint64) string {
