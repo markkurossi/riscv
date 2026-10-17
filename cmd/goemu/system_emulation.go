@@ -18,6 +18,7 @@ import (
 	"github.com/markkurossi/riscv"
 	"github.com/markkurossi/riscv/cpu"
 	"github.com/markkurossi/riscv/dev"
+	"github.com/markkurossi/riscv/gdb"
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/memory"
 	"github.com/markkurossi/riscv/mmu"
@@ -54,8 +55,8 @@ const (
 	SHMBase = 0x4000_0000
 )
 
-func systemEmulation(htif bool, params riscv.Params, cfg *SystemConfig,
-	args []string) error {
+func systemEmulation(htif bool, gdbStub string, params riscv.Params,
+	cfg *SystemConfig, args []string) error {
 
 	ramSize, err := ParseMem(cfg.Memory)
 	if err != nil {
@@ -300,6 +301,18 @@ func systemEmulation(htif bool, params riscv.Params, cfg *SystemConfig,
 	// Start UARTS.
 	for _, u := range uarts {
 		go u.Peer.Run(u)
+	}
+
+	if len(gdbStub) > 0 {
+		stub, err := gdb.New(hart, gdbStub)
+		if err != nil {
+			return err
+		}
+		hart.GDB = stub
+
+		go stub.Run()
+
+		stub.Breakpoint()
 	}
 
 	if gpu != nil {

@@ -80,6 +80,7 @@ func main() {
 	dumpdtb := flag.String("dumpdtb", "", "dump DTB to `file`")
 	memsize := flag.String("m", "", "guest RAM size")
 	nographic := flag.Bool("nographic", false, "disable graphical output")
+	gdbStub := flag.String("gdb", "", "run GDB stub on address")
 
 	flag.Var(&argDrives, "drive", "configure drive")
 	flag.Var(&argDevices, "device", "configure device")
@@ -177,7 +178,7 @@ func main() {
 	// If any critical system emulation parameters are set, start
 	// system emulation.
 	if systemConfig.Defined() {
-		err := systemEmulation(*htif, params, systemConfig, rest)
+		err := systemEmulation(*htif, *gdbStub, params, systemConfig, rest)
 		if err != nil {
 			log.Fatal(err)
 		}

@@ -39,6 +39,12 @@ const (
 
 type TrapHandler func(cpu *CPU, trap *isa.Trap) (bool, error)
 
+// Maybe: Interrupt, Breakpoint, SingleStep, GuestException, Diagnostics.
+
+type GDB interface {
+	Breakpoint()
+}
+
 type lossage struct {
 	pc    uint64
 	instr isa.Instr
@@ -83,6 +89,7 @@ type CPU struct {
 	codePagenum uint64
 	codePage    []byte
 
+	GDB         GDB
 	TrapHandler TrapHandler
 	Symtab      Symtab
 

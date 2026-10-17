@@ -73,3 +73,27 @@ $ file /mnt/ext2_inside/sbin/init
 $ file /mnt/ext2_inside/lib/systemd/systemd
 /mnt/ext2_inside/lib/systemd/systemd: ELF 64-bit LSB pie executable, UCB RISC-V, RVC, double-float ABI, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-riscv64-lp64d.so.1, BuildID[sha1]=16822c25a108c2b12ac2409154f34deaa82bfc1c, for GNU/Linux 4.15.0, stripped
 ```
+
+## GDB Remote Debugging
+
+```bash
+$ riscv64-linux-gnu-gdb vmlinux
+(gdb) set non-stop off
+(gdb) target remote localhost:1234
+
+```
+
+In gdb:
+
+```bash
+(gdb) set $task = (struct task_struct *)$tp
+(gdb) p $task->pid
+$4 = 1
+(gdb) p $task->tgid
+$5 = 1
+(gdb) p $task->comm
+$6 = "init", '\000' <repeats 11 times>
+(gdb) p $task->mm
+$7 = (struct mm_struct *) 0xffffffd603220d80
+
+```
