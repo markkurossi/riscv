@@ -258,7 +258,14 @@ func DecodeC(raw uint16) (Instr, error) {
 				case 0b111:
 					// The RISC-V Zcb Extension.
 					switch raw >> 2 & 0b111 {
-					case 0b100:
+					case 0b000: // c.zext.b
+						instr.Rd = compressedRegisters[raw>>7&0b111]
+						instr.Rs1 = instr.Rd
+						instr.Rs2 = Zero
+						instr.Imm = 0xff
+						instr.Op = Andi
+
+					case 0b100: // c.zext.w
 						instr.Rd = compressedRegisters[raw>>7&0b111]
 						instr.Rs1 = instr.Rd
 						instr.Rs2 = Zero

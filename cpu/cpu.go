@@ -359,8 +359,8 @@ dispatch:
 		switch instr.Op {
 		case isa.Invalid:
 			err = fmt.Errorf("invalid %v[0x%x]", instr, raw)
-			if false {
-				cpu.tracef(raw, instr, "invalid: %v", instr)
+			if raw != 0 {
+				cpu.tracef(raw, instr, "non-zero %x decoded as %v", raw, instr)
 				cpu.Dump(cpu.PC)
 				return err
 			} else {

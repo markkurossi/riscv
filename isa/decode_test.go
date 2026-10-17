@@ -366,6 +366,16 @@ var compressedDecodeTests = []struct {
 	{0b111_000_000_10000_01, 0, S0, 0, 0b00010000000, Bne},
 	{0b111_100_000_00000_01, 0, S0, 0, ^int32(0b11111111), Bne},
 
+	// The RISC-V Zcb Extension.
+
+	// C.ZEXT.B
+	{0b100_111_000_11_000_01, S0, S0, 0, 0xff, Andi},
+	{0b100_111_001_11_000_01, S1, S1, 0, 0xff, Andi},
+
+	// C.ZEXT.W
+	{0b100_111_000_11_100_01, S0, S0, 0, 0, AddUw},
+	{0b100_111_001_11_100_01, S1, S1, 0, 0, AddUw},
+
 	// Quadrant 2.
 
 	// C.SLLI
