@@ -446,11 +446,12 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		vpu.VStart = 0
 
 	case isa.Vle8V:
-		vm := instr.Imm & 0b1
-		mop := instr.Imm >> 1 & 0b111
-		nf := uint64(instr.Imm>>4&0b111) + 1
+		lumop := instr.Imm & 0b11111
+		vm := instr.Imm >> 5 & 0b1
+		mop := instr.Imm >> 6 & 0b111
+		nf := uint64(instr.Imm>>9&0b111) + 1
 
-		if mop != 0 || nf != 1 {
+		if mop != 0 || nf != 1 || (lumop != 0 && lumop != 0b10000) {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
 					instr, mop, nf))
@@ -466,11 +467,10 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			emul = uint64(vemul)
 		}
 
-		vl := vpu.VL
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vd := uint64(instr.Rd)
 
-		for i := vpu.VStart; i < vl; i++ {
+		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
 				if !vpu.maskElt(0, i) {
 					continue
@@ -482,7 +482,14 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memAddr := baseAddr + (i*nf+fn)*eltSize
 				val, err := vpu.cpu.MMU.Load8(memAddr)
 				if err != nil {
-					return err
+					if lumop == 0 || i == 0 {
+						// lumop != 0: fault-only-first load
+						return err
+					}
+					// Reduce VL if an extension occurs on a later
+					// element. This also terminates the outer loop.
+					vpu.VL = i
+					break
 				}
 				reg, ofs := vpu.elt(isa.E8, vd+fn*emul, i)
 				reg[ofs] = val
@@ -491,11 +498,12 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		vpu.VStart = 0
 
 	case isa.Vle16V:
-		vm := instr.Imm & 0b1
-		mop := instr.Imm >> 1 & 0b111
-		nf := uint64(instr.Imm>>4&0b111) + 1
+		lumop := instr.Imm & 0b11111
+		vm := instr.Imm >> 5 & 0b1
+		mop := instr.Imm >> 6 & 0b111
+		nf := uint64(instr.Imm>>9&0b111) + 1
 
-		if mop != 0 || nf != 1 {
+		if mop != 0 || nf != 1 || (lumop != 0 && lumop != 0b10000) {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
 					instr, mop, nf))
@@ -511,11 +519,10 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			emul = uint64(vemul)
 		}
 
-		vl := vpu.VL
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vd := uint64(instr.Rd)
 
-		for i := vpu.VStart; i < vl; i++ {
+		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
 				if !vpu.maskElt(0, i) {
 					continue
@@ -527,7 +534,14 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memAddr := baseAddr + (i*nf+fn)*eltSize
 				val, err := vpu.cpu.MMU.Load16(memAddr)
 				if err != nil {
-					return err
+					if lumop == 0 || i == 0 {
+						// lumop != 0: fault-only-first load
+						return err
+					}
+					// Reduce VL if an extension occurs on a later
+					// element. This also terminates the outer loop.
+					vpu.VL = i
+					break
 				}
 				reg, ofs := vpu.elt(isa.E16, vd+fn*emul, i)
 				memory.PutUint16(reg, ofs, val)
@@ -536,11 +550,12 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		vpu.VStart = 0
 
 	case isa.Vle32V:
-		vm := instr.Imm & 0b1
-		mop := instr.Imm >> 1 & 0b111
-		nf := uint64(instr.Imm>>4&0b111) + 1
+		lumop := instr.Imm & 0b11111
+		vm := instr.Imm >> 5 & 0b1
+		mop := instr.Imm >> 6 & 0b111
+		nf := uint64(instr.Imm>>9&0b111) + 1
 
-		if mop != 0 || nf != 1 {
+		if mop != 0 || nf != 1 || (lumop != 0 && lumop != 0b10000) {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
 					instr, mop, nf))
@@ -556,11 +571,10 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			emul = uint64(vemul)
 		}
 
-		vl := vpu.VL
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vd := uint64(instr.Rd)
 
-		for i := vpu.VStart; i < vl; i++ {
+		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
 				if !vpu.maskElt(0, i) {
 					continue
@@ -572,7 +586,14 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memAddr := baseAddr + (i*nf+fn)*eltSize
 				val, err := vpu.cpu.MMU.Load32(memAddr)
 				if err != nil {
-					return err
+					if lumop == 0 || i == 0 {
+						// lumop != 0: fault-only-first load
+						return err
+					}
+					// Reduce VL if an extension occurs on a later
+					// element. This also terminates the outer loop.
+					vpu.VL = i
+					break
 				}
 				reg, ofs := vpu.elt(isa.E32, vd+fn*emul, i)
 				memory.PutUint32(reg, ofs, val)
@@ -581,11 +602,12 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		vpu.VStart = 0
 
 	case isa.Vle64V:
-		vm := instr.Imm & 0b1
-		mop := instr.Imm >> 1 & 0b111
-		nf := uint64(instr.Imm>>4&0b111) + 1
+		lumop := instr.Imm & 0b11111
+		vm := instr.Imm >> 5 & 0b1
+		mop := instr.Imm >> 6 & 0b111
+		nf := uint64(instr.Imm>>9&0b111) + 1
 
-		if mop != 0 || nf != 1 {
+		if mop != 0 || nf != 1 || (lumop != 0 && lumop != 0b10000) {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
 					instr, mop, nf))
@@ -601,11 +623,10 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			emul = uint64(vemul)
 		}
 
-		vl := vpu.VL
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vd := uint64(instr.Rd)
 
-		for i := vpu.VStart; i < vl; i++ {
+		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
 				if !vpu.maskElt(0, i) {
 					continue
@@ -617,7 +638,14 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memAddr := baseAddr + (i*nf+fn)*eltSize
 				val, err := vpu.cpu.MMU.Load64(memAddr)
 				if err != nil {
-					return err
+					if lumop == 0 || i == 0 {
+						// lumop != 0: fault-only-first load
+						return err
+					}
+					// Reduce VL if an extension occurs on a later
+					// element. This also terminates the outer loop.
+					vpu.VL = i
+					break
 				}
 				reg, ofs := vpu.elt(isa.E64, vd+fn*emul, i)
 				memory.PutUint64(reg, ofs, val)

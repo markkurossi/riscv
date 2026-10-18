@@ -376,6 +376,8 @@ const (
 	Ctz
 	Minu
 	Maxu
+	SextB
+	SextH
 	Sh1add
 	Sh2add
 	Sh3add
@@ -1047,6 +1049,12 @@ var Operands = map[Op]OpInfo{
 	Maxu: OpInfo{
 		Name: "maxu",
 	},
+	SextB: OpInfo{
+		Name: "sext.b",
+	},
+	SextH: OpInfo{
+		Name: "sext.h",
+	},
 	Sh1add: OpInfo{
 		Name: "sh1add",
 	},
@@ -1303,11 +1311,16 @@ func (instr Instr) String() string {
 		}
 	}
 
-	return fmt.Sprintf("Instr: Op=%v", instr.Op)
+	return instr.Op.String()
 }
 
 func (instr Instr) vsString() string {
-	var size, op string
+	var size, op, ff string
+
+	lumop := instr.Imm & 0b11111
+	if lumop == 0b10000 {
+		ff = "ff"
+	}
 
 	switch instr.Op {
 	case Vle8V:
@@ -1343,6 +1356,7 @@ func (instr Instr) vsString() string {
 	if nf > 0 {
 		seg = fmt.Sprintf("seg%v", nf+1)
 	}
+	_ = seg
 
 	var idx string
 	var idxReg string
@@ -1358,7 +1372,8 @@ func (instr Instr) vsString() string {
 		idxReg = fmt.Sprintf(",%v", instr.Rs2)
 	}
 
-	opname := fmt.Sprintf("v%v%v%ve%v.v", op, idx, seg, size)
+	//opname := fmt.Sprintf("v%v%v%ve%v%v.v", op, idx, seg, size, ff)
+	opname := fmt.Sprintf("v%v%ve%v%v.v", op, idx, size, ff)
 	for len(opname) < maxOpNameLen {
 		opname += " "
 	}

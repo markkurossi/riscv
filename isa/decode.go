@@ -84,21 +84,28 @@ func DecodeC(raw uint16) (Instr, error) {
 				int32(raw&0b1100000)<<1
 			instr.Op = Ld
 
-		case 0b100: // XXX
-			// Zca / C Extension
-			funct3 := raw >> 10 & 0b111
-			switch funct3 {
+		case 0b100:
+			// "Zc*" Extension for Code Size Reduction.
+			//
+			// At this point, we have resolved quadrant Q0 [1:0] and
+			// funct3 [15:13].
+			f3 := raw >> 10 & 0b111
+			switch f3 {
 			case 0b000: // C.LBU
 				instr.Rd = compressedRegisters[raw>>2&0b111]
 				instr.Rs1 = compressedRegisters[raw>>7&0b111]
 				instr.Imm = int32(raw>>6&0b1) | int32(raw>>4&0b10)
 				instr.Op = Lbu
 
-			case 0b001: // C.LHU
+			case 0b001: // C.LHU / C.LH
 				instr.Rd = compressedRegisters[raw>>2&0b111]
 				instr.Rs1 = compressedRegisters[raw>>7&0b111]
-				instr.Imm = int32(raw >> 5 & 0b1)
-				instr.Op = Lhu
+				instr.Imm = int32(raw >> 4 & 0b10)
+				if raw&0b1000000 == 0 {
+					instr.Op = Lhu
+				} else {
+					instr.Op = Lh
+				}
 
 			case 0b010: // C.SB
 				instr.Rs1 = compressedRegisters[raw>>7&0b111]
@@ -106,8 +113,19 @@ func DecodeC(raw uint16) (Instr, error) {
 				instr.Imm = int32(raw>>6&0b1) | int32(raw>>4&0b10)
 				instr.Op = Sb
 
+			case 0b011: // C.SH
+				if raw&0b1000000 == 0 {
+					instr.Rs1 = compressedRegisters[raw>>7&0b111]
+					instr.Rs2 = compressedRegisters[raw>>2&0b111]
+					instr.Imm = int32(raw >> 4 & 0b10)
+					instr.Op = Sh
+				} else {
+					return instr, fmt.Errorf("zc*: Q0/%03b/%03b, raw=%04x",
+						funct3, f3, raw)
+				}
+
 			default:
-				return instr, fmt.Errorf("zca: Q0/%03b, raw=%04x",
+				return instr, fmt.Errorf("zc*: Q0/%03b, raw=%04x",
 					funct3, raw)
 			}
 
@@ -262,37 +280,52 @@ func DecodeC(raw uint16) (Instr, error) {
 					instr.Rs2 = compressedRegisters[raw>>2&0b111]
 					instr.Op = Addw
 
-				case 0b110: // XXX
-					// The RISC-V Zcb Extension.
+				case 0b110: // C.MUL
+					// "Zc*" Extension for Code Size Reduction.
 					instr.Rd = compressedRegisters[raw>>7&0b111]
 					instr.Rs1 = instr.Rd
 					instr.Rs2 = compressedRegisters[raw>>2&0b111]
 					instr.Op = Mul
 
-				case 0b111: // XXX
-					// The RISC-V Zcb Extension.
+				case 0b111:
+					// "Zc*" Extension for Code Size Reduction.
+					//
+					// At this point, we have resolved quadrant Q1 [1:0] and
+					// bits [15:10] and [6:5].
 					switch raw >> 2 & 0b111 {
-					case 0b000: // c.zext.b
+					case 0b000: // C.ZEXT.B
 						instr.Rd = compressedRegisters[raw>>7&0b111]
 						instr.Rs1 = instr.Rd
 						instr.Rs2 = Zero
 						instr.Imm = 0xff
 						instr.Op = Andi
 
-					case 0b010: // c.zext.h
+					case 0b001: // C.SEXT.B
+						instr.Rd = compressedRegisters[raw>>7&0b111]
+						instr.Rs1 = instr.Rd
+						instr.Rs2 = Zero
+						instr.Op = SextB
+
+					case 0b010: // C.ZEXT.H
 						instr.Rd = compressedRegisters[raw>>7&0b111]
 						instr.Rs1 = instr.Rd
 						instr.Rs2 = Zero
 						instr.Imm = 0xffff
 						instr.Op = Andi
 
-					case 0b100: // c.zext.w
+					case 0b011: // C.SEXT.H
+						instr.Rd = compressedRegisters[raw>>7&0b111]
+						instr.Rs1 = instr.Rd
+						instr.Rs2 = Zero
+						instr.Op = SextH
+
+					case 0b100: // C.ZEXT.W
 						instr.Rd = compressedRegisters[raw>>7&0b111]
 						instr.Rs1 = instr.Rd
 						instr.Rs2 = Zero
 						instr.Op = AddUw
 
-					case 0b101: // c.not
+					case 0b101: // C.NOT
 						instr.Rd = compressedRegisters[raw>>7&0b111]
 						instr.Rs1 = instr.Rd
 						instr.Rs2 = Zero
@@ -536,7 +569,17 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b010010:
 				instr.Op = Bclri
 			case 0b011000:
-				instr.Op = Ctz
+				switch raw >> 20 & 0b111111 {
+				case 0b000001:
+					instr.Op = Ctz
+				case 0b000100:
+					instr.Op = SextB
+				case 0b000101:
+					instr.Op = SextH
+				default:
+					return instr, fmt.Errorf("%v/%03b/%06b/%06b: raw=%x",
+						group, funct3, funct6, raw>>20&0b111111, raw)
+				}
 			case 0b011010:
 				instr.Op = Binvi
 			default:
@@ -1050,30 +1093,26 @@ func Decode(raw uint32) (Instr, error) {
 		}
 
 	case GroupLOADFP:
+		instr.Imm = int32(raw) >> 20
+
 		switch funct3 {
 		case 0b010:
-			instr.Imm = int32(raw) >> 20
 			instr.Op = Flw
 
 		case 0b011:
-			instr.Imm = int32(raw) >> 20
 			instr.Op = Fld
 
 			// Vector loads.
 		case 0b000:
-			instr.Imm = int32(raw >> 25)
 			instr.Op = Vle8V
 
 		case 0b101:
-			instr.Imm = int32(raw >> 25)
 			instr.Op = Vle16V
 
 		case 0b110:
-			instr.Imm = int32(raw >> 25)
 			instr.Op = Vle32V
 
 		case 0b111:
-			instr.Imm = int32(raw >> 25)
 			instr.Op = Vle64V
 
 		default:

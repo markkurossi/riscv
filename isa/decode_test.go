@@ -7,6 +7,7 @@
 package isa
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -202,6 +203,30 @@ var compressedDecodeTests = []struct {
 	{0b111_000_010_01_001_00, 0, A0, S1, 0b0001000000, Sd},
 	{0b111_000_010_10_001_00, 0, A0, S1, 0b0010000000, Sd},
 
+	// "Zc*" Extension for Code Size Reduction
+
+	// C.LBU
+	{0b100_000_001_00_010_00, A0, S1, 0, 0b0000000000, Lbu},
+	{0b100_000_001_10_010_00, A0, S1, 0, 0b0000000001, Lbu},
+	{0b100_000_001_01_010_00, A0, S1, 0, 0b0000000010, Lbu},
+	{0b100_000_001_11_010_00, A0, S1, 0, 0b0000000011, Lbu},
+
+	// C.LHU
+	{0b100_001_001_00_010_00, A0, S1, 0, 0b0000000000, Lhu},
+	{0b100_001_001_01_010_00, A0, S1, 0, 0b0000000010, Lhu},
+
+	// C.LH
+	{0b100_001_001_10_010_00, A0, S1, 0, 0b0000000000, Lh},
+	{0b100_001_001_11_010_00, A0, S1, 0, 0b0000000010, Lh},
+
+	// C.SB
+	{0b100_010_001_00_010_00, 0, S1, A0, 0b0000000000, Sb},
+	{0b100_010_001_01_010_00, 0, S1, A0, 0b0000000010, Sb},
+
+	// C.SH
+	{0b100_011_001_00_010_00, 0, S1, A0, 0b0000000000, Sh},
+	{0b100_011_001_01_010_00, 0, S1, A0, 0b0000000010, Sh},
+
 	// Quadrant 1.
 
 	// C.NOP / C.ADDI
@@ -344,6 +369,11 @@ var compressedDecodeTests = []struct {
 	{0b101_00001000000_01, 0, 0, 0, 0b10000000000, Jal},
 	{0b101_10000000000_01, 0, 0, 0, ^int32(0b11111111111), Jal},
 
+	// "Zc*" Extension for Code Size Reduction.
+
+	// C.ZEXT.B
+	{0b100_111_001_11_000_01, S1, S1, 0, 0b00011111111, Andi},
+
 	// C.BEQZ
 	{0b110_000_000_00000_01, 0, S0, 0, 0b00000000000, Beq},
 	{0b110_000_000_00010_01, 0, S0, 0, 0b00000000010, Beq},
@@ -372,9 +402,29 @@ var compressedDecodeTests = []struct {
 	{0b100_111_000_11_000_01, S0, S0, 0, 0xff, Andi},
 	{0b100_111_001_11_000_01, S1, S1, 0, 0xff, Andi},
 
+	// C.SEXT.B
+	{0b100_111_000_11_001_01, S0, S0, 0, 0, SextB},
+	{0b100_111_001_11_001_01, S1, S1, 0, 0, SextB},
+
+	// C.ZEXT.H
+	{0b100_111_000_11_010_01, S0, S0, 0, 0xffff, Andi},
+	{0b100_111_001_11_010_01, S1, S1, 0, 0xffff, Andi},
+
+	// C.ZEXT.H
+	{0b100_111_000_11_011_01, S0, S0, 0, 0, SextH},
+	{0b100_111_001_11_011_01, S1, S1, 0, 0, SextH},
+
 	// C.ZEXT.W
 	{0b100_111_000_11_100_01, S0, S0, 0, 0, AddUw},
 	{0b100_111_001_11_100_01, S1, S1, 0, 0, AddUw},
+
+	// C.NOT
+	{0b100_111_000_11_101_01, S0, S0, 0, -1, Xori},
+	{0b100_111_001_11_101_01, S1, S1, 0, -1, Xori},
+
+	// C.MUL
+	{0b100_111_000_10_010_01, S0, S0, A0, 0, Mul},
+	{0b100_111_001_10_010_01, S1, S1, A0, 0, Mul},
 
 	// Quadrant 2.
 
@@ -494,5 +544,27 @@ func TestCompressedDecode(t *testing.T) {
 					test.Instr, instr.Op, test.Op)
 			}
 		}
+	}
+}
+
+var bugs = []uint32{
+	0x02bf0007, // vlm.v
+	0x66110157, // vmsne.vv
+	0x5c1100d7, // vmerge.vvm
+}
+
+func TestBug(t *testing.T) {
+	for _, raw := range bugs {
+		var instr Instr
+		var err error
+		if raw&0b11 == 0b11 {
+			instr, err = Decode(raw)
+		} else {
+			instr, err = DecodeC(uint16(raw))
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		fmt.Printf("instr: %v\n", instr)
 	}
 }

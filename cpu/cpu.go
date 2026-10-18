@@ -492,7 +492,7 @@ dispatch:
 			if cpu.Trace {
 				cpu.traceFunc(cpu.PC)
 				cpu.tracef(raw, instr, "mode=%v => %v, mepc=%x",
-					cpu.Mode(), cpu.mstatus.MPP(), cpu.CSR[isa.CsrMepc])
+					cpu.Mode(), cpu.mstatus.MPP(), cpu.CSR[isa.CsrMepc].Load())
 			}
 			cpu.mstatus.SetMIE(cpu.mstatus.MPIE())
 			cpu.mstatus.SetMPIE(true)
@@ -1316,6 +1316,12 @@ dispatch:
 			} else {
 				cpu.X[instr.Rd] = cpu.X[instr.Rs2]
 			}
+
+		case isa.SextB:
+			cpu.X[instr.Rd] = uint64(int64(int8(cpu.X[instr.Rs1])))
+
+		case isa.SextH:
+			cpu.X[instr.Rd] = uint64(int64(int16(cpu.X[instr.Rs1])))
 
 			// Zicond Extension (Conditional Integer Operations).
 
