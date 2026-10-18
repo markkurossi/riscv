@@ -51,9 +51,9 @@ func DecodeC(raw uint16) (Instr, error) {
 
 	// Switch by quadrants.
 	switch raw & 0b11 {
-	case 0:
+	case 0b00: // Quadrant 0
 		switch funct3 {
-		case 0b000:
+		case 0b000: // C.ADDI4SPN
 			instr.Imm = int32(raw&0b1000000)>>4 |
 				int32(raw&0b100000)>>2 |
 				int32(raw&0b11000_00000000)>>7 |
@@ -62,14 +62,14 @@ func DecodeC(raw uint16) (Instr, error) {
 			instr.Rs1 = Sp
 			instr.Op = Addi
 
-		case 0b001:
+		case 0b001: // C.FLD
 			instr.Rd = compressedRegisters[raw>>2&0b111]
 			instr.Rs1 = compressedRegisters[raw>>7&0b111]
 			instr.Imm = int32(raw&0b11100_00000000)>>7 |
 				int32(raw&0b1100000)<<1
 			instr.Op = Fld
 
-		case 0b010:
+		case 0b010: // C.LW
 			instr.Rd = compressedRegisters[raw>>2&0b111]
 			instr.Rs1 = compressedRegisters[raw>>7&0b111]
 			instr.Imm = int32(raw&0b1000000)>>4 |
@@ -77,48 +77,48 @@ func DecodeC(raw uint16) (Instr, error) {
 				int32(raw&0b100000)<<1
 			instr.Op = Lw
 
-		case 0b011:
+		case 0b011: // C.LD
 			instr.Rd = compressedRegisters[raw>>2&0b111]
 			instr.Rs1 = compressedRegisters[raw>>7&0b111]
 			instr.Imm = int32(raw&0b11100_00000000)>>7 |
 				int32(raw&0b1100000)<<1
 			instr.Op = Ld
 
-		case 0b100:
+		case 0b100: // XXX
 			// Zca / C Extension
 			funct3 := raw >> 10 & 0b111
 			switch funct3 {
-			case 0b000: // c.lbu
+			case 0b000: // C.LBU
 				instr.Rd = compressedRegisters[raw>>2&0b111]
 				instr.Rs1 = compressedRegisters[raw>>7&0b111]
 				instr.Imm = int32(raw>>6&0b1) | int32(raw>>4&0b10)
 				instr.Op = Lbu
 
-			case 0b001: // c.lhu
+			case 0b001: // C.LHU
 				instr.Rd = compressedRegisters[raw>>2&0b111]
 				instr.Rs1 = compressedRegisters[raw>>7&0b111]
 				instr.Imm = int32(raw >> 5 & 0b1)
 				instr.Op = Lhu
 
-			case 0b010: // c.sb
+			case 0b010: // C.SB
 				instr.Rs1 = compressedRegisters[raw>>7&0b111]
 				instr.Rs2 = compressedRegisters[raw>>2&0b111]
 				instr.Imm = int32(raw>>6&0b1) | int32(raw>>4&0b10)
 				instr.Op = Sb
 
 			default:
-				return instr, fmt.Errorf("zca: func3=%03b, raw=%04x",
+				return instr, fmt.Errorf("zca: Q0/%03b, raw=%04x",
 					funct3, raw)
 			}
 
-		case 0b101:
+		case 0b101: // C.FSD
 			instr.Rs2 = compressedRegisters[raw>>2&0b111]
 			instr.Rs1 = compressedRegisters[raw>>7&0b111]
 			instr.Imm = int32(raw&0b11100_00000000)>>7 |
 				int32(raw&0b1100000)<<1
 			instr.Op = Fsd
 
-		case 0b110:
+		case 0b110: // C.SW
 			instr.Rs2 = compressedRegisters[raw>>2&0b111]
 			instr.Rs1 = compressedRegisters[raw>>7&0b111]
 			instr.Imm = int32(raw&0b1000000)>>4 |
@@ -126,7 +126,7 @@ func DecodeC(raw uint16) (Instr, error) {
 				int32(raw&0b100000)<<1
 			instr.Op = Sw
 
-		case 0b111:
+		case 0b111: // C.SD
 			instr.Rs2 = compressedRegisters[raw>>2&0b111]
 			instr.Rs1 = compressedRegisters[raw>>7&0b111]
 			instr.Imm = int32(raw&0b11100_00000000)>>7 |
@@ -134,12 +134,12 @@ func DecodeC(raw uint16) (Instr, error) {
 			instr.Op = Sd
 
 		default:
-			return instr, fmt.Errorf("raw=%04x, Q=0, funct3=%03b", raw, funct3)
+			return instr, fmt.Errorf("C: Q0/%03b, raw=%04x", funct3, raw)
 		}
 
-	case 1:
+	case 0b01: // Quadrant 1
 		switch funct3 {
-		case 0b000:
+		case 0b000: // C.ADDI / C.NOP
 			instr.Rd = rds1
 			instr.Rs1 = rds1
 			instr.Imm = int32(raw&0b1111100)>>2 |
@@ -150,7 +150,7 @@ func DecodeC(raw uint16) (Instr, error) {
 			}
 			instr.Op = Addi
 
-		case 0b001:
+		case 0b001: // C.ADDIW
 			instr.Rd = rds1
 			instr.Rs1 = rds1
 			instr.Imm = int32(raw&0b1111100)>>2 |
@@ -161,7 +161,7 @@ func DecodeC(raw uint16) (Instr, error) {
 			}
 			instr.Op = Addiw
 
-		case 0b010:
+		case 0b010: // C.LI
 			instr.Rd = rds1
 			instr.Rs1 = Zero
 			instr.Imm = int32(raw&0b1111100)>>2 |
@@ -171,9 +171,10 @@ func DecodeC(raw uint16) (Instr, error) {
 			}
 			instr.Op = Addi
 
-		case 0b011:
+		case 0b011: // C.ADDI16SP / C.LUI
 			instr.Rd = rds1
 			if rds1 == 2 {
+				// C.ADDI16SP
 				instr.Imm = int32(raw&0b1000000)>>2 |
 					int32(raw&0b100)<<3 |
 					int32(raw&0b100000)<<1 |
@@ -185,6 +186,7 @@ func DecodeC(raw uint16) (Instr, error) {
 				instr.Rs1 = Sp
 				instr.Op = Addi
 			} else {
+				// C.LUI
 				instr.Rd = rds1
 				instr.Imm = int32(raw&0b1111100)<<10 |
 					int32(raw&0b10000_00000000)<<5
@@ -197,21 +199,21 @@ func DecodeC(raw uint16) (Instr, error) {
 		case 0b100:
 			funct2 := raw >> 10 & 0b11
 			switch funct2 {
-			case 0b00:
+			case 0b00: // C.SRLI
 				instr.Rd = compressedRegisters[raw>>7&0b111]
 				instr.Rs1 = instr.Rd
 				instr.Imm = int32(raw&0b1111100)>>2 |
 					int32(raw&0b10000_00000000)>>7
 				instr.Op = Srli
 
-			case 0b01:
+			case 0b01: // C.SRAI
 				instr.Rd = compressedRegisters[raw>>7&0b111]
 				instr.Rs1 = instr.Rd
 				instr.Imm = int32(raw&0b1111100)>>2 |
 					int32(raw&0b10000_00000000)>>7
 				instr.Op = Srai
 
-			case 0b10: // c.andi
+			case 0b10: // C.ANDI
 				instr.Rd = compressedRegisters[raw>>7&0b111]
 				instr.Rs1 = instr.Rd
 				instr.Imm = int32(raw&0b1111100)>>2 |
@@ -224,50 +226,50 @@ func DecodeC(raw uint16) (Instr, error) {
 			case 0b11:
 				f3 := (raw >> 5 & 0b11) | (raw >> 10 & 0b100)
 				switch f3 {
-				case 0b000:
+				case 0b000: // C.SUB
 					instr.Rd = compressedRegisters[raw>>7&0b111]
 					instr.Rs1 = instr.Rd
 					instr.Rs2 = compressedRegisters[raw>>2&0b111]
 					instr.Op = Sub
 
-				case 0b001:
+				case 0b001: // C.XOR
 					instr.Rd = compressedRegisters[raw>>7&0b111]
 					instr.Rs1 = instr.Rd
 					instr.Rs2 = compressedRegisters[raw>>2&0b111]
 					instr.Op = Xor
 
-				case 0b010:
+				case 0b010: // C.OR
 					instr.Rd = compressedRegisters[raw>>7&0b111]
 					instr.Rs1 = instr.Rd
 					instr.Rs2 = compressedRegisters[raw>>2&0b111]
 					instr.Op = Or
 
-				case 0b011:
+				case 0b011: // C.AND
 					instr.Rd = compressedRegisters[raw>>7&0b111]
 					instr.Rs1 = instr.Rd
 					instr.Rs2 = compressedRegisters[raw>>2&0b111]
 					instr.Op = And
 
-				case 0b101:
-					instr.Rd = compressedRegisters[raw>>7&0b111]
-					instr.Rs1 = instr.Rd
-					instr.Rs2 = compressedRegisters[raw>>2&0b111]
-					instr.Op = Addw
-
-				case 0b100:
+				case 0b100: // C.SUBW
 					instr.Rd = compressedRegisters[raw>>7&0b111]
 					instr.Rs1 = instr.Rd
 					instr.Rs2 = compressedRegisters[raw>>2&0b111]
 					instr.Op = Subw
 
-				case 0b110:
+				case 0b101: // C.ADDW
+					instr.Rd = compressedRegisters[raw>>7&0b111]
+					instr.Rs1 = instr.Rd
+					instr.Rs2 = compressedRegisters[raw>>2&0b111]
+					instr.Op = Addw
+
+				case 0b110: // XXX
 					// The RISC-V Zcb Extension.
 					instr.Rd = compressedRegisters[raw>>7&0b111]
 					instr.Rs1 = instr.Rd
 					instr.Rs2 = compressedRegisters[raw>>2&0b111]
 					instr.Op = Mul
 
-				case 0b111:
+				case 0b111: // XXX
 					// The RISC-V Zcb Extension.
 					switch raw >> 2 & 0b111 {
 					case 0b000: // c.zext.b
@@ -299,21 +301,20 @@ func DecodeC(raw uint16) (Instr, error) {
 
 					default:
 						return instr,
-							fmt.Errorf("zcb: raw=%04x, Q1/100/11/%03b", raw, f3)
+							fmt.Errorf("zcb: Q1/100/11/%03b, raw=%04x", f3, raw)
 					}
 
 				default:
-					return instr, fmt.Errorf("raw=%04x, Q1/100/11/%03b",
-						raw, f3)
+					return instr, fmt.Errorf("C: Q1/100/11/%03b, raw=%04x",
+						f3, raw)
 				}
 
 			default:
 				return instr,
-					fmt.Errorf("raw=%04x, Q1, funct3=%03b, funct2=%02b",
-						raw, funct3, funct2)
+					fmt.Errorf("C: Q1/%03b/%02b, raw=%04x", funct3, funct2, raw)
 			}
 
-		case 0b101:
+		case 0b101: // C.J
 			instr.Imm = int32(raw&0b111000)>>2 |
 				int32(raw&0b1000_00000000)>>7 |
 				int32(raw&0b100)<<3 |
@@ -327,7 +328,7 @@ func DecodeC(raw uint16) (Instr, error) {
 			}
 			instr.Op = Jal
 
-		case 0b110, 0b111:
+		case 0b110, 0b111: // C.BEQZ / C.BNEZ
 			instr.Rs1 = compressedRegisters[raw>>7&0b111]
 			instr.Imm = int32(raw&0b11000)>>2 |
 				int32(raw&0b1100_00000000)>>7 |
@@ -338,26 +339,28 @@ func DecodeC(raw uint16) (Instr, error) {
 				instr.Imm |= ^int32(0b11111111)
 			}
 			if funct3 == 0b110 {
+				// C.BEQZ
 				instr.Op = Beq
 			} else {
+				// C.BNEZ
 				instr.Op = Bne
 			}
 
 		default:
 			return instr,
-				fmt.Errorf("raw=%04x, Q=1, funct3=%03b", raw, funct3)
+				fmt.Errorf("C: Q1/%03b, raw=%04x", funct3, raw)
 		}
 
-	case 2:
+	case 0b10: // Quadrant 2
 		switch funct3 {
-		case 0b000:
+		case 0b000: // C.SLLI
 			instr.Rd = rds1
 			instr.Rs1 = rds1
 			instr.Imm = int32(raw&0b1111100)>>2 |
 				int32(raw&0b10000_00000000)>>7
 			instr.Op = Slli
 
-		case 0b001:
+		case 0b001: // C.FLDSP
 			instr.Imm = int32(raw&0b11100)<<4 |
 				int32(raw&0b1100000)>>2 |
 				int32(raw&0b10000_00000000)>>7
@@ -365,7 +368,7 @@ func DecodeC(raw uint16) (Instr, error) {
 			instr.Rs1 = Sp
 			instr.Op = Fld
 
-		case 0b010:
+		case 0b010: // C.FLWSP
 			instr.Imm = int32(raw&0b1110000)>>2 |
 				int32(raw&0b10000_00000000)>>7 |
 				int32(raw&0b1100)<<4
@@ -373,7 +376,7 @@ func DecodeC(raw uint16) (Instr, error) {
 			instr.Rs1 = Sp
 			instr.Op = Lw
 
-		case 0b011:
+		case 0b011: // C.LDSP
 			instr.Imm = int32(raw&0b11100)<<4 |
 				int32(raw&0b1100000)>>2 |
 				int32(raw&0b10000_00000000)>>7
@@ -385,29 +388,34 @@ func DecodeC(raw uint16) (Instr, error) {
 			if raw&0b10000_00000000 == 0 {
 				if rds1 != 0 {
 					if rs2 == 0 {
+						// C.JR
 						instr.Rs1 = rds1
 						instr.Op = Jalr
 					} else {
+						// C.MV
 						instr.Rd = rds1
 						instr.Rs2 = rs2
 						instr.Op = Add
 					}
 				} else {
-					return instr, fmt.Errorf("raw=%04x", raw)
+					return instr, fmt.Errorf("C: Q2, raw=%04x", raw)
 				}
 			} else {
 				if rds1 == 0 {
 					if rs2 == 0 {
+						// C.EBREAK
 						instr.Op = Ebreak
 					} else {
-						return instr, fmt.Errorf("raw=%04x", raw)
+						return instr, fmt.Errorf("C: Q2, raw=%04x", raw)
 					}
 				} else {
 					if rs2 == 0 {
+						// C.JALR
 						instr.Rd = Ra
 						instr.Rs1 = rds1
 						instr.Op = Jalr
 					} else {
+						// C.ADD
 						instr.Rd = rds1
 						instr.Rs1 = rds1
 						instr.Rs2 = rs2
@@ -416,21 +424,21 @@ func DecodeC(raw uint16) (Instr, error) {
 				}
 			}
 
-		case 0b101:
+		case 0b101: // C.FSDSP
 			instr.Rs1 = Sp
 			instr.Rs2 = rs2
 			instr.Imm = int32(raw&0b11100_00000000)>>7 |
 				int32(raw&0b11_10000000)>>1
 			instr.Op = Fsd
 
-		case 0b110:
+		case 0b110: // C.SWSP
 			instr.Rs1 = Sp
 			instr.Rs2 = rs2
 			instr.Imm = int32(raw&0b11110_00000000)>>7 |
 				int32(raw&0b01_10000000)>>1
 			instr.Op = Sw
 
-		case 0b111:
+		case 0b111: // C.SDSP
 			instr.Rs1 = Sp
 			instr.Rs2 = rs2
 			instr.Imm = int32(raw&0b11100_00000000)>>7 |
@@ -438,11 +446,11 @@ func DecodeC(raw uint16) (Instr, error) {
 			instr.Op = Sd
 
 		default:
-			return instr, fmt.Errorf("raw=%04x, Q=2, funct3=%03b", raw, funct3)
+			return instr, fmt.Errorf("C: Q2/%03b, raw=%04x", funct3, raw)
 		}
 
 	default:
-		return instr, fmt.Errorf("raw=%04x, Q=%v", raw, raw&0b11)
+		return instr, fmt.Errorf("C: Q%v, raw=%04x", raw&0b11, raw)
 	}
 
 	return instr, nil
