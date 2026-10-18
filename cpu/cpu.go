@@ -121,7 +121,7 @@ func New(mem *memory.Memory) *CPU {
 	cpu.MMU.Hart = cpu
 
 	if debugLossage {
-		cpu.lossage = make([]lossage, 512)
+		cpu.lossage = make([]lossage, 128)
 	}
 
 	return cpu
