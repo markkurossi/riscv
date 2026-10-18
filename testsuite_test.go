@@ -36,11 +36,9 @@ var skipISA = map[string]uint64{
 	"rv64uzbb-p-clzw":   0,
 	"rv64uzbb-p-cpop":   0,
 	"rv64uzbb-p-cpopw":  0,
-	"rv64uzbb-p-ctz":    0,
 	"rv64uzbb-p-ctzw":   0,
 	"rv64uzbb-p-max":    0,
 	"rv64uzbb-p-min":    0,
-	"rv64uzbb-p-minu":   0,
 	"rv64uzbb-p-orn":    0,
 	"rv64uzbb-p-rev8":   0,
 	"rv64uzbb-p-rol":    0,
@@ -52,7 +50,6 @@ var skipISA = map[string]uint64{
 	"rv64uzbb-p-sext_b": 0,
 	"rv64uzbb-p-sext_h": 0,
 	"rv64uzbb-p-xnor":   0,
-	"rv64uzbb-p-zext_h": 0,
 
 	// Zbc - carry-less multiplication
 	"rv64uzbc-p-clmul":  0,
@@ -62,7 +59,6 @@ var skipISA = map[string]uint64{
 	// Zbs - single-bit instructions.
 	"rv64uzbs-p-bclr": 0,
 	"rv64uzbs-p-binv": 0,
-	"rv64uzbs-p-bset": 0,
 
 	// Zbkb - bit-manipulation for Cryptography
 	"rv64uzbkb-p-brev8": 0,

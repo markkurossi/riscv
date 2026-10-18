@@ -1303,6 +1303,13 @@ dispatch:
 
 			// Extension 'B' Bit Manipulation.
 
+		case isa.Minu:
+			if cpu.X[instr.Rs1] < cpu.X[instr.Rs2] {
+				cpu.X[instr.Rd] = cpu.X[instr.Rs1]
+			} else {
+				cpu.X[instr.Rd] = cpu.X[instr.Rs2]
+			}
+
 		case isa.Maxu:
 			if cpu.X[instr.Rs1] > cpu.X[instr.Rs2] {
 				cpu.X[instr.Rd] = cpu.X[instr.Rs1]
@@ -1341,6 +1348,10 @@ dispatch:
 
 		case isa.Binvi:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] ^ uint64(1)<<instr.Imm
+
+		case isa.Bset:
+			shift := cpu.X[instr.Rs2] & 63
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] | uint64(1)<<shift
 
 		case isa.Bseti:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] | uint64(1)<<instr.Imm

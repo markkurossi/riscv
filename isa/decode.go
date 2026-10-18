@@ -88,11 +88,23 @@ func DecodeC(raw uint16) (Instr, error) {
 			// Zca / C Extension
 			funct3 := raw >> 10 & 0b111
 			switch funct3 {
-			case 0b000:
+			case 0b000: // c.lbu
 				instr.Rd = compressedRegisters[raw>>2&0b111]
 				instr.Rs1 = compressedRegisters[raw>>7&0b111]
 				instr.Imm = int32(raw>>6&0b1) | int32(raw>>4&0b10)
 				instr.Op = Lbu
+
+			case 0b001: // c.lhu
+				instr.Rd = compressedRegisters[raw>>2&0b111]
+				instr.Rs1 = compressedRegisters[raw>>7&0b111]
+				instr.Imm = int32(raw >> 5 & 0b1)
+				instr.Op = Lhu
+
+			case 0b010: // c.sb
+				instr.Rs1 = compressedRegisters[raw>>7&0b111]
+				instr.Rs2 = compressedRegisters[raw>>2&0b111]
+				instr.Imm = int32(raw>>6&0b1) | int32(raw>>4&0b10)
+				instr.Op = Sb
 
 			default:
 				return instr, fmt.Errorf("zca: func3=%03b, raw=%04x",
@@ -199,7 +211,7 @@ func DecodeC(raw uint16) (Instr, error) {
 					int32(raw&0b10000_00000000)>>7
 				instr.Op = Srai
 
-			case 0b10:
+			case 0b10: // c.andi
 				instr.Rd = compressedRegisters[raw>>7&0b111]
 				instr.Rs1 = instr.Rd
 				instr.Imm = int32(raw&0b1111100)>>2 |
@@ -671,7 +683,7 @@ func Decode(raw uint32) (Instr, error) {
 
 	case GroupOP:
 		switch funct7 {
-		case 0:
+		case 0b0000000:
 			switch funct3 {
 			case 0:
 				instr.Op = Add
@@ -696,7 +708,7 @@ func Decode(raw uint32) (Instr, error) {
 			}
 
 			// The 'M' Extension (Multiply/Divide)
-		case 1:
+		case 0b0000001:
 			switch funct3 {
 			case 0:
 				instr.Op = Mul
@@ -721,19 +733,22 @@ func Decode(raw uint32) (Instr, error) {
 			}
 
 			// The 'B' Extension for Bit Manipulation.
-		case 5:
+		case 0b0000101:
 			switch funct3 {
+			case 0b101:
+				instr.Op = Minu
+
 			case 0b111:
 				instr.Op = Maxu
 
 			default:
 				return instr,
-					fmt.Errorf("invalid B-extension: funct3=%03b, raw=%08x",
-						funct3, raw)
+					fmt.Errorf("%v: B-extension: funct3=%03b, raw=%08x",
+						group, funct3, raw)
 			}
 
 			// Zicond Extension (Conditional Integer Operations).
-		case 7:
+		case 0b0000111:
 			switch funct3 {
 			case 0b101:
 				instr.Op = CzeroEqz
@@ -742,6 +757,17 @@ func Decode(raw uint32) (Instr, error) {
 			default:
 				return instr,
 					fmt.Errorf("zicond: funct3=%03b, raw=%08x", funct3, raw)
+			}
+
+			// Zbs (Single-Bit Instructions) extension.
+		case 0b0010100:
+			switch funct3 {
+			case 0b001:
+				instr.Op = Bset
+			default:
+				return instr,
+					fmt.Errorf("%v zbs: funct3=%03b, raw=%08x",
+						group, funct3, raw)
 			}
 
 		case 0b0100000:

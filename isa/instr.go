@@ -374,6 +374,7 @@ const (
 	AddUw
 	Andn
 	Ctz
+	Minu
 	Maxu
 	Sh1add
 	Sh2add
@@ -1039,6 +1040,9 @@ var Operands = map[Op]OpInfo{
 	},
 	Ctz: OpInfo{
 		Name: "ctz",
+	},
+	Minu: OpInfo{
+		Name: "minu",
 	},
 	Maxu: OpInfo{
 		Name: "maxu",

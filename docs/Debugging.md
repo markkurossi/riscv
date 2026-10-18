@@ -100,7 +100,6 @@ $ file /mnt/ext2_inside/lib/systemd/systemd
 $ riscv64-linux-gnu-gdb vmlinux
 (gdb) set non-stop off
 (gdb) target remote localhost:1234
-
 ```
 
 In gdb:
