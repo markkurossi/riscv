@@ -516,14 +516,13 @@ func (mmu *MMU) mapLeaf(pte PTE, pteAddr, vaddr uint64, level, access int) (
 	}
 
 	readable := pte.Readable()
-	if mxr && pte.Executable() {
-		// MXR overrides read constraints if executable is active
-		readable = true
-	}
 	if pte.Writable() && !readable {
-		// W=1, R=0
 		return 0, 0, 0, mmu.Hart.Trap(isa.CauseStorePageFault, vaddr,
 			acWithDesc(ac, "W=1, R=0"))
+	}
+	if mxr && pte.Executable() {
+		// MXR overrides read constraints if executable is active.
+		readable = true
 	}
 
 	// Check permissions.
