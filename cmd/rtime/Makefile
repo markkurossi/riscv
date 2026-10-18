@@ -17,4 +17,4 @@ push-linux:
 	rsync -avhe ssh --delete --exclude-from rsync.exclude . $(TARGET_LINUX)
 
 push-netbsd:
-	scp *.c Makefile $(TARGET_NETBSD)
+	scp *.c *.h Makefile $(TARGET_NETBSD)
