@@ -57,7 +57,11 @@ operating systems, and the RISC-V privileged architecture.
 
 ### Release 1.0
 
-- [ ] V extension
+
+- [ ] Shortlist
+  - [ ] V extension
+  - [x] Check all `C.*` instruction decodings - do not be too liberal
+  - [ ] mstatus.FS==RegOff => CauseIllegalInstr => BSDs fail to boot
 - [ ] Reimplement DTB creation
   - [ ] `soc {interrupt-parent = <&plic>;}` instead of `interrupts-extended`
 - [ ] FreeBSD
@@ -403,25 +407,19 @@ $ sudo pfctl -f pf.conf
 $ sudo pfctl -e
 ```
 
-# Conformance tests
+## The Longest Goemu Run
 
-``` shell
-$ ./goemu -cooked -htif -kernel ../../testdata/isa/rv64mi-p-illegal
-```
+``` text
+Uptime: 104d10h17m7s
 
-fails on
+The operating system has halted.
+Please press any key to reboot.
 
-``` asm
-bad6:
-  # Make sure SFENCE.VMA and satp do trap when TVM=1.
-  sfence.vma
-  j fail
-bad7:
-  csrr t0, satp
-  j fail
-
-000000008000036c <bad6>:
-    8000036c:	12000073          	sfence.vma
-    80000370:	0700006f          	j	800003e0 <fail>
-
+Rebooting...
+CPU: instret: 601214835622361, runtime: 1287h23m51.175974687s, MIPS: 129.72
+virtio-rng: read    : 2 GB
+virtio-blk: read    : 2 GB
+virtio-blk: wrote   : 1 TB
+virtio-net: sent    : 239 MB
+virtio-net: rcvd    : 989 MB
 ```
