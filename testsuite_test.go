@@ -67,7 +67,6 @@ var skipISA = map[string]uint64{
 	"rv64uzbkx-p-xperm8": 0,
 
 	// Zfh extension - 16 bit floating points.
-
 	"rv64uzfh-p-fadd":     0,
 	"rv64uzfh-p-fclass":   0,
 	"rv64uzfh-p-fcmp":     0,
