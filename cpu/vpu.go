@@ -873,8 +873,6 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 				err := vpu.cpu.MMU.Store16(baseAddr+(i*nf+fn)*eltSize, val)
 				if err != nil {
-					vpu.cpu.tracef(raw, instr, "store: base=%x, i=%v, vl=%v",
-						baseAddr, i, vpu.VL)
 					return err
 				}
 			}
@@ -920,8 +918,6 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 				err := vpu.cpu.MMU.Store32(baseAddr+(i*nf+fn)*eltSize, val)
 				if err != nil {
-					vpu.cpu.tracef(raw, instr, "store: base=%x, i=%v, vl=%v",
-						baseAddr, i, vpu.VL)
 					return err
 				}
 			}
@@ -967,8 +963,6 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 				err := vpu.cpu.MMU.Store64(baseAddr+(i*nf+fn)*eltSize, val)
 				if err != nil {
-					vpu.cpu.tracef(raw, instr, "store: base=%x, i=%v, vl=%v",
-						baseAddr, i, vpu.VL)
 					return err
 				}
 			}
