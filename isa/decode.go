@@ -1433,6 +1433,19 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Imm = int32(imm)
 				instr.Op = VrsubVi
 
+			case 0b001110:
+				vm := funct7 & 1
+				// Imm is sign-extented and shifted one bit left.
+				imm := uint32(raw >> 14 & 0b111110)
+				// We store vm bit to bit 0.
+				if vm != 0 {
+					imm |= 1
+				} else {
+					imm &^= 1
+				}
+				instr.Imm = int32(imm)
+				instr.Op = VslideupVi
+
 			case 0b010111:
 				instr.Imm = int32(raw<<12) >> 27
 				instr.Op = VmvVI
