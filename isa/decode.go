@@ -619,6 +619,16 @@ func Decode(raw uint32) (Instr, error) {
 				// the formats above if imm is 6 or 7 bits.
 				instr.Op = Rori
 
+			case 0b011010:
+				switch raw >> 20 & 0b111111 {
+				case 0b111000:
+					instr.Op = Rev8
+
+				default:
+					return instr, fmt.Errorf("%v/%03b/%06b/%06b: raw=%x",
+						group, funct3, funct7>>1, raw>>20&0b111111, raw)
+				}
+
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
 					group, funct3, funct7>>1, raw)

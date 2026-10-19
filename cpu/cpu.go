@@ -1335,6 +1335,19 @@ dispatch:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1]>>instr.Imm |
 				cpu.X[instr.Rs1]<<(64-instr.Imm)
 
+		case isa.Rev8:
+			input := cpu.X[instr.Rs1]
+			var output uint64
+
+			for i := 0; i < 8; i++ {
+				b := input & 0xff
+				input >>= 8
+
+				output <<= 8
+				output |= b
+			}
+			cpu.X[instr.Rd] = output
+
 		case isa.SextB:
 			cpu.X[instr.Rd] = uint64(int64(int8(cpu.X[instr.Rs1])))
 
