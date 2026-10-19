@@ -1331,6 +1331,10 @@ dispatch:
 				cpu.X[instr.Rd] = cpu.X[instr.Rs2]
 			}
 
+		case isa.Rori:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1]>>instr.Imm |
+				cpu.X[instr.Rs1]<<(64-instr.Imm)
+
 		case isa.SextB:
 			cpu.X[instr.Rd] = uint64(int64(int8(cpu.X[instr.Rs1])))
 

@@ -613,9 +613,15 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b010010:
 				instr.Op = Bexti
 
+			case 0b011000:
+				// XXX for rori, the shmat is 6 bits but below masks 7
+				// bits, which is ok as our lowest bit is zero. Check
+				// the formats above if imm is 6 or 7 bits.
+				instr.Op = Rori
+
 			default:
-				return instr, fmt.Errorf("%v/%03b/%07b: raw=%x",
-					group, funct3, funct7, raw)
+				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
+					group, funct3, funct7>>1, raw)
 			}
 			instr.Imm &= 0b1111111
 
@@ -1378,6 +1384,10 @@ func Decode(raw uint32) (Instr, error) {
 
 		case 0b010: // OPMVV
 			switch funct7 >> 1 {
+			case 0b000011:
+				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
+				instr.Op = VredxorVs
+
 			case 0b010000:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
 				instr.Op = VfirstM

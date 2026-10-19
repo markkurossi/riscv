@@ -338,6 +338,7 @@ const (
 	VaddVx
 	VxorVv
 	VmsneVV
+	VredxorVs
 	VfirstM
 	VidV
 	VmorMM
@@ -387,6 +388,7 @@ const (
 	Minu
 	Max
 	Maxu
+	Rori
 	SextB
 	SextH
 	Sh1add
@@ -961,6 +963,9 @@ var Operands = map[Op]OpInfo{
 	VmsneVV: OpInfo{
 		Name: "vmne.vv",
 	},
+	VredxorVs: OpInfo{
+		Name: "vredxor.vs",
+	},
 	VfirstM: OpInfo{
 		Name: "vfirst.m",
 	},
@@ -1092,6 +1097,9 @@ var Operands = map[Op]OpInfo{
 	},
 	Maxu: OpInfo{
 		Name: "maxu",
+	},
+	Rori: OpInfo{
+		Name: "rori",
 	},
 	SextB: OpInfo{
 		Name: "sext.b",
