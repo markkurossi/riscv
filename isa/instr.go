@@ -375,7 +375,9 @@ const (
 	// Zba & Zbb Bit-Manipulation Extensions and Zcb extensions.
 	AddUw
 	Andn
+	Clz
 	Ctz
+	Cpop
 	Min
 	Minu
 	Max
@@ -1050,8 +1052,14 @@ var Operands = map[Op]OpInfo{
 	Andn: OpInfo{
 		Name: "andn",
 	},
+	Clz: OpInfo{
+		Name: "clz",
+	},
 	Ctz: OpInfo{
 		Name: "ctz",
+	},
+	Cpop: OpInfo{
+		Name: "cpop",
 	},
 	Min: OpInfo{
 		Name: "min",

@@ -570,8 +570,12 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = Bclri
 			case 0b011000:
 				switch raw >> 20 & 0b111111 {
+				case 0b000000:
+					instr.Op = Clz
 				case 0b000001:
 					instr.Op = Ctz
+				case 0b000010:
+					instr.Op = Cpop
 				case 0b000100:
 					instr.Op = SextB
 				case 0b000101:

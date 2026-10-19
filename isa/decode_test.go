@@ -553,7 +553,9 @@ var bugs = []struct {
 	{0x02bf0007, "vlm.v"},
 	{0x66110157, "vmsne.vv"},
 	{0x5c1100d7, "vmerge.vvm"},
-	{0x0ad56533, "???"},
+	{0x0ad56533, "max"},
+	{0x60279793, "cpop"},
+	{0x60079793, "clz"},
 }
 
 func TestBug(t *testing.T) {
