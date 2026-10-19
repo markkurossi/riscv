@@ -560,6 +560,7 @@ var bugs = []struct {
 	{0x40d5e6b3, "orn"},
 	{0x0e10b0d7, "vrsub.vi"},
 	{0x6005151b, "clzw"},
+	{0x02274157, "vadd.vx"},
 }
 
 func TestBug(t *testing.T) {
