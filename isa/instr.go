@@ -333,7 +333,8 @@ const (
 	Vsetvli
 	Vsetivli
 	Vsetvl
-	VandVX
+	VandVx
+	VmulVx
 	VxorVv
 	VmsneVV
 	VfirstM
@@ -353,6 +354,7 @@ const (
 	Vse16V
 	Vse32V
 	Vse64V
+	VrsubVi
 	VaddVI
 	VmseqVI
 	VsllVI
@@ -374,6 +376,7 @@ const (
 
 	// Zba & Zbb Bit-Manipulation Extensions and Zcb extensions.
 	AddUw
+	Orn
 	Andn
 	Clz
 	Ctz
@@ -941,8 +944,11 @@ var Operands = map[Op]OpInfo{
 	Vsetvl: OpInfo{
 		Name: "vsetvl",
 	},
-	VandVX: OpInfo{
-		Name: "vand.v.x",
+	VandVx: OpInfo{
+		Name: "vand.vx",
+	},
+	VmulVx: OpInfo{
+		Name: "vmul.vx",
 	},
 	VxorVv: OpInfo{
 		Name: "vxor.vv",
@@ -1001,6 +1007,9 @@ var Operands = map[Op]OpInfo{
 	Vse64V: OpInfo{
 		Name: "vse64.v",
 	},
+	VrsubVi: OpInfo{
+		Name: "vrsub.vi",
+	},
 	VaddVI: OpInfo{
 		Name: "vadd.vi",
 	},
@@ -1048,6 +1057,9 @@ var Operands = map[Op]OpInfo{
 
 	AddUw: OpInfo{
 		Name: "add.uw",
+	},
+	Orn: OpInfo{
+		Name: "orn",
 	},
 	Andn: OpInfo{
 		Name: "andn",

@@ -30,7 +30,7 @@ func TestOpNameLen(t *testing.T) {
 }
 
 func TestOpCount(t *testing.T) {
-	if Rorw != 224 {
+	if Rorw != 227 {
 		t.Errorf("max op Rorw = %d", int(Rorw))
 	}
 }

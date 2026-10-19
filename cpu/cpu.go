@@ -1385,6 +1385,9 @@ dispatch:
 		case isa.Andn:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] & ^cpu.X[instr.Rs2]
 
+		case isa.Orn:
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] | ^cpu.X[instr.Rs2]
+
 		case isa.Clz:
 			v := cpu.X[instr.Rs1]
 			var i uint64

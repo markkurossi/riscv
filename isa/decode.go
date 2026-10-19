@@ -837,6 +837,8 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = Sub
 			case 0b101:
 				instr.Op = Sra
+			case 0b110:
+				instr.Op = Orn
 			case 0b111:
 				instr.Op = Andn
 			default:
@@ -1406,6 +1408,19 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Imm = int32(imm)
 				instr.Op = VaddVI
 
+			case 0b000011:
+				vm := funct7 & 1
+				// Imm is sign-extented and shifted one bit left.
+				imm := uint32(int32(raw<<12) >> 26)
+				// We store vm bit to bit 0.
+				if vm != 0 {
+					imm |= 1
+				} else {
+					imm &^= 1
+				}
+				instr.Imm = int32(imm)
+				instr.Op = VrsubVi
+
 			case 0b010111:
 				instr.Imm = int32(raw<<12) >> 27
 				instr.Op = VmvVI
@@ -1452,7 +1467,7 @@ func Decode(raw uint32) (Instr, error) {
 			switch funct7 >> 1 {
 			case 0b001001:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VandVX
+				instr.Op = VandVx
 
 			case 0b010111:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
@@ -1468,6 +1483,10 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b010000:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
 				instr.Op = VmvSX
+
+			case 0b100101:
+				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
+				instr.Op = VmulVx
 
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
