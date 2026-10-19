@@ -1372,6 +1372,10 @@ func Decode(raw uint32) (Instr, error) {
 		switch funct3 {
 		case 0b000: // OPIVV
 			switch funct7 >> 1 {
+			case 0b000110:
+				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
+				instr.Op = VmaxuVv
+
 			case 0b001011:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
 				instr.Op = VxorVv
