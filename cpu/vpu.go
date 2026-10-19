@@ -968,6 +968,25 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
+	case isa.Vl1re8V:
+		sew := vpu.VType.VSEW()
+		baseAddr := vpu.cpu.X[instr.Rs1]
+		vd := uint64(instr.Rd)
+		length := uint64(instr.Imm>>9&0b111) + 1
+		eltPerReg := vpu.VLEN / 8 / sew.Len()
+		size := length * eltPerReg
+
+		for i := vpu.VStart; i < size; i++ {
+			vpu.VStart = i
+			val, err := vpu.cpu.MMU.Load8(baseAddr + i*sew.Len())
+			if err != nil {
+				return err
+			}
+			reg, ofs := vpu.elt(sew, vd, i)
+			reg[ofs] = val
+		}
+		vpu.VStart = 0
+
 	case isa.VlmV:
 		vm := instr.Imm >> 5 & 0b1
 		mop := instr.Imm >> 6 & 0b111
