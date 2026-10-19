@@ -32,7 +32,6 @@ var skipISA = map[string]uint64{
 	"rv64ssvnapot-p-napot": 0,
 
 	// Zbb - basic bit manipulation.
-	"rv64uzbb-p-clzw":  0,
 	"rv64uzbb-p-cpopw": 0,
 	"rv64uzbb-p-ctzw":  0,
 	"rv64uzbb-p-orn":   0,

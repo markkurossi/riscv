@@ -1398,6 +1398,16 @@ dispatch:
 			}
 			cpu.X[instr.Rd] = i
 
+		case isa.Clzw:
+			v := cpu.X[instr.Rs1]
+			var i uint64
+			for i = 0; i < 32; i++ {
+				if v&(1<<(31-i)) != 0 {
+					break
+				}
+			}
+			cpu.X[instr.Rd] = i
+
 		case isa.Ctz:
 			v := cpu.X[instr.Rs1]
 			var i uint64

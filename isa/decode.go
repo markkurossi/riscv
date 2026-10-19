@@ -638,6 +638,8 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = Slliw
 			case 0b000010:
 				instr.Op = SlliUW
+			case 0b011000:
+				instr.Op = Clzw
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
 					group, funct3, funct6, raw)
