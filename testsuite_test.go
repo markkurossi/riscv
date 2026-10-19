@@ -34,11 +34,9 @@ var skipISA = map[string]uint64{
 	// Zbb - basic bit manipulation.
 	"rv64uzbb-p-cpopw": 0,
 	"rv64uzbb-p-ctzw":  0,
-	"rv64uzbb-p-orn":   0,
 	"rv64uzbb-p-rol":   0,
 	"rv64uzbb-p-rolw":  0,
 	"rv64uzbb-p-ror":   0,
-	"rv64uzbb-p-rori":  0,
 	"rv64uzbb-p-roriw": 0,
 	"rv64uzbb-p-rorw":  0,
 	"rv64uzbb-p-xnor":  0,
