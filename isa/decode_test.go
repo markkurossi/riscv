@@ -553,6 +553,7 @@ var bugs = []struct {
 	{0x02bf0007, "vlm.v"},
 	{0x66110157, "vmsne.vv"},
 	{0x5c1100d7, "vmerge.vvm"},
+	{0x0ad56533, "???"},
 }
 
 func TestBug(t *testing.T) {
@@ -565,7 +566,7 @@ func TestBug(t *testing.T) {
 			instr, err = DecodeC(uint16(bug.raw))
 		}
 		if err != nil {
-			t.Fatalf("bug %x %v: %v", bug.raw, bug.name, err)
+			t.Fatalf("%x: %v: %v", bug.raw, bug.name, err)
 		}
 		got := instr.Op.String()
 		if bug.name != got {

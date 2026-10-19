@@ -401,7 +401,7 @@ func DecodeC(raw uint16) (Instr, error) {
 			instr.Rs1 = Sp
 			instr.Op = Fld
 
-		case 0b010: // C.FLWSP
+		case 0b010: // C.LWSP
 			instr.Imm = int32(raw&0b1110000)>>2 |
 				int32(raw&0b10000_00000000)>>7 |
 				int32(raw&0b1100)<<4
@@ -786,8 +786,14 @@ func Decode(raw uint32) (Instr, error) {
 			// The 'B' Extension for Bit Manipulation.
 		case 0b0000101:
 			switch funct3 {
+			case 0b100:
+				instr.Op = Min
+
 			case 0b101:
 				instr.Op = Minu
+
+			case 0b110:
+				instr.Op = Max
 
 			case 0b111:
 				instr.Op = Maxu

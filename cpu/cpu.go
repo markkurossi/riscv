@@ -1303,8 +1303,22 @@ dispatch:
 
 			// Extension 'B' Bit Manipulation.
 
+		case isa.Min:
+			if int64(cpu.X[instr.Rs1]) < int64(cpu.X[instr.Rs2]) {
+				cpu.X[instr.Rd] = cpu.X[instr.Rs1]
+			} else {
+				cpu.X[instr.Rd] = cpu.X[instr.Rs2]
+			}
+
 		case isa.Minu:
 			if cpu.X[instr.Rs1] < cpu.X[instr.Rs2] {
+				cpu.X[instr.Rd] = cpu.X[instr.Rs1]
+			} else {
+				cpu.X[instr.Rd] = cpu.X[instr.Rs2]
+			}
+
+		case isa.Max:
+			if int64(cpu.X[instr.Rs1]) > int64(cpu.X[instr.Rs2]) {
 				cpu.X[instr.Rd] = cpu.X[instr.Rs1]
 			} else {
 				cpu.X[instr.Rd] = cpu.X[instr.Rs2]

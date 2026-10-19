@@ -376,7 +376,9 @@ const (
 	AddUw
 	Andn
 	Ctz
+	Min
 	Minu
+	Max
 	Maxu
 	SextB
 	SextH
@@ -1051,8 +1053,14 @@ var Operands = map[Op]OpInfo{
 	Ctz: OpInfo{
 		Name: "ctz",
 	},
+	Min: OpInfo{
+		Name: "min",
+	},
 	Minu: OpInfo{
 		Name: "minu",
+	},
+	Max: OpInfo{
+		Name: "max",
 	},
 	Maxu: OpInfo{
 		Name: "maxu",
