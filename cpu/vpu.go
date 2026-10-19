@@ -698,6 +698,51 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
+	case isa.VlmV:
+		vm := instr.Imm >> 5 & 0b1
+		mop := instr.Imm >> 6 & 0b111
+		nf := uint64(instr.Imm>>9&0b111) + 1
+
+		if mop != 0 || nf != 1 {
+			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
+					instr, mop, nf))
+		}
+
+		var eltSize uint64 = 1 // sizeof(uint8)
+
+		veew := eltSize * 8
+		vemul := float32(veew) / float32(vpu.VType.VSEW()) * vpu.VType.VLMUL()
+
+		var emul uint64 = 1
+		if vemul > 1 {
+			emul = uint64(vemul)
+		}
+
+		vl := (vpu.VL + 7) / 8
+		baseAddr := vpu.cpu.X[instr.Rs1]
+		vd := uint64(instr.Rd)
+
+		for i := vpu.VStart; i < vl; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			vpu.VStart = i
+
+			for fn := uint64(0); fn < nf; fn++ {
+				memAddr := baseAddr + (i*nf+fn)*eltSize
+				val, err := vpu.cpu.MMU.Load8(memAddr)
+				if err != nil {
+					return err
+				}
+				reg, ofs := vpu.elt(isa.E8, vd+fn*emul, i)
+				reg[ofs] = val
+			}
+		}
+		vpu.VStart = 0
+
 	case isa.Vse8V:
 		vm := instr.Imm & 0b1
 		mop := instr.Imm >> 1 & 0b111

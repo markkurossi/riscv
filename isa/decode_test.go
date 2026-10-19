@@ -7,7 +7,6 @@
 package isa
 
 import (
-	"fmt"
 	"testing"
 )
 
@@ -547,24 +546,30 @@ func TestCompressedDecode(t *testing.T) {
 	}
 }
 
-var bugs = []uint32{
-	0x02bf0007, // vlm.v
-	0x66110157, // vmsne.vv
-	0x5c1100d7, // vmerge.vvm
+var bugs = []struct {
+	raw  uint32
+	name string
+}{
+	{0x02bf0007, "vlm.v"},
+	{0x66110157, "vmsne.vv"},
+	{0x5c1100d7, "vmerge.vvm"},
 }
 
 func TestBug(t *testing.T) {
-	for _, raw := range bugs {
+	for _, bug := range bugs {
 		var instr Instr
 		var err error
-		if raw&0b11 == 0b11 {
-			instr, err = Decode(raw)
+		if bug.raw&0b11 == 0b11 {
+			instr, err = Decode(bug.raw)
 		} else {
-			instr, err = DecodeC(uint16(raw))
+			instr, err = DecodeC(uint16(bug.raw))
 		}
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("bug %x %v: %v", bug.raw, bug.name, err)
 		}
-		fmt.Printf("instr: %v\n", instr)
+		got := instr.Op.String()
+		if bug.name != got {
+			t.Errorf("%x: expected %v, got %v\n", bug.raw, bug.name, got)
+		}
 	}
 }

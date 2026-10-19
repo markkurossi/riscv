@@ -1104,7 +1104,18 @@ func Decode(raw uint32) (Instr, error) {
 
 			// Vector loads.
 		case 0b000:
-			instr.Op = Vle8V
+			lumop := raw >> 20 & 0b11111
+			switch lumop {
+			case 0b00000:
+				instr.Op = Vle8V
+			case 0b10000: // vle8ff.v - lumop is checked at VPU
+				instr.Op = Vle8V
+			case 0b01011:
+				instr.Op = VlmV
+			default:
+				return instr, fmt.Errorf("%v/%03b/%05b, raw=%08x",
+					group, funct3, lumop, raw)
+			}
 
 		case 0b101:
 			instr.Op = Vle16V
