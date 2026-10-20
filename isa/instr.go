@@ -977,7 +977,7 @@ var Operands = map[Op]OpInfo{
 		Name: "vrgather.vv",
 	},
 	VmsneVv: OpInfo{
-		Name: "vmne.vv",
+		Name: "vmsne.vv",
 	},
 	VredxorVs: OpInfo{
 		Name: "vredxor.vs",
