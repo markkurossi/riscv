@@ -1485,7 +1485,7 @@ dispatch:
 				if err != nil {
 					return err
 				}
-			} else if isa.Vsetvli <= instr.Op && instr.Op <= isa.VsraVI {
+			} else if isa.Vsetvli <= instr.Op && instr.Op <= isa.VsraVi {
 				// Vector extension.
 				err := cpu.vpu.execute(instr, raw)
 				if err != nil {

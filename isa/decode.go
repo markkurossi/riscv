@@ -1399,7 +1399,7 @@ func Decode(raw uint32) (Instr, error) {
 
 			case 0b011001:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VmsneVV
+				instr.Op = VmsneVv
 
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
@@ -1442,7 +1442,7 @@ func Decode(raw uint32) (Instr, error) {
 					imm &^= 1
 				}
 				instr.Imm = int32(imm)
-				instr.Op = VaddVI
+				instr.Op = VaddVi
 
 			case 0b000011:
 				vm := funct7 & 1
@@ -1482,7 +1482,7 @@ func Decode(raw uint32) (Instr, error) {
 					imm |= 1 << 31
 				}
 				instr.Imm = int32(imm)
-				instr.Op = VsllVI
+				instr.Op = VsllVi
 
 			case 0b101000:
 				vm := funct7 & 1
@@ -1502,7 +1502,7 @@ func Decode(raw uint32) (Instr, error) {
 					imm |= 1 << 31
 				}
 				instr.Imm = int32(imm)
-				instr.Op = VsraVI
+				instr.Op = VsraVi
 
 			case 0b011000:
 				vm := funct7 & 1
@@ -1515,7 +1515,7 @@ func Decode(raw uint32) (Instr, error) {
 					imm &^= 1
 				}
 				instr.Imm = int32(imm)
-				instr.Op = VmseqVI
+				instr.Op = VmseqVi
 
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",

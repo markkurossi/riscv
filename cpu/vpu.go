@@ -554,7 +554,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.VmsneVV:
+	case isa.VmsneVv:
 		// if (insn.rd() != insn.rs2())
 		//   requiire_nooever(insn.rd(), 1, insn.rs2(), P.VU.vflmul)
 		// #define require_noover(astart, asize, bstart, bsize) \
@@ -1401,7 +1401,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.VaddVI:
+	case isa.VaddVi:
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {
 			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
@@ -1450,7 +1450,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.VmseqVI:
+	case isa.VmseqVi:
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {
 			err := vpu.requireAlign(raw, uint64(instr.Rs2), uint64(vlmul))
@@ -1500,7 +1500,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.VsllVI:
+	case isa.VsllVi:
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {
 			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
@@ -1598,7 +1598,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.VsraVI:
+	case isa.VsraVi:
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {
 			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))

@@ -340,7 +340,7 @@ const (
 	VmaxuVv
 	VxorVv
 	VrgatherVv
-	VmsneVV
+	VmsneVv
 	VredxorVs
 	VfirstM
 	VslideupVi
@@ -362,11 +362,11 @@ const (
 	Vse32V
 	Vse64V
 	VrsubVi
-	VaddVI
-	VmseqVI
-	VsllVI
+	VaddVi
+	VmseqVi
+	VsllVi
 	VsrlVi
-	VsraVI
+	VsraVi
 
 	// Zicond Extension (Conditional Integer Operations).
 	CzeroEqz
@@ -976,7 +976,7 @@ var Operands = map[Op]OpInfo{
 	VrgatherVv: OpInfo{
 		Name: "vrgather.vv",
 	},
-	VmsneVV: OpInfo{
+	VmsneVv: OpInfo{
 		Name: "vmne.vv",
 	},
 	VredxorVs: OpInfo{
@@ -1042,19 +1042,19 @@ var Operands = map[Op]OpInfo{
 	VrsubVi: OpInfo{
 		Name: "vrsub.vi",
 	},
-	VaddVI: OpInfo{
+	VaddVi: OpInfo{
 		Name: "vadd.vi",
 	},
-	VmseqVI: OpInfo{
+	VmseqVi: OpInfo{
 		Name: "vmseq.vi",
 	},
-	VsllVI: OpInfo{
+	VsllVi: OpInfo{
 		Name: "vsll.vi",
 	},
 	VsrlVi: OpInfo{
 		Name: "vsrl.vi",
 	},
-	VsraVI: OpInfo{
+	VsraVi: OpInfo{
 		Name: "vsra.vi",
 	},
 
