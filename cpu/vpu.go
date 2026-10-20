@@ -418,11 +418,11 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		if instr.Rd == instr.Rs1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("Vd and Vs1 are the same register"))
+				fmt.Errorf("vd and vs1 are the same register"))
 		}
 		if instr.Rd == instr.Rs2 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("Vd and Vs2 are the same register"))
+				fmt.Errorf("vd and vs2 are the same register"))
 		}
 		sew := vpu.VType.VSEW()
 		if sew < isa.E8 || sew > isa.E64 {
@@ -713,7 +713,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		if instr.Rd == instr.Rs2 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("Vd and Vs2 are the same register"))
+				fmt.Errorf("vd and vs2 are the same register"))
 		}
 		sew := vpu.VType.VSEW()
 		if sew < isa.E8 || sew > isa.E64 {
