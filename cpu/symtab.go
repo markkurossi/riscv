@@ -15,6 +15,7 @@ import (
 	"strings"
 )
 
+// Symtab defines an interface for symbol table.
 type Symtab interface {
 	Resolve(addr uint64) *SymEntry
 	Lookup(name string) *SymEntry
@@ -24,6 +25,7 @@ var (
 	_ Symtab = &SystemMap{}
 )
 
+// SymEntry implements a symbol entry in the system map.
 type SymEntry struct {
 	Start uint64
 	End   uint64
@@ -31,14 +33,17 @@ type SymEntry struct {
 	Name  string
 }
 
+// Contains checks if the SymEntry contains the address addr.
 func (entry *SymEntry) Contains(addr uint64) bool {
 	return entry.Start <= addr && addr < entry.End
 }
 
+// SystemMap implements system map from addresses to symbols.
 type SystemMap struct {
 	Entries []*SymEntry
 }
 
+// LoadSystemMap loads the system map from the file.
 func LoadSystemMap(file string) (*SystemMap, error) {
 	f, err := os.Open(file)
 	if err != nil {
@@ -88,6 +93,7 @@ func LoadSystemMap(file string) (*SystemMap, error) {
 	return result, nil
 }
 
+// Resolve resolves address addr with the system map.
 func (sm *SystemMap) Resolve(addr uint64) *SymEntry {
 	start := 0
 	end := len(sm.Entries)
@@ -111,6 +117,7 @@ func (sm *SystemMap) Resolve(addr uint64) *SymEntry {
 	}
 }
 
+// Lookup looks up the symbol name from the system map.
 func (sm *SystemMap) Lookup(name string) *SymEntry {
 	for _, entry := range sm.Entries {
 		if entry.Name == name {
