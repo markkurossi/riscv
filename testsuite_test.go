@@ -14,11 +14,17 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/markkurossi/riscv/cpu"
 	"github.com/markkurossi/riscv/dev"
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/memory"
+)
+
+var (
+	instret uint64
+	runtime time.Duration
 )
 
 var skipISA = map[string]uint64{
@@ -80,6 +86,10 @@ func TestISA(t *testing.T) {
 
 func TestVPU(t *testing.T) {
 	testSuite(t, "testdata/vpu", nil)
+	t.Logf("instret: %v, runtime: %v, MIPS: %.2f\n",
+		instret, runtime,
+		float64(instret/1000000.0)/float64(runtime/time.Second))
+
 }
 
 func testSuite(t *testing.T, dir string, skip map[string]uint64) {
@@ -144,6 +154,10 @@ func runTest(t *testing.T, file string) (bool, uint64, error) {
 	if err != nil {
 		return false, 0, err
 	}
+
+	instret += hart.Instret
+	runtime += hart.Runtime
+
 	if htif.ExitStatus != 1 {
 		return false, htif.ExitStatus >> 1, nil
 	}
