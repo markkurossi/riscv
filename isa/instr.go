@@ -365,6 +365,7 @@ const (
 	VaddVI
 	VmseqVI
 	VsllVI
+	VsrlVi
 	VsraVI
 
 	// Zicond Extension (Conditional Integer Operations).
@@ -1049,6 +1050,9 @@ var Operands = map[Op]OpInfo{
 	},
 	VsllVI: OpInfo{
 		Name: "vsll.vi",
+	},
+	VsrlVi: OpInfo{
+		Name: "vsrl.vi",
 	},
 	VsraVI: OpInfo{
 		Name: "vsra.vi",
