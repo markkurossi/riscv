@@ -43,7 +43,7 @@ func (cpu *CPU) CSRLoad(csr isa.CSR, raw uint32, instr isa.Instr) (
 			return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 				fmt.Errorf("read fcsr when FS is off"))
 		}
-		v := cpu.CSR[csr].Load()
+		v = cpu.CSR[csr].Load()
 		switch csr {
 		case isa.CsrFflags:
 			v &= 0b11111

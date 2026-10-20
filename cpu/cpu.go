@@ -478,7 +478,7 @@ dispatch:
 			if cpu.Trace {
 				cpu.traceFunc(cpu.PC)
 				cpu.tracef(raw, instr, "mode=%v => %v, sepc=%x",
-					cpu.Mode(), cpu.mstatus.SPP(), cpu.CSR[isa.CsrSepc])
+					cpu.Mode(), cpu.mstatus.SPP(), cpu.CSR[isa.CsrSepc].Load())
 			}
 			cpu.mstatus.SetSIE(cpu.mstatus.SPIE())
 			cpu.mstatus.SetSPIE(true)
