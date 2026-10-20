@@ -13,6 +13,7 @@ import (
 	"github.com/markkurossi/riscv/isa"
 )
 
+// Trap handles a synchronous interrupt cause, tval.
 func (cpu *CPU) Trap(cause, tval uint64, err error) error {
 	epc := cpu.PC
 
@@ -86,6 +87,8 @@ func (cpu *CPU) trap(epc, cause, tval uint64) error {
 	return nil
 }
 
+// Interrupt handles the interrupt cause delegating it to the target
+// mode.
 func (cpu *CPU) Interrupt(target isa.PrivilegeMode, cause uint64) {
 
 	cause |= 1 << 63
@@ -134,26 +137,7 @@ func (cpu *CPU) Interrupt(target isa.PrivilegeMode, cause uint64) {
 	}
 }
 
-func (cpu *CPU) HandleTrap(trap *isa.Trap) error {
-	if cpu.TrapHandler != nil {
-		ok, err := cpu.TrapHandler(cpu, trap)
-		if err != nil {
-			return err
-		}
-		if ok {
-			return nil
-		}
-	}
-
-	fmt.Println(trap.Error())
-	if trap.Err != nil {
-		fmt.Printf("  caused by: %v\n", trap.Err)
-	}
-	cpu.Dump(trap.PC)
-
-	return trap
-}
-
+// Dump the CPU state into standard output.
 func (cpu *CPU) Dump(epc uint64) {
 	fmt.Printf("CPU: 0 Mode: %v IC: %v Mstatus: %x\r\n",
 		cpu.mode, cpu.Instret, cpu.mstatus)
