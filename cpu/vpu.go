@@ -400,6 +400,95 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
+	case isa.VrgatherVv:
+		vlmul := vpu.VType.VLMUL()
+		if vlmul > 1 {
+			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
+			if err != nil {
+				return err
+			}
+			err = vpu.requireAlign(raw, uint64(instr.Rs1), uint64(vlmul))
+			if err != nil {
+				return err
+			}
+			err = vpu.requireAlign(raw, uint64(instr.Rs2), uint64(vlmul))
+			if err != nil {
+				return err
+			}
+		}
+		if instr.Rd == instr.Rs1 {
+			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("Vd and Vs1 are the same register"))
+		}
+		if instr.Rd == instr.Rs2 {
+			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("Vd and Vs2 are the same register"))
+		}
+		sew := vpu.VType.VSEW()
+		if sew < isa.E8 || sew > isa.E64 {
+			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("SEW=%v", sew))
+		}
+		vlmax := uint64(float32(vpu.VLEN/uint64(sew)) * vlmul)
+		vm := instr.Imm & 1
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+			vs1reg, vs1ofs := vpu.elt(sew, uint64(instr.Rs1), i)
+
+			switch sew {
+			case isa.E8:
+				var v uint8
+				vs1 := uint64(vs1reg[vs1ofs])
+				if vs1 >= vlmax {
+					v = 0
+				} else {
+					vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), vs1)
+					v = vs2reg[vs2ofs]
+				}
+				reg[ofs] = v
+
+			case isa.E16:
+				var v uint16
+				vs1 := uint64(vs1reg[vs1ofs])
+				if vs1 >= vlmax {
+					v = 0
+				} else {
+					vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), vs1)
+					v = memory.Uint16(vs2reg, vs2ofs)
+				}
+				memory.PutUint16(reg, ofs, v)
+
+			case isa.E32:
+				var v uint32
+				vs1 := uint64(vs1reg[vs1ofs])
+				if vs1 >= vlmax {
+					v = 0
+				} else {
+					vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), vs1)
+					v = memory.Uint32(vs2reg, vs2ofs)
+				}
+				memory.PutUint32(reg, ofs, v)
+
+			case isa.E64:
+				var v uint64
+				vs1 := uint64(vs1reg[vs1ofs])
+				if vs1 >= vlmax {
+					v = 0
+				} else {
+					vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), vs1)
+					v = memory.Uint64(vs2reg, vs2ofs)
+				}
+				memory.PutUint64(reg, ofs, v)
+			}
+		}
+		vpu.VStart = 0
+
 	case isa.VmaxuVv:
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {
@@ -623,7 +712,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 		if instr.Rd == instr.Rs2 {
-			return fmt.Errorf("Vd and Vs2 are the same register")
+			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("Vd and Vs2 are the same register"))
 		}
 		sew := vpu.VType.VSEW()
 		if sew < isa.E8 || sew > isa.E64 {

@@ -569,6 +569,7 @@ var bugs = []struct {
 	{0x1a478157, "vmaxu.vv"},
 	{0x02850b07, "vl1re8.v"}, // alias vl1r.v
 	{0x021181d7, "vadd.vv"},
+	{0x331a03d7, "vrgather.vv"},
 }
 
 func TestBug(t *testing.T) {

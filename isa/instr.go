@@ -339,6 +339,7 @@ const (
 	VaddVv
 	VmaxuVv
 	VxorVv
+	VrgatherVv
 	VmsneVV
 	VredxorVs
 	VfirstM
@@ -970,6 +971,9 @@ var Operands = map[Op]OpInfo{
 	},
 	VxorVv: OpInfo{
 		Name: "vxor.vv",
+	},
+	VrgatherVv: OpInfo{
+		Name: "vrgather.vv",
 	},
 	VmsneVV: OpInfo{
 		Name: "vmne.vv",
