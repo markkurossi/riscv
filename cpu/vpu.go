@@ -15,10 +15,12 @@ import (
 )
 
 const (
+	// ELEN defines the physical width of vector registers in bits.
 	ELEN     = 64
 	vpuDebug = false
 )
 
+// VPU implements the Vector Processing Unit.
 type VPU struct {
 	cpu *CPU
 
@@ -38,6 +40,7 @@ type VPU struct {
 	VLEN uint64 // Physical width of each register in bits (e.g., 128, 256, 512)
 }
 
+// NewVPU creates a new Vector Processing Unit for the CPU.
 func NewVPU(cpu *CPU) *VPU {
 	vpu := &VPU{
 		cpu:  cpu,
