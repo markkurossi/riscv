@@ -43,7 +43,6 @@ var skipISA = map[string]uint64{
 	"rv64uzbb-p-rol":   0,
 	"rv64uzbb-p-rolw":  0,
 	"rv64uzbb-p-ror":   0,
-	"rv64uzbb-p-roriw": 0,
 	"rv64uzbb-p-rorw":  0,
 	"rv64uzbb-p-xnor":  0,
 

@@ -1335,6 +1335,11 @@ dispatch:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1]>>instr.Imm |
 				cpu.X[instr.Rs1]<<(64-instr.Imm)
 
+		case isa.Roriw:
+			v := uint32(cpu.X[instr.Rs1])
+			v = v>>instr.Imm | v<<(32-instr.Imm)
+			cpu.X[instr.Rd] = uint64(int64(int32(v)))
+
 		case isa.Rev8:
 			input := cpu.X[instr.Rs1]
 			var output uint64

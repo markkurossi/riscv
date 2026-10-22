@@ -657,18 +657,22 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b011000:
 				instr.Op = Clzw
 			default:
-				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
+				return instr, fmt.Errorf("%v/%03b/%06b, raw=%x",
 					group, funct3, funct6, raw)
 			}
 		case 0b101:
 			switch funct7 {
-			case 0:
+			case 0b0000000:
 				instr.Op = Srliw
-			case 32:
+			case 0b0100000:
 				instr.Op = Sraiw
 				instr.Imm &= 0b111111
+			case 0b0110000:
+				instr.Op = Roriw
+				instr.Imm &= 0b11111
 			default:
-				return instr, fmt.Errorf("GroupOPIMM32: Func7=%v", funct7)
+				return instr, fmt.Errorf("%v/%03b/%07b, raw=%x",
+					group, funct3, funct7, raw)
 			}
 		}
 
