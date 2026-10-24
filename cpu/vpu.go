@@ -665,6 +665,70 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
+	case isa.VredsumVs:
+		vlmul := vpu.VType.VLMUL()
+		if vlmul > 1 {
+			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
+			if err != nil {
+				return err
+			}
+		}
+		sew := vpu.VType.VSEW()
+		if sew < isa.E8 || sew > isa.E64 {
+			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("SEW=%v", sew))
+		}
+		vm := instr.Imm & 1
+
+		reg, ofs := vpu.elt(sew, uint64(instr.Rd), 0)
+
+		var vd0res uint64
+
+		vs1reg, vs1ofs := vpu.elt(sew, uint64(instr.Rs1), 0)
+		switch sew {
+		case isa.E8:
+			vd0res = uint64(vs1reg[vs1ofs])
+		case isa.E16:
+			vd0res = uint64(memory.Uint16(vs1reg, vs1ofs))
+		case isa.E32:
+			vd0res = uint64(memory.Uint32(vs1reg, vs1ofs))
+		case isa.E64:
+			vd0res = memory.Uint64(vs1reg, vs1ofs)
+		}
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), i)
+
+			switch sew {
+			case isa.E8:
+				vd0res += uint64(vs2reg[vs2ofs])
+			case isa.E16:
+				vd0res += uint64(memory.Uint16(vs2reg, vs2ofs))
+			case isa.E32:
+				vd0res += uint64(memory.Uint32(vs2reg, vs2ofs))
+			case isa.E64:
+				vd0res += uint64(memory.Uint64(vs2reg, vs2ofs))
+			}
+		}
+		if vpu.VL > 0 {
+			switch sew {
+			case isa.E8:
+				reg[ofs] = uint8(vd0res)
+			case isa.E16:
+				memory.PutUint16(reg, ofs, uint16(vd0res))
+			case isa.E32:
+				memory.PutUint32(reg, ofs, uint32(vd0res))
+			case isa.E64:
+				memory.PutUint64(reg, ofs, uint64(vd0res))
+			}
+		}
+		vpu.VStart = 0
+
 	case isa.VredxorVs:
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {
