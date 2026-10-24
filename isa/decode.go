@@ -1428,6 +1428,26 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
 				instr.Op = VidV
 
+			case 0b010010:
+				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
+				switch instr.Rs1 {
+				// Table 22. VXUNARY0 encoding space:
+				// 00010 vzext.vf8
+				// 00011 vsext.vf8
+				// 00100 vzext.vf4
+				// 00101 vsext.vf4
+				// 00110 vzext.vf2
+				// 00111 vsext.vf2
+				case 0b00011:
+					instr.Op = VsextVf8
+				case 0b00101:
+					instr.Op = VsextVf4
+
+				default:
+					return instr, fmt.Errorf("%v/%03b/%06b, vs1=%05b, raw=%x",
+						group, funct3, funct7>>1, int(instr.Rs1), raw)
+				}
+
 			case 0b011010:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
 				instr.Op = VmorMM

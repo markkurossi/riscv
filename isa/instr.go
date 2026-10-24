@@ -346,6 +346,8 @@ const (
 	VfirstM
 	VslideupVi
 	VidV
+	VsextVf8
+	VsextVf4
 	VmorMM
 	VmvVX
 	VmvSX
@@ -995,6 +997,12 @@ var Operands = map[Op]OpInfo{
 	},
 	VidV: OpInfo{
 		Name: "vid.v",
+	},
+	VsextVf8: OpInfo{
+		Name: "vsext.vf8",
+	},
+	VsextVf4: OpInfo{
+		Name: "vsext.vf4",
 	},
 	VmorMM: OpInfo{
 		Name: "vmor.mm",

@@ -842,6 +842,92 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
+	case isa.VsextVf8:
+		sew := vpu.VType.VSEW()
+		from := sew / 8 // div=8
+		pat := uint32(((sew >> 3) << 4) | from>>3)
+
+		// The vm bit is bit 0.
+		vm := instr.Imm & 1
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+			vs2reg, vs2ofs := vpu.elt(from, uint64(instr.Rs2), i)
+
+			switch pat {
+			case 0x21:
+				memory.PutUint16(reg, ofs, uint16(int16(int8(vs2reg[vs2ofs]))))
+			case 0x41:
+				memory.PutUint32(reg, ofs, uint32(int32(int8(vs2reg[vs2ofs]))))
+			case 0x81:
+				memory.PutUint64(reg, ofs, uint64(int64(int8(vs2reg[vs2ofs]))))
+
+			case 0x42:
+				memory.PutUint32(reg, ofs,
+					uint32(int32(int16(memory.Uint16(vs2reg, vs2ofs)))))
+			case 0x82:
+				memory.PutUint64(reg, ofs,
+					uint64(int64(int16(memory.Uint16(vs2reg, vs2ofs)))))
+
+			case 0x84:
+				memory.PutUint64(reg, ofs,
+					uint64(int64(int32(memory.Uint32(vs2reg, vs2ofs)))))
+
+			default:
+				return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+					fmt.Errorf("SEW=%v", sew))
+			}
+		}
+		vpu.VStart = 0
+
+	case isa.VsextVf4:
+		sew := vpu.VType.VSEW()
+		from := sew / 4 // div=4
+		pat := uint32(((sew >> 3) << 4) | from>>3)
+
+		// The vm bit is bit 0.
+		vm := instr.Imm & 1
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+			vs2reg, vs2ofs := vpu.elt(from, uint64(instr.Rs2), i)
+
+			switch pat {
+			case 0x21:
+				memory.PutUint16(reg, ofs, uint16(int16(int8(vs2reg[vs2ofs]))))
+			case 0x41:
+				memory.PutUint32(reg, ofs, uint32(int32(int8(vs2reg[vs2ofs]))))
+			case 0x81:
+				memory.PutUint64(reg, ofs, uint64(int64(int8(vs2reg[vs2ofs]))))
+
+			case 0x42:
+				memory.PutUint32(reg, ofs,
+					uint32(int32(int16(memory.Uint16(vs2reg, vs2ofs)))))
+			case 0x82:
+				memory.PutUint64(reg, ofs,
+					uint64(int64(int16(memory.Uint16(vs2reg, vs2ofs)))))
+
+			case 0x84:
+				memory.PutUint64(reg, ofs,
+					uint64(int64(int32(memory.Uint32(vs2reg, vs2ofs)))))
+
+			default:
+				return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+					fmt.Errorf("SEW=%v", sew))
+			}
+		}
+		vpu.VStart = 0
+
 	case isa.VmorMM:
 		sew := vpu.VType.VSEW()
 		if sew > isa.E64 {
