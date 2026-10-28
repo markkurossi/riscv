@@ -1604,7 +1604,11 @@ func Decode(raw uint32) (Instr, error) {
 
 			case 0b010111:
 				instr.Imm = int32(raw<<12) >> 27
-				instr.Op = VmvVI
+				if funct7&1 == 1 {
+					instr.Op = VmvVI
+				} else {
+					instr.Op = VmergeVim
+				}
 
 			case 0b100101:
 				vm := funct7 & 1

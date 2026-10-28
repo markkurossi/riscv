@@ -355,6 +355,7 @@ const (
 	VmvSX
 	VmvVV
 	VmergeVvm
+	VmergeVim
 	VmvVI
 	Vle8V
 	Vle16V
@@ -1027,6 +1028,9 @@ var Operands = map[Op]OpInfo{
 	},
 	VmergeVvm: OpInfo{
 		Name: "vmerge.vvm",
+	},
+	VmergeVim: OpInfo{
+		Name: "vmerge.vim",
 	},
 	VmvVI: OpInfo{
 		Name: "vmv.v.i",

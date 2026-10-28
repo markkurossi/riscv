@@ -572,8 +572,8 @@ var bugs = []struct {
 	{0x331a03d7, "vrgather.vv"},
 	{0xa22030d7, "vsrl.vi"},
 	{0x2a1280d7, "vor.vv"},
-
 	{0x0626f107, "vluxei64.v"},
+	{0x5c22b157, "vmerge.vim"},
 }
 
 func TestBug(t *testing.T) {
