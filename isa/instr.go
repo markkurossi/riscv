@@ -338,6 +338,7 @@ const (
 	VaddVx
 	VaddVv
 	VmaxuVv
+	VandVv
 	VxorVv
 	VorVv
 	VrgatherVv
@@ -361,6 +362,7 @@ const (
 	Vle64V
 	Vl1re8V
 	VlmV
+	Vluxei64V
 	Vse8V
 	Vse16V
 	Vse32V
@@ -975,6 +977,9 @@ var Operands = map[Op]OpInfo{
 	VmaxuVv: OpInfo{
 		Name: "vmaxu.vv",
 	},
+	VandVv: OpInfo{
+		Name: "vand.vv",
+	},
 	VxorVv: OpInfo{
 		Name: "vxor.vv",
 	},
@@ -1043,6 +1048,9 @@ var Operands = map[Op]OpInfo{
 	},
 	VlmV: OpInfo{
 		Name: "vlm.v",
+	},
+	Vluxei64V: OpInfo{
+		Name: "vluxei64.v",
 	},
 	Vse8V: OpInfo{
 		Name: "vse8.v",

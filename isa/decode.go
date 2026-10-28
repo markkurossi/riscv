@@ -1129,22 +1129,74 @@ func Decode(raw uint32) (Instr, error) {
 	case GroupLOADFP:
 		instr.Imm = int32(raw) >> 20
 
+		// The mop and lumop fields for vector loads/stores.
+
+		// The vector addressing modes are encoded using the 2-bit
+		// mop[1:0] field.
+		//
+		// Table 9. encoding for loads:
+		//
+		//   mop [1:0] | Description       | Opcodes
+		//   ----------+-------------------+-------------
+		//   0 0       | unit-stride       | VLE<EEW>
+		//   0 1       | indexed-unordered | VLUXEI<EEW>
+		//   1 0       | strided           | VLSE<EEW>
+		//   1 1       | indexed-ordered   | VLOXEI<EEW>
+		//
+		// Table 10. encoding for stores:
+		//
+		//   mop [1:0] | Description       | Opcodes
+		//   ----------+-------------------+-------------
+		//   0 0       | unit-stride       | VSE<EEW>
+		//   0 1       | indexed-unordered | VSUXEI<EEW>
+		//   1 0       | strided           | VSSE<EEW>
+		//   1 1       | indexed-ordered   | VSOXEI<EEW>
+		mop := raw >> 26 & 0b11
+
+		// Additional unit-stride vector addressing modes are encoded
+		// using the 5-bit lumop and sumop fields in the unit-stride
+		// load and store instruction encodings respectively.
+		//
+		// Table 11. lumop:
+		//
+		//   lumop[4:0] | Description
+		//   -----------+---------------------------------
+		//   0 0 0 0 0  | unit-stride load
+		//   0 1 0 0 0  | unit-stride, whole register load
+		//   0 1 0 1 1  | unit-stride, mask load, EEW=8
+		//   1 0 0 0 0  | unit-stride fault-only-rst
+		//   x x x x x  | other encodings reserved
+		//
+		// Table 12. sumop:
+		//
+		//   sumop[4:0] | Description
+		//   -----------+----------------------------------
+		//   0 0 0 0 0  | unit-stride store
+		//   0 1 0 0 0  | unit-stride, whole register store
+		//   0 1 0 1 1  | unit-stride, mask store, EEW=8
+		//   x x x x x  | other encodings reserved
+		lumop := raw >> 20 & 0b11111
+
 		switch funct3 {
-		// Vector loads.
-		case 0b000:
-			lumop := raw >> 20 & 0b11111
-			switch lumop {
-			case 0b00000:
-				instr.Op = Vle8V
-			case 0b01000:
-				instr.Op = Vl1re8V
-			case 0b10000: // vle8ff.v - lumop is checked at VPU
-				instr.Op = Vle8V
-			case 0b01011:
-				instr.Op = VlmV
+		case 0b000: // vector loads
+			switch mop {
+			case 0b00: // unit-stride - vle<eew>
+				switch lumop {
+				case 0b00000:
+					instr.Op = Vle8V
+				case 0b01000:
+					instr.Op = Vl1re8V
+				case 0b10000: // vle8ff.v - lumop is checked at VPU
+					instr.Op = Vle8V
+				case 0b01011:
+					instr.Op = VlmV
+				default:
+					return instr, fmt.Errorf("%v/%03b/%02b/%05b, raw=%08x",
+						group, funct3, mop, lumop, raw)
+				}
 			default:
-				return instr, fmt.Errorf("%v/%03b/%05b, raw=%08x",
-					group, funct3, lumop, raw)
+				return instr, fmt.Errorf("%v/%03b/%02b, raw=%08x",
+					group, funct3, mop, raw)
 			}
 
 		case 0b010:
@@ -1154,13 +1206,57 @@ func Decode(raw uint32) (Instr, error) {
 			instr.Op = Fld
 
 		case 0b101:
-			instr.Op = Vle16V
+			switch mop {
+			case 0b00: // unit-stride - vle<eew>
+				switch lumop {
+				case 0b00000:
+					instr.Op = Vle16V
+				case 0b10000: // vle16ff.v - lumop is checked at VPU
+					instr.Op = Vle16V
+				default:
+					return instr, fmt.Errorf("%v/%03b/%02b/%05b, raw=%08x",
+						group, funct3, mop, lumop, raw)
+				}
+			default:
+				return instr, fmt.Errorf("%v/%03b/%02b, raw=%08x",
+					group, funct3, mop, raw)
+			}
 
 		case 0b110:
-			instr.Op = Vle32V
+			switch mop {
+			case 0b00: // unit-stride - vle<eew>
+				switch lumop {
+				case 0b00000:
+					instr.Op = Vle32V
+				case 0b10000: // vle32ff.v - lumop is checked at VPU
+					instr.Op = Vle32V
+				default:
+					return instr, fmt.Errorf("%v/%03b/%02b/%05b, raw=%08x",
+						group, funct3, mop, lumop, raw)
+				}
+			default:
+				return instr, fmt.Errorf("%v/%03b/%02b, raw=%08x",
+					group, funct3, mop, raw)
+			}
 
-		case 0b111:
-			instr.Op = Vle64V
+		case 0b111: // vector loads
+			switch mop {
+			case 0b00: // unit-stride - vle<eew>
+				switch lumop {
+				case 0b00000:
+					instr.Op = Vle64V
+				case 0b10000: // vle64ff.v - lumop is checked at VPU
+					instr.Op = Vle64V
+				default:
+					return instr, fmt.Errorf("%v/%03b/%02b/%05b, raw=%08x",
+						group, funct3, mop, lumop, raw)
+				}
+			case 0b01: // indexed-unordered - vluxei<eew>
+				instr.Op = Vluxei64V
+			default:
+				return instr, fmt.Errorf("%v/%03b/%02b, raw=%08x",
+					group, funct3, mop, raw)
+			}
 
 		default:
 			return instr, fmt.Errorf("%v/%03b: raw=%08x", group, funct3, raw)
@@ -1385,6 +1481,10 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b000110:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
 				instr.Op = VmaxuVv
+
+			case 0b001001:
+				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
+				instr.Op = VandVv
 
 			case 0b001011:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
