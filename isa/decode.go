@@ -1704,6 +1704,10 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
 				instr.Op = VmvSX
 
+			case 0b001111:
+				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
+				instr.Op = Vslide1downVx
+
 			case 0b100101:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
 				instr.Op = VmulVx

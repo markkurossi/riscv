@@ -355,6 +355,7 @@ const (
 	VmorMM
 	VmvVX
 	VmvSX
+	Vslide1downVx
 	VmvVV
 	VmergeVvm
 	VmergeVim
@@ -1031,6 +1032,9 @@ var Operands = map[Op]OpInfo{
 	VmvSX: OpInfo{
 		Name: "vmv.s.x",
 	},
+	Vslide1downVx: OpInfo{
+		Name: "vslide1down.vx",
+	},
 	VmvVV: OpInfo{
 		Name: "vmv.v.v",
 	},
@@ -1202,7 +1206,7 @@ var Operands = map[Op]OpInfo{
 }
 
 const (
-	maxOpNameLen = 11
+	maxOpNameLen = 14
 )
 
 func (op Op) String() string {
