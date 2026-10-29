@@ -916,6 +916,25 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		vpu.cpu.X[instr.Rd] = val
 		vpu.VStart = 0
 
+	case isa.VcpopM:
+		sew := vpu.VType.VSEW()
+		if sew < isa.E8 || sew > isa.E64 {
+			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("SEW=%v", sew))
+		}
+		vm := instr.Imm & 1
+		var popcount uint64
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vpu.maskElt(uint64(instr.Rs2), i) {
+				if vm == 1 || vpu.maskElt(0, i) {
+					popcount++
+				}
+			}
+		}
+		vpu.cpu.X[instr.Rd] = popcount
+		vpu.VStart = 0
+
 	case isa.VfirstM:
 		sew := vpu.VType.VSEW()
 		if sew < isa.E8 || sew > isa.E64 {
@@ -937,6 +956,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 		vpu.cpu.X[instr.Rd] = pos
+		vpu.VStart = 0
 
 	case isa.VslideupVi:
 		vlmul := vpu.VType.VLMUL()

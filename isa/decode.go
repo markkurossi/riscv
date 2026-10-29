@@ -1532,10 +1532,12 @@ func Decode(raw uint32) (Instr, error) {
 				// 	 vs1   | instruction
 				// 	 ------+------------
 				// 	 00000 | vmv.x.s
-				// 	 10000 | vpopc
+				// 	 10000 | vcpop.m - was vpopc
 				// 	 10001 | vfirst
 				case 0b00000:
 					instr.Op = VmvXS
+				case 0b10000:
+					instr.Op = VcpopM
 				case 0b10001:
 					instr.Op = VfirstM
 
