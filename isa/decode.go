@@ -1526,7 +1526,23 @@ func Decode(raw uint32) (Instr, error) {
 
 			case 0b010000:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VfirstM
+				switch instr.Rs1 {
+				// Table 21. VWXUNARY0 encoding space:
+				//
+				// 	 vs1   | instruction
+				// 	 ------+------------
+				// 	 00000 | vmv.x.s
+				// 	 10000 | vpopc
+				// 	 10001 | vfirst
+				case 0b00000:
+					instr.Op = VmvXS
+				case 0b10001:
+					instr.Op = VfirstM
+
+				default:
+					return instr, fmt.Errorf("%v/%03b/%06b, vs1=%05b, raw=%x",
+						group, funct3, funct7>>1, int(instr.Rs1), raw)
+				}
 
 			case 0b010100:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
@@ -1536,12 +1552,15 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
 				switch instr.Rs1 {
 				// Table 22. VXUNARY0 encoding space:
-				// 00010 vzext.vf8
-				// 00011 vsext.vf8
-				// 00100 vzext.vf4
-				// 00101 vsext.vf4
-				// 00110 vzext.vf2
-				// 00111 vsext.vf2
+				//
+				// 	 vs1   | instruction
+				// 	 ------+------------
+				// 	 00010 | vzext.vf8
+				// 	 00011 | vsext.vf8
+				// 	 00100 | vzext.vf4
+				// 	 00101 | vsext.vf4
+				// 	 00110 | vzext.vf2
+				// 	 00111 | vsext.vf2
 				case 0b00011:
 					instr.Op = VsextVf8
 				case 0b00101:

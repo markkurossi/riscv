@@ -894,6 +894,28 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
+	case isa.VmvXS:
+		sew := vpu.VType.VSEW()
+		if sew < isa.E8 || sew > isa.E64 {
+			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("SEW=%v", sew))
+		}
+		vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), 0)
+		var val uint64
+
+		switch sew {
+		case isa.E8:
+			val = uint64(vs2reg[vs2ofs])
+		case isa.E16:
+			val = uint64(memory.Uint16(vs2reg, vs2ofs))
+		case isa.E32:
+			val = uint64(memory.Uint32(vs2reg, vs2ofs))
+		case isa.E64:
+			val = uint64(memory.Uint64(vs2reg, vs2ofs))
+		}
+		vpu.cpu.X[instr.Rd] = val
+		vpu.VStart = 0
+
 	case isa.VfirstM:
 		sew := vpu.VType.VSEW()
 		if sew < isa.E8 || sew > isa.E64 {

@@ -574,6 +574,8 @@ var bugs = []struct {
 	{0x2a1280d7, "vor.vv"},
 	{0x0626f107, "vluxei64.v"},
 	{0x5c22b157, "vmerge.vim"},
+	{0x0100000f, "fence"}, // `pause' is alias for `fence w, 0'
+	{0x42102657, "vmv.x.s"},
 }
 
 func TestBug(t *testing.T) {

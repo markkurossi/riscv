@@ -345,6 +345,7 @@ const (
 	VmsneVv
 	VredsumVs
 	VredxorVs
+	VmvXS
 	VfirstM
 	VslideupVi
 	VidV
@@ -998,6 +999,9 @@ var Operands = map[Op]OpInfo{
 	},
 	VredxorVs: OpInfo{
 		Name: "vredxor.vs",
+	},
+	VmvXS: OpInfo{
+		Name: "vmv.x.s",
 	},
 	VfirstM: OpInfo{
 		Name: "vfirst.m",
