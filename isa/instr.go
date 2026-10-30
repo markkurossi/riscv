@@ -418,6 +418,9 @@ const (
 	Sh3addUw
 	Rolw
 	Rorw
+
+	// Pseudo instruction for the vector extension.
+	Vpu
 )
 
 // OpInfo defines opcode information.
@@ -1206,6 +1209,10 @@ var Operands = map[Op]OpInfo{
 	},
 	Rorw: OpInfo{
 		Name: "rorw",
+	},
+	Vpu: OpInfo{
+		Name: "vpu",
+		Desc: `Pseudo instruction encoding "V" vector extension instructions`,
 	},
 }
 
