@@ -1693,6 +1693,10 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
 				instr.Op = VmvVX
 
+			case 0b101100:
+				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
+				instr.Op = VnsrlWx
+
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
 					group, funct3, funct7>>1, raw)
