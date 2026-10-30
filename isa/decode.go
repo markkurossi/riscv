@@ -872,6 +872,9 @@ func Decode(raw uint32) (Instr, error) {
 			// Zbs Extension for Single-bit instructions.
 		case 0b0100100:
 			switch funct3 {
+			case 0b001:
+				instr.Op = Bclr
+
 			case 0b101:
 				instr.Op = Bext
 

@@ -1377,6 +1377,10 @@ dispatch:
 
 			// Zbs Extension for Single-bit instructions.
 
+		case isa.Bclr:
+			index := cpu.X[instr.Rs2] & 63
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1] &^ (uint64(1) << index)
+
 		case isa.Bclri:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] &^ (uint64(1) << instr.Imm)
 
