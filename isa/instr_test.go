@@ -14,7 +14,7 @@ func TestOpNameLen(t *testing.T) {
 	var maxLen int
 	var max []string
 
-	for _, info := range Operands {
+	var checkInfo = func(info OpInfo) {
 		l := len(info.Name)
 		if l > maxLen {
 			maxLen = l
@@ -23,6 +23,13 @@ func TestOpNameLen(t *testing.T) {
 		if l == maxLen {
 			max = append(max, info.Name)
 		}
+	}
+
+	for _, info := range Operands {
+		checkInfo(info)
+	}
+	for _, info := range VpuOperands {
+		checkInfo(info)
 	}
 	if maxLen != maxOpNameLen {
 		t.Errorf("maxOpNameLen=%v but len(%v)=%v", maxOpNameLen, max, maxLen)

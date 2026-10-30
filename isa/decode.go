@@ -1186,13 +1186,13 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b00: // unit-stride - vle<eew>
 				switch lumop {
 				case 0b00000:
-					instr.Op = Vle8V
+					instr.Op = OldVle8V
 				case 0b01000:
-					instr.Op = Vl1re8V
+					instr.Op = OldVl1re8V
 				case 0b10000: // vle8ff.v - lumop is checked at VPU
-					instr.Op = Vle8V
+					instr.Op = OldVle8V
 				case 0b01011:
-					instr.Op = VlmV
+					instr.Op = OldVlmV
 				default:
 					return instr, fmt.Errorf("%v/%03b/%02b/%05b, raw=%08x",
 						group, funct3, mop, lumop, raw)
@@ -1213,9 +1213,9 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b00: // unit-stride - vle<eew>
 				switch lumop {
 				case 0b00000:
-					instr.Op = Vle16V
+					instr.Op = OldVle16V
 				case 0b10000: // vle16ff.v - lumop is checked at VPU
-					instr.Op = Vle16V
+					instr.Op = OldVle16V
 				default:
 					return instr, fmt.Errorf("%v/%03b/%02b/%05b, raw=%08x",
 						group, funct3, mop, lumop, raw)
@@ -1230,9 +1230,9 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b00: // unit-stride - vle<eew>
 				switch lumop {
 				case 0b00000:
-					instr.Op = Vle32V
+					instr.Op = OldVle32V
 				case 0b10000: // vle32ff.v - lumop is checked at VPU
-					instr.Op = Vle32V
+					instr.Op = OldVle32V
 				default:
 					return instr, fmt.Errorf("%v/%03b/%02b/%05b, raw=%08x",
 						group, funct3, mop, lumop, raw)
@@ -1247,15 +1247,15 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b00: // unit-stride - vle<eew>
 				switch lumop {
 				case 0b00000:
-					instr.Op = Vle64V
+					instr.Op = OldVle64V
 				case 0b10000: // vle64ff.v - lumop is checked at VPU
-					instr.Op = Vle64V
+					instr.Op = OldVle64V
 				default:
 					return instr, fmt.Errorf("%v/%03b/%02b/%05b, raw=%08x",
 						group, funct3, mop, lumop, raw)
 				}
 			case 0b01: // indexed-unordered - vluxei<eew>
-				instr.Op = Vluxei64V
+				instr.Op = OldVluxei64V
 			default:
 				return instr, fmt.Errorf("%v/%03b/%02b, raw=%08x",
 					group, funct3, mop, raw)
@@ -1281,19 +1281,19 @@ func Decode(raw uint32) (Instr, error) {
 
 		case 0b000:
 			instr.Imm = int32(raw >> 25)
-			instr.Op = Vse8V
+			instr.Op = OldVse8V
 
 		case 0b101:
 			instr.Imm = int32(raw >> 25)
-			instr.Op = Vse16V
+			instr.Op = OldVse16V
 
 		case 0b110:
 			instr.Imm = int32(raw >> 25)
-			instr.Op = Vse32V
+			instr.Op = OldVse32V
 
 		case 0b111:
 			instr.Imm = int32(raw >> 25)
-			instr.Op = Vse64V
+			instr.Op = OldVse64V
 
 		default:
 			return instr, fmt.Errorf("STORE-FP: funct3=%03b", funct3)
@@ -1479,38 +1479,38 @@ func Decode(raw uint32) (Instr, error) {
 			switch funct7 >> 1 {
 			case 0b000000:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VaddVv
+				instr.Op = OldVaddVv
 
 			case 0b000110:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VmaxuVv
+				instr.Op = OldVmaxuVv
 
 			case 0b001001:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VandVv
+				instr.Op = OldVandVv
 
 			case 0b001011:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VxorVv
+				instr.Op = OldVxorVv
 
 			case 0b001010:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VorVv
+				instr.Op = OldVorVv
 
 			case 0b001100:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VrgatherVv
+				instr.Op = OldVrgatherVv
 
 			case 0b010111:
 				if funct7&0b1 == 1 {
-					instr.Op = VmvVV
+					instr.Op = OldVmvVV
 				} else {
-					instr.Op = VmergeVvm
+					instr.Op = OldVmergeVvm
 				}
 
 			case 0b011001:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VmsneVv
+				instr.Op = OldVmsneVv
 
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
@@ -1521,11 +1521,11 @@ func Decode(raw uint32) (Instr, error) {
 			switch funct7 >> 1 {
 			case 0b000000:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VredsumVs
+				instr.Op = OldVredsumVs
 
 			case 0b000011:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VredxorVs
+				instr.Op = OldVredxorVs
 
 			case 0b010000:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
@@ -1538,11 +1538,11 @@ func Decode(raw uint32) (Instr, error) {
 				// 	 10000 | vcpop.m - was vpopc
 				// 	 10001 | vfirst
 				case 0b00000:
-					instr.Op = VmvXS
+					instr.Op = OldVmvXS
 				case 0b10000:
-					instr.Op = VcpopM
+					instr.Op = OldVcpopM
 				case 0b10001:
-					instr.Op = VfirstM
+					instr.Op = OldVfirstM
 
 				default:
 					return instr, fmt.Errorf("%v/%03b/%06b, vs1=%05b, raw=%x",
@@ -1551,7 +1551,7 @@ func Decode(raw uint32) (Instr, error) {
 
 			case 0b010100:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VidV
+				instr.Op = OldVidV
 
 			case 0b010010:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
@@ -1567,9 +1567,9 @@ func Decode(raw uint32) (Instr, error) {
 				// 	 00110 | vzext.vf2
 				// 	 00111 | vsext.vf2
 				case 0b00011:
-					instr.Op = VsextVf8
+					instr.Op = OldVsextVf8
 				case 0b00101:
-					instr.Op = VsextVf4
+					instr.Op = OldVsextVf4
 
 				default:
 					return instr, fmt.Errorf("%v/%03b/%06b, vs1=%05b, raw=%x",
@@ -1578,7 +1578,7 @@ func Decode(raw uint32) (Instr, error) {
 
 			case 0b011010:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VmorMM
+				instr.Op = OldVmorMM
 
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
@@ -1598,7 +1598,7 @@ func Decode(raw uint32) (Instr, error) {
 					imm &^= 1
 				}
 				instr.Imm = int32(imm)
-				instr.Op = VaddVi
+				instr.Op = OldVaddVi
 
 			case 0b000011:
 				vm := funct7 & 1
@@ -1611,7 +1611,7 @@ func Decode(raw uint32) (Instr, error) {
 					imm &^= 1
 				}
 				instr.Imm = int32(imm)
-				instr.Op = VrsubVi
+				instr.Op = OldVrsubVi
 
 			case 0b001110:
 				vm := funct7 & 1
@@ -1624,14 +1624,14 @@ func Decode(raw uint32) (Instr, error) {
 					imm &^= 1
 				}
 				instr.Imm = int32(imm)
-				instr.Op = VslideupVi
+				instr.Op = OldVslideupVi
 
 			case 0b010111:
 				instr.Imm = int32(raw<<12) >> 27
 				if funct7&1 == 1 {
-					instr.Op = VmvVI
+					instr.Op = OldVmvVI
 				} else {
-					instr.Op = VmergeVim
+					instr.Op = OldVmergeVim
 				}
 
 			case 0b100101:
@@ -1642,7 +1642,7 @@ func Decode(raw uint32) (Instr, error) {
 					imm |= 1 << 31
 				}
 				instr.Imm = int32(imm)
-				instr.Op = VsllVi
+				instr.Op = OldVsllVi
 
 			case 0b101000:
 				vm := funct7 & 1
@@ -1652,7 +1652,7 @@ func Decode(raw uint32) (Instr, error) {
 					imm |= 1 << 31
 				}
 				instr.Imm = int32(imm)
-				instr.Op = VsrlVi
+				instr.Op = OldVsrlVi
 
 			case 0b101001:
 				vm := funct7 & 1
@@ -1662,7 +1662,7 @@ func Decode(raw uint32) (Instr, error) {
 					imm |= 1 << 31
 				}
 				instr.Imm = int32(imm)
-				instr.Op = VsraVi
+				instr.Op = OldVsraVi
 
 			case 0b011000:
 				vm := funct7 & 1
@@ -1675,7 +1675,7 @@ func Decode(raw uint32) (Instr, error) {
 					imm &^= 1
 				}
 				instr.Imm = int32(imm)
-				instr.Op = VmseqVi
+				instr.Op = OldVmseqVi
 
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
@@ -1686,23 +1686,23 @@ func Decode(raw uint32) (Instr, error) {
 			switch funct7 >> 1 {
 			case 0b000000:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VaddVx
+				instr.Op = OldVaddVx
 
 			case 0b001001:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VandVx
+				instr.Op = OldVandVx
 
 			case 0b010111:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VmvVX
+				instr.Op = OldVmvVX
 
 			case 0b101000:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VsrlVx
+				instr.Op = OldVsrlVx
 
 			case 0b101100:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VnsrlWx
+				instr.Op = OldVnsrlWx
 
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
@@ -1713,15 +1713,15 @@ func Decode(raw uint32) (Instr, error) {
 			switch funct7 >> 1 {
 			case 0b010000:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VmvSX
+				instr.Op = OldVmvSX
 
 			case 0b001111:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = Vslide1downVx
+				instr.Op = OldVslide1downVx
 
 			case 0b100101:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = VmulVx
+				instr.Op = OldVmulVx
 
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
@@ -1731,13 +1731,13 @@ func Decode(raw uint32) (Instr, error) {
 		case 0b111:
 			if raw&(1<<31) == 0 {
 				instr.Imm = int32((raw >> 20) & 0b111_11111111)
-				instr.Op = Vsetvli
+				instr.Op = OldVsetvli
 			} else if raw&(1<<30) != 0 {
 				instr.Imm = int32((raw >> 20) & 0b011_11111111)
 				// Rs1 is uimm[4:0]
-				instr.Op = Vsetivli
+				instr.Op = OldVsetivli
 			} else {
-				instr.Op = Vsetvl
+				instr.Op = OldVsetvl
 			}
 
 		default:

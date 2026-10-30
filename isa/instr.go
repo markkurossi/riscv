@@ -330,7 +330,106 @@ const (
 
 	// Vector extension.
 
-	Vsetvli
+	OldVsetvli
+	OldVsetivli
+	OldVsetvl
+	OldVandVx
+	OldVmulVx
+	OldVaddVx
+	OldVaddVv
+	OldVmaxuVv
+	OldVandVv
+	OldVxorVv
+	OldVorVv
+	OldVrgatherVv
+	OldVmsneVv
+	OldVredsumVs
+	OldVredxorVs
+	OldVmvXS
+	OldVcpopM
+	OldVfirstM
+	OldVslideupVi
+	OldVidV
+	OldVsextVf8
+	OldVsextVf4
+	OldVmorMM
+	OldVmvVX
+	OldVsrlVx
+	OldVnsrlWx
+	OldVmvSX
+	OldVslide1downVx
+	OldVmvVV
+	OldVmergeVvm
+	OldVmergeVim
+	OldVmvVI
+	OldVle8V
+	OldVle16V
+	OldVle32V
+	OldVle64V
+	OldVl1re8V
+	OldVlmV
+	OldVluxei64V
+	OldVse8V
+	OldVse16V
+	OldVse32V
+	OldVse64V
+	OldVrsubVi
+	OldVaddVi
+	OldVmseqVi
+	OldVsllVi
+	OldVsrlVi
+	OldVsraVi
+
+	// Zicond Extension (Conditional Integer Operations).
+	CzeroEqz
+	CzeroNez
+
+	// Zbs Extension for Single-bit instructions.
+	Bclr
+	Bclri
+	Bext
+	Bexti
+	Binv
+	Binvi
+	Bset
+	Bseti
+
+	// Zba & Zbb Bit-Manipulation Extensions and Zcb extensions.
+	AddUw
+	Orn
+	Andn
+	Clz
+	Clzw
+	Ctz
+	Cpop
+	Min
+	Minu
+	Max
+	Maxu
+	Rori
+	Roriw
+	Rev8
+	SextB
+	SextH
+	Sh1add
+	Sh2add
+	Sh3add
+	Sh1addUw
+	Sh2addUw
+	Sh3addUw
+	Rolw
+	Rorw
+
+	// Pseudo instruction for the vector extension.
+	Vpu
+)
+
+// VpuOp defines vector instruction opcodes.
+type VpuOp uint8
+
+// Vector extension opcodes.
+const (
+	Vsetvli VpuOp = iota
 	Vsetivli
 	Vsetvl
 	VandVx
@@ -379,49 +478,6 @@ const (
 	VsllVi
 	VsrlVi
 	VsraVi
-
-	// Zicond Extension (Conditional Integer Operations).
-	CzeroEqz
-	CzeroNez
-
-	// Zbs Extension for Single-bit instructions.
-	Bclr
-	Bclri
-	Bext
-	Bexti
-	Binv
-	Binvi
-	Bset
-	Bseti
-
-	// Zba & Zbb Bit-Manipulation Extensions and Zcb extensions.
-	AddUw
-	Orn
-	Andn
-	Clz
-	Clzw
-	Ctz
-	Cpop
-	Min
-	Minu
-	Max
-	Maxu
-	Rori
-	Roriw
-	Rev8
-	SextB
-	SextH
-	Sh1add
-	Sh2add
-	Sh3add
-	Sh1addUw
-	Sh2addUw
-	Sh3addUw
-	Rolw
-	Rorw
-
-	// Pseudo instruction for the vector extension.
-	Vpu
 )
 
 // OpInfo defines opcode information.
@@ -962,6 +1018,266 @@ var Operands = map[Op]OpInfo{
 		Name: "fmadd.d",
 	},
 
+	OldVsetvli: OpInfo{
+		Name: "vsetvli",
+	},
+	OldVsetivli: OpInfo{
+		Name: "vsetivli",
+	},
+	OldVsetvl: OpInfo{
+		Name: "vsetvl",
+	},
+	OldVandVx: OpInfo{
+		Name: "vand.vx",
+	},
+	OldVmulVx: OpInfo{
+		Name: "vmul.vx",
+	},
+	OldVaddVx: OpInfo{
+		Name: "vadd.vx",
+	},
+	OldVaddVv: OpInfo{
+		Name: "vadd.vv",
+	},
+	OldVmaxuVv: OpInfo{
+		Name: "vmaxu.vv",
+	},
+	OldVandVv: OpInfo{
+		Name: "vand.vv",
+	},
+	OldVxorVv: OpInfo{
+		Name: "vxor.vv",
+	},
+	OldVorVv: OpInfo{
+		Name: "vor.vv",
+	},
+	OldVrgatherVv: OpInfo{
+		Name: "vrgather.vv",
+	},
+	OldVmsneVv: OpInfo{
+		Name: "vmsne.vv",
+	},
+	OldVredsumVs: OpInfo{
+		Name: "vredsum.vs",
+	},
+	OldVredxorVs: OpInfo{
+		Name: "vredxor.vs",
+	},
+	OldVmvXS: OpInfo{
+		Name: "vmv.x.s",
+	},
+	OldVcpopM: OpInfo{
+		Name: "vcpop.m",
+	},
+	OldVfirstM: OpInfo{
+		Name: "vfirst.m",
+	},
+	OldVslideupVi: OpInfo{
+		Name: "vslideup.vi",
+	},
+	OldVidV: OpInfo{
+		Name: "vid.v",
+	},
+	OldVsextVf8: OpInfo{
+		Name: "vsext.vf8",
+	},
+	OldVsextVf4: OpInfo{
+		Name: "vsext.vf4",
+	},
+	OldVmorMM: OpInfo{
+		Name: "vmor.mm",
+	},
+	OldVmvVX: OpInfo{
+		Name: "vmv.v.x",
+	},
+	OldVsrlVx: OpInfo{
+		Name: "vsrl.vx",
+	},
+	OldVnsrlWx: OpInfo{
+		Name: "vnsrl.wx",
+	},
+	OldVmvSX: OpInfo{
+		Name: "vmv.s.x",
+	},
+	OldVslide1downVx: OpInfo{
+		Name: "vslide1down.vx",
+	},
+	OldVmvVV: OpInfo{
+		Name: "vmv.v.v",
+	},
+	OldVmergeVvm: OpInfo{
+		Name: "vmerge.vvm",
+	},
+	OldVmergeVim: OpInfo{
+		Name: "vmerge.vim",
+	},
+	OldVmvVI: OpInfo{
+		Name: "vmv.v.i",
+	},
+	OldVle8V: OpInfo{
+		Name: "vle8.v",
+	},
+	OldVle16V: OpInfo{
+		Name: "vle16.v",
+	},
+	OldVle32V: OpInfo{
+		Name: "vle32.v",
+	},
+	OldVle64V: OpInfo{
+		Name: "vle64.v",
+	},
+	OldVl1re8V: OpInfo{
+		Name: "vl1re8.v",
+	},
+	OldVlmV: OpInfo{
+		Name: "vlm.v",
+	},
+	OldVluxei64V: OpInfo{
+		Name: "vluxei64.v",
+	},
+	OldVse8V: OpInfo{
+		Name: "vse8.v",
+	},
+	OldVse16V: OpInfo{
+		Name: "vse16.v",
+	},
+	OldVse32V: OpInfo{
+		Name: "vse32.v",
+	},
+	OldVse64V: OpInfo{
+		Name: "vse64.v",
+	},
+	OldVrsubVi: OpInfo{
+		Name: "vrsub.vi",
+	},
+	OldVaddVi: OpInfo{
+		Name: "vadd.vi",
+	},
+	OldVmseqVi: OpInfo{
+		Name: "vmseq.vi",
+	},
+	OldVsllVi: OpInfo{
+		Name: "vsll.vi",
+	},
+	OldVsrlVi: OpInfo{
+		Name: "vsrl.vi",
+	},
+	OldVsraVi: OpInfo{
+		Name: "vsra.vi",
+	},
+
+	CzeroEqz: OpInfo{
+		Name: "czero.eqz",
+	},
+	CzeroNez: OpInfo{
+		Name: "czero.nez",
+	},
+
+	Bclr: OpInfo{
+		Name: "bclr",
+	},
+	Bclri: OpInfo{
+		Name: "bclri",
+	},
+	Bext: OpInfo{
+		Name: "bext",
+	},
+	Bexti: OpInfo{
+		Name: "bexti",
+	},
+	Binv: OpInfo{
+		Name: "binv",
+	},
+	Binvi: OpInfo{
+		Name: "binvi",
+	},
+	Bset: OpInfo{
+		Name: "bset",
+	},
+	Bseti: OpInfo{
+		Name: "bseti",
+	},
+
+	AddUw: OpInfo{
+		Name: "add.uw",
+	},
+	Orn: OpInfo{
+		Name: "orn",
+	},
+	Andn: OpInfo{
+		Name: "andn",
+	},
+	Clz: OpInfo{
+		Name: "clz",
+	},
+	Clzw: OpInfo{
+		Name: "clzw",
+	},
+	Ctz: OpInfo{
+		Name: "ctz",
+	},
+	Cpop: OpInfo{
+		Name: "cpop",
+	},
+	Min: OpInfo{
+		Name: "min",
+	},
+	Minu: OpInfo{
+		Name: "minu",
+	},
+	Max: OpInfo{
+		Name: "max",
+	},
+	Maxu: OpInfo{
+		Name: "maxu",
+	},
+	Rori: OpInfo{
+		Name: "rori",
+	},
+	Roriw: OpInfo{
+		Name: "roriw",
+	},
+	Rev8: OpInfo{
+		Name: "rev8",
+	},
+	SextB: OpInfo{
+		Name: "sext.b",
+	},
+	SextH: OpInfo{
+		Name: "sext.h",
+	},
+	Sh1add: OpInfo{
+		Name: "sh1add",
+	},
+	Sh2add: OpInfo{
+		Name: "sh2add",
+	},
+	Sh3add: OpInfo{
+		Name: "sh3add",
+	},
+	Sh1addUw: OpInfo{
+		Name: "sh1add.uw",
+	},
+	Sh2addUw: OpInfo{
+		Name: "sh2add.uw",
+	},
+	Sh3addUw: OpInfo{
+		Name: "sh3add.uw",
+	},
+	Rolw: OpInfo{
+		Name: "rolw",
+	},
+	Rorw: OpInfo{
+		Name: "rorw",
+	},
+	Vpu: OpInfo{
+		Name: "vpu",
+		Desc: `Pseudo instruction encoding "V" vector extension instructions`,
+	},
+}
+
+// VpuOperands provide information about vector instructions.
+var VpuOperands = map[VpuOp]OpInfo{
 	Vsetvli: OpInfo{
 		Name: "vsetvli",
 	},
@@ -1108,115 +1424,6 @@ var Operands = map[Op]OpInfo{
 	},
 	VsraVi: OpInfo{
 		Name: "vsra.vi",
-	},
-
-	CzeroEqz: OpInfo{
-		Name: "czero.eqz",
-	},
-	CzeroNez: OpInfo{
-		Name: "czero.nez",
-	},
-
-	Bclr: OpInfo{
-		Name: "bclr",
-	},
-	Bclri: OpInfo{
-		Name: "bclri",
-	},
-	Bext: OpInfo{
-		Name: "bext",
-	},
-	Bexti: OpInfo{
-		Name: "bexti",
-	},
-	Binv: OpInfo{
-		Name: "binv",
-	},
-	Binvi: OpInfo{
-		Name: "binvi",
-	},
-	Bset: OpInfo{
-		Name: "bset",
-	},
-	Bseti: OpInfo{
-		Name: "bseti",
-	},
-
-	AddUw: OpInfo{
-		Name: "add.uw",
-	},
-	Orn: OpInfo{
-		Name: "orn",
-	},
-	Andn: OpInfo{
-		Name: "andn",
-	},
-	Clz: OpInfo{
-		Name: "clz",
-	},
-	Clzw: OpInfo{
-		Name: "clzw",
-	},
-	Ctz: OpInfo{
-		Name: "ctz",
-	},
-	Cpop: OpInfo{
-		Name: "cpop",
-	},
-	Min: OpInfo{
-		Name: "min",
-	},
-	Minu: OpInfo{
-		Name: "minu",
-	},
-	Max: OpInfo{
-		Name: "max",
-	},
-	Maxu: OpInfo{
-		Name: "maxu",
-	},
-	Rori: OpInfo{
-		Name: "rori",
-	},
-	Roriw: OpInfo{
-		Name: "roriw",
-	},
-	Rev8: OpInfo{
-		Name: "rev8",
-	},
-	SextB: OpInfo{
-		Name: "sext.b",
-	},
-	SextH: OpInfo{
-		Name: "sext.h",
-	},
-	Sh1add: OpInfo{
-		Name: "sh1add",
-	},
-	Sh2add: OpInfo{
-		Name: "sh2add",
-	},
-	Sh3add: OpInfo{
-		Name: "sh3add",
-	},
-	Sh1addUw: OpInfo{
-		Name: "sh1add.uw",
-	},
-	Sh2addUw: OpInfo{
-		Name: "sh2add.uw",
-	},
-	Sh3addUw: OpInfo{
-		Name: "sh3add.uw",
-	},
-	Rolw: OpInfo{
-		Name: "rolw",
-	},
-	Rorw: OpInfo{
-		Name: "rorw",
-	},
-	Vpu: OpInfo{
-		Name: "vpu",
-		Desc: `Pseudo instruction encoding "V" vector extension instructions`,
 	},
 }
 
@@ -1418,17 +1625,17 @@ func (instr Instr) String() string {
 
 			// GroupOPV
 
-		case Vsetvli:
+		case OldVsetvli:
 			return fmt.Sprintf("%v %v,%v,%v",
 				pad(instr.Op), instr.Rd, instr.Rs1, VType(instr.Imm))
-		case Vsetivli:
+		case OldVsetivli:
 			return fmt.Sprintf("%v %v,%v,%v",
 				pad(instr.Op), instr.Rd, uint32(instr.Rs1), VType(instr.Imm))
-		case Vsetvl:
+		case OldVsetvl:
 			return fmt.Sprintf("%v %v,%v,%v",
 				pad(instr.Op), instr.Rd, instr.Rs1, VType(instr.Rs2))
 
-		case VmvVX:
+		case OldVmvVX:
 			result := fmt.Sprintf("%v v%v,%v",
 				pad(instr.Op), int(instr.Rd), instr.Rs1)
 			if instr.Imm == 0 {
@@ -1436,16 +1643,17 @@ func (instr Instr) String() string {
 			}
 			return result
 
-		case VmvVV:
+		case OldVmvVV:
 			return fmt.Sprintf("%v v%v,%v",
 				pad(instr.Op), int(instr.Rd), int(instr.Rs1))
 
-		case VmvVI:
+		case OldVmvVI:
 			return fmt.Sprintf("%v v%v,%v",
 				pad(instr.Op), int(instr.Rd), instr.Imm)
 
 			// Vector loads and stores.
-		case Vle8V, Vle16V, Vle32V, Vle64V, Vse8V, Vse16V, Vse32V, Vse64V:
+		case OldVle8V, OldVle16V, OldVle32V, OldVle64V, OldVse8V, OldVse16V,
+			OldVse32V, OldVse64V:
 			return instr.vsString()
 		}
 	}
@@ -1462,28 +1670,28 @@ func (instr Instr) vsString() string {
 	}
 
 	switch instr.Op {
-	case Vle8V:
+	case OldVle8V:
 		size = "8"
 		op = "l"
-	case Vle16V:
+	case OldVle16V:
 		size = "16"
 		op = "l"
-	case Vle32V:
+	case OldVle32V:
 		size = "32"
 		op = "l"
-	case Vle64V:
+	case OldVle64V:
 		size = "64"
 		op = "l"
-	case Vse8V:
+	case OldVse8V:
 		size = "8"
 		op = "s"
-	case Vse16V:
+	case OldVse16V:
 		size = "16"
 		op = "s"
-	case Vse32V:
+	case OldVse32V:
 		size = "32"
 		op = "s"
-	case Vse64V:
+	case OldVse64V:
 		size = "64"
 		op = "s"
 	default:
