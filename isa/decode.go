@@ -1611,6 +1611,10 @@ func Decode(raw uint32) (Instr, error) {
 					instr.SetVPU(VmergeVim, 0)
 				}
 
+			case 0b011000:
+				instr.Imm = int32(raw<<12) >> 27
+				instr.SetVPU(VmseqVi, uint32(funct7&0b1))
+
 			case 0b100101:
 				instr.Imm = int32(instr.Rs1)
 				instr.SetVPU(VsllVi, uint32(funct7&0b1))
@@ -1626,9 +1630,9 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Imm = int32(instr.Rs1)
 				instr.SetVPU(VsraVi, uint32(funct7&0b1))
 
-			case 0b011000:
-				instr.Imm = int32(raw<<12) >> 27
-				instr.SetVPU(VmseqVi, uint32(funct7&0b1))
+			case 0b101100:
+				instr.Imm = int32(instr.Rs1)
+				instr.SetVPU(VnsrlWi, uint32(funct7&0b1))
 
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
