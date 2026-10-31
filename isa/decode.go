@@ -1599,6 +1599,10 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Imm = int32(raw >> 15 & 0b11111)
 				instr.SetVPU(VslideupVi, uint32(funct7&0b1))
 
+			case 0b001111:
+				instr.Imm = int32(raw >> 15 & 0b11111)
+				instr.SetVPU(VslidedownVi, uint32(funct7&0b1))
+
 			case 0b010111:
 				instr.Imm = int32(raw<<12) >> 27
 				if funct7&1 == 1 {
