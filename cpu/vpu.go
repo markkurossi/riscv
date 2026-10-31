@@ -1225,52 +1225,12 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	default:
-		vpu.cpu.tracef(raw, instr, "not implemented")
-		vpu.cpu.Dump(vpu.cpu.PC)
-		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-			fmt.Errorf("instruction %v[0x%x] not implemented yet",
-				instr, raw))
-	}
-
-	vpu.cpu.mstatus.SetVS(isa.RegDirty)
-	vpu.cpu.mstatus.SetSD(true)
-
-	return nil
-}
-
-func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
-	// Vector extension.
-
-	if vpuDebug {
-		vpu.cpu.tracef(raw, instr, "pc=%x", vpu.cpu.PC)
-		vpu.cpu.DebugTrace = true
-	}
-
-	if vpu.cpu.mstatus.VS() == isa.RegOff {
-		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-			fmt.Errorf("VS=%v", vpu.cpu.mstatus.VS()))
-	}
-
-	// Load and store instructions:
-	//
-	// 	 0:1 vm - 1 unmasked, 0 masked
-	// 	 1:3 mop:
-	// 	     - 000 unit-stride
-	// 	     - 010 strided
-	// 	     - 011 indexed (unordered)
-	// 	     - 111 indexed (ordered)
-	// 	 4:6 nf - number of fields = nf+1
-
-	switch instr.Op {
-
-	case isa.OldVl1re8V:
+	case isa.Vl1re8V:
 		sew := vpu.VType.VSEW()
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vd := uint64(instr.Rd)
-		length := uint64(instr.Imm>>9&0b111) + 1
 		eltPerReg := vpu.VLEN / 8 / sew.Len()
-		size := length * eltPerReg
+		size := nf * eltPerReg
 
 		for i := vpu.VStart; i < size; i++ {
 			vpu.VStart = i
@@ -1283,15 +1243,10 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.OldVlmV:
-		vm := instr.Imm >> 5 & 0b1
-		mop := instr.Imm >> 6 & 0b111
-		nf := uint64(instr.Imm>>9&0b111) + 1
-
-		if mop != 0 || nf != 1 {
+	case isa.VlmV:
+		if nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
-					instr, mop, nf))
+				fmt.Errorf("%v: nf=%v", instr, nf))
 		}
 
 		var eltSize uint64 = 1 // sizeof(uint8)
@@ -1328,10 +1283,7 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.OldVluxei64V:
-		vm := instr.Imm >> 5 & 0b1
-		nf := uint64(instr.Imm>>9&0b111) + 1
-
+	case isa.Vluxei64V:
 		var flmul uint64
 		vlmul := vpu.VType.VLMUL()
 		if vlmul < 1 {
@@ -1395,15 +1347,10 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.OldVse8V:
-		vm := instr.Imm & 0b1
-		mop := instr.Imm >> 1 & 0b111
-		nf := uint64(instr.Imm>>4&0b111) + 1
-
-		if mop != 0 || nf != 1 {
+	case isa.Vse8V:
+		if nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
-					instr, mop, nf))
+				fmt.Errorf("%v: nf=%v", instr, nf))
 		}
 
 		var eltSize uint64 = 1 // sizeof(uint8)
@@ -1441,15 +1388,10 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.OldVse16V:
-		vm := instr.Imm & 0b1
-		mop := instr.Imm >> 1 & 0b111
-		nf := uint64(instr.Imm>>4&0b111) + 1
-
-		if mop != 0 || nf != 1 {
+	case isa.Vse16V:
+		if nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
-					instr, mop, nf))
+				fmt.Errorf("%v: nf=%v", instr, nf))
 		}
 
 		var eltSize uint64 = 2 // sizeof(uint16)
@@ -1486,15 +1428,10 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.OldVse32V:
-		vm := instr.Imm & 0b1
-		mop := instr.Imm >> 1 & 0b111
-		nf := uint64(instr.Imm>>4&0b111) + 1
-
-		if mop != 0 || nf != 1 {
+	case isa.Vse32V:
+		if nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
-					instr, mop, nf))
+				fmt.Errorf("%v: nf=%v", instr, nf))
 		}
 
 		var eltSize uint64 = 4 // sizeof(uint32)
@@ -1531,15 +1468,10 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.OldVse64V:
-		vm := instr.Imm & 0b1
-		mop := instr.Imm >> 1 & 0b111
-		nf := uint64(instr.Imm>>4&0b111) + 1
-
-		if mop != 0 || nf != 1 {
+	case isa.Vse64V:
+		if nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
-					instr, mop, nf))
+				fmt.Errorf("%v: nf=%v", instr, nf))
 		}
 
 		var eltSize uint64 = 8 // sizeof(uint64)
@@ -1575,6 +1507,45 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 			}
 		}
 		vpu.VStart = 0
+
+	default:
+		vpu.cpu.tracef(raw, instr, "not implemented")
+		vpu.cpu.Dump(vpu.cpu.PC)
+		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+			fmt.Errorf("instruction %v[0x%x] not implemented yet",
+				instr, raw))
+	}
+
+	vpu.cpu.mstatus.SetVS(isa.RegDirty)
+	vpu.cpu.mstatus.SetSD(true)
+
+	return nil
+}
+
+func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
+	// Vector extension.
+
+	if vpuDebug {
+		vpu.cpu.tracef(raw, instr, "pc=%x", vpu.cpu.PC)
+		vpu.cpu.DebugTrace = true
+	}
+
+	if vpu.cpu.mstatus.VS() == isa.RegOff {
+		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+			fmt.Errorf("VS=%v", vpu.cpu.mstatus.VS()))
+	}
+
+	// Load and store instructions:
+	//
+	// 	 0:1 vm - 1 unmasked, 0 masked
+	// 	 1:3 mop:
+	// 	     - 000 unit-stride
+	// 	     - 010 strided
+	// 	     - 011 indexed (unordered)
+	// 	     - 111 indexed (ordered)
+	// 	 4:6 nf - number of fields = nf+1
+
+	switch instr.Op {
 
 	case isa.OldVrsubVi:
 		vlmul := vpu.VType.VLMUL()

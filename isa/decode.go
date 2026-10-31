@@ -1189,9 +1189,9 @@ func Decode(raw uint32) (Instr, error) {
 					instr.Imm = lumop
 					instr.SetVPU(Vle8V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
 				case 0b01000:
-					instr.Op = OldVl1re8V
+					instr.SetVPU(Vl1re8V, uint32(raw>>28&0b1110))
 				case 0b01011:
-					instr.Op = OldVlmV
+					instr.SetVPU(VlmV, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
 				default:
 					return instr, fmt.Errorf("%v/%03b/%02b/%05b, raw=%08x",
 						group, funct3, mop, lumop, raw)
@@ -1251,7 +1251,7 @@ func Decode(raw uint32) (Instr, error) {
 						group, funct3, mop, lumop, raw)
 				}
 			case 0b01: // indexed-unordered - vluxei<eew>
-				instr.Op = OldVluxei64V
+				instr.SetVPU(Vluxei64V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
 			default:
 				return instr, fmt.Errorf("%v/%03b/%02b, raw=%08x",
 					group, funct3, mop, raw)
@@ -1274,22 +1274,14 @@ func Decode(raw uint32) (Instr, error) {
 			instr.Op = Fsd
 
 			// Vector stores.
-
 		case 0b000:
-			instr.Imm = int32(raw >> 25)
-			instr.Op = OldVse8V
-
+			instr.SetVPU(Vse8V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
 		case 0b101:
-			instr.Imm = int32(raw >> 25)
-			instr.Op = OldVse16V
-
+			instr.SetVPU(Vse16V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
 		case 0b110:
-			instr.Imm = int32(raw >> 25)
-			instr.Op = OldVse32V
-
+			instr.SetVPU(Vse32V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
 		case 0b111:
-			instr.Imm = int32(raw >> 25)
-			instr.Op = OldVse64V
+			instr.SetVPU(Vse64V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
 
 		default:
 			return instr, fmt.Errorf("STORE-FP: funct3=%03b", funct3)
