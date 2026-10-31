@@ -1519,15 +1519,12 @@ func Decode(raw uint32) (Instr, error) {
 		case 0b010: // OPMVV
 			switch funct7 >> 1 {
 			case 0b000000:
-				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = OldVredsumVs
+				instr.SetVPU(VredsumVs, uint32(funct7&0b1))
 
 			case 0b000011:
-				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = OldVredxorVs
+				instr.SetVPU(VredxorVs, uint32(funct7&0b1))
 
 			case 0b010000:
-				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
 				switch instr.Rs1 {
 				// Table 21. VWXUNARY0 encoding space:
 				//
@@ -1537,11 +1534,11 @@ func Decode(raw uint32) (Instr, error) {
 				// 	 10000 | vcpop.m - was vpopc
 				// 	 10001 | vfirst
 				case 0b00000:
-					instr.Op = OldVmvXS
+					instr.SetVPU(VmvXS, 0)
 				case 0b10000:
-					instr.Op = OldVcpopM
+					instr.SetVPU(VcpopM, uint32(funct7&0b1))
 				case 0b10001:
-					instr.Op = OldVfirstM
+					instr.SetVPU(VfirstM, uint32(funct7&0b1))
 
 				default:
 					return instr, fmt.Errorf("%v/%03b/%06b, vs1=%05b, raw=%x",
@@ -1613,17 +1610,11 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = OldVrsubVi
 
 			case 0b001110:
-				vm := funct7 & 1
-				// Imm is sign-extented and shifted one bit left.
-				imm := uint32(raw >> 14 & 0b111110)
-				// We store vm bit to bit 0.
-				if vm != 0 {
-					imm |= 1
-				} else {
-					imm &^= 1
+				if instr.Rd == instr.Rs2 {
+					return instr, fmt.Errorf("vslideup.vi: vd == vs2")
 				}
-				instr.Imm = int32(imm)
-				instr.Op = OldVslideupVi
+				instr.Imm = int32(raw >> 15 & 0b11111)
+				instr.SetVPU(VslideupVi, uint32(funct7&0b1))
 
 			case 0b010111:
 				instr.Imm = int32(raw<<12) >> 27
