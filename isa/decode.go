@@ -1569,30 +1569,12 @@ func Decode(raw uint32) (Instr, error) {
 		case 0b011: // OPIVI
 			switch funct7 >> 1 {
 			case 0b000000:
-				vm := funct7 & 1
-				// Imm is sign-extented and shifted one bit left.
-				imm := uint32(int32(raw<<12) >> 26)
-				// We store vm bit to bit 0.
-				if vm != 0 {
-					imm |= 1
-				} else {
-					imm &^= 1
-				}
-				instr.Imm = int32(imm)
-				instr.Op = OldVaddVi
+				instr.Imm = int32(raw<<12) >> 27
+				instr.SetVPU(VaddVi, uint32(funct7&0b1))
 
 			case 0b000011:
-				vm := funct7 & 1
-				// Imm is sign-extented and shifted one bit left.
-				imm := uint32(int32(raw<<12) >> 26)
-				// We store vm bit to bit 0.
-				if vm != 0 {
-					imm |= 1
-				} else {
-					imm &^= 1
-				}
-				instr.Imm = int32(imm)
-				instr.Op = OldVrsubVi
+				instr.Imm = int32(raw<<12) >> 27
+				instr.SetVPU(VrsubVi, uint32(funct7&0b1))
 
 			case 0b001110:
 				if instr.Rd == instr.Rs2 {
@@ -1610,47 +1592,20 @@ func Decode(raw uint32) (Instr, error) {
 				}
 
 			case 0b100101:
-				vm := funct7 & 1
-				imm := uint32(instr.Rs1)
-				// We store vm bit to bit 31.
-				if vm != 0 {
-					imm |= 1 << 31
-				}
-				instr.Imm = int32(imm)
-				instr.Op = OldVsllVi
+				instr.Imm = int32(instr.Rs1)
+				instr.SetVPU(VsllVi, uint32(funct7&0b1))
 
 			case 0b101000:
-				vm := funct7 & 1
-				imm := uint32(instr.Rs1)
-				// We store vm bit to bit 31.
-				if vm != 0 {
-					imm |= 1 << 31
-				}
-				instr.Imm = int32(imm)
-				instr.Op = OldVsrlVi
+				instr.Imm = int32(instr.Rs1)
+				instr.SetVPU(VsrlVi, uint32(funct7&0b1))
 
 			case 0b101001:
-				vm := funct7 & 1
-				imm := uint32(instr.Rs1)
-				// We store vm bit to bit 31.
-				if vm != 0 {
-					imm |= 1 << 31
-				}
-				instr.Imm = int32(imm)
-				instr.Op = OldVsraVi
+				instr.Imm = int32(instr.Rs1)
+				instr.SetVPU(VsraVi, uint32(funct7&0b1))
 
 			case 0b011000:
-				vm := funct7 & 1
-				// Imm is sign-extented and shifted one bit left.
-				imm := uint32(int32(raw<<12) >> 26)
-				// We store vm bit to bit 0.
-				if vm != 0 {
-					imm |= 1
-				} else {
-					imm &^= 1
-				}
-				instr.Imm = int32(imm)
-				instr.Op = OldVmseqVi
+				instr.Imm = int32(raw<<12) >> 27
+				instr.SetVPU(VmseqVi, uint32(funct7&0b1))
 
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
