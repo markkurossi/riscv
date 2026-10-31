@@ -230,59 +230,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	default:
-		vpu.cpu.tracef(raw, instr, "not implemented")
-		vpu.cpu.Dump(vpu.cpu.PC)
-		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-			fmt.Errorf("instruction %v[0x%x] not implemented yet",
-				instr, raw))
-	}
-
-	vpu.cpu.mstatus.SetVS(isa.RegDirty)
-	vpu.cpu.mstatus.SetSD(true)
-
-	return nil
-}
-
-func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
-	// Vector extension.
-
-	if vpuDebug {
-		vpu.cpu.tracef(raw, instr, "pc=%x", vpu.cpu.PC)
-		vpu.cpu.DebugTrace = true
-	}
-
-	if vpu.cpu.mstatus.VS() == isa.RegOff {
-		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-			fmt.Errorf("VS=%v", vpu.cpu.mstatus.VS()))
-	}
-
-	// Load and store instructions:
-	//
-	// 	 0:1 vm - 1 unmasked, 0 masked
-	// 	 1:3 mop:
-	// 	     - 000 unit-stride
-	// 	     - 010 strided
-	// 	     - 011 indexed (unordered)
-	// 	     - 111 indexed (ordered)
-	// 	 4:6 nf - number of fields = nf+1
-
-	switch instr.Op {
-
-	case isa.OldVmulVx:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
+	case isa.VmulVx:
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -314,13 +263,8 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.OldVslide1downVx:
+	case isa.Vslide1downVx:
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -360,20 +304,8 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.OldVaddVx:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
+	case isa.VaddVx:
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -405,20 +337,8 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.OldVaddVv:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
+	case isa.VaddVv:
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -454,20 +374,8 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.OldVandVv:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
+	case isa.VandVv:
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -503,20 +411,8 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.OldVxorVv:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
+	case isa.VxorVv:
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -552,20 +448,8 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.OldVorVv:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
+	case isa.VorVv:
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -601,37 +485,10 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.OldVrgatherVv:
+	case isa.VrgatherVv:
 		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-			err = vpu.requireAlign(raw, uint64(instr.Rs1), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-			err = vpu.requireAlign(raw, uint64(instr.Rs2), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
-		if instr.Rd == instr.Rs1 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("vd and vs1 are the same register"))
-		}
-		if instr.Rd == instr.Rs2 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("vd and vs2 are the same register"))
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
 		vlmax := uint64(float32(vpu.VLEN/uint64(sew)) * vlmul)
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -690,20 +547,8 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.OldVmaxuVv:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
+	case isa.VmaxuVv:
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -755,29 +600,8 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.OldVmsneVv:
-		// if (insn.rd() != insn.rs2())
-		//   requiire_nooever(insn.rd(), 1, insn.rs2(), P.VU.vflmul)
-		// #define require_noover(astart, asize, bstart, bsize) \
-		//   require(!is_overlapped(astart, asize, bstart, bsize))
-
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rs1), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-			err = vpu.requireAlign(raw, uint64(instr.Rs2), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
+	case isa.VmsneVv:
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -813,6 +637,45 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 			vpu.setMaskElt(uint64(instr.Rd), i, res)
 		}
 		vpu.VStart = 0
+
+	default:
+		vpu.cpu.tracef(raw, instr, "not implemented")
+		vpu.cpu.Dump(vpu.cpu.PC)
+		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+			fmt.Errorf("instruction %v[0x%x] not implemented yet",
+				instr, raw))
+	}
+
+	vpu.cpu.mstatus.SetVS(isa.RegDirty)
+	vpu.cpu.mstatus.SetSD(true)
+
+	return nil
+}
+
+func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
+	// Vector extension.
+
+	if vpuDebug {
+		vpu.cpu.tracef(raw, instr, "pc=%x", vpu.cpu.PC)
+		vpu.cpu.DebugTrace = true
+	}
+
+	if vpu.cpu.mstatus.VS() == isa.RegOff {
+		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+			fmt.Errorf("VS=%v", vpu.cpu.mstatus.VS()))
+	}
+
+	// Load and store instructions:
+	//
+	// 	 0:1 vm - 1 unmasked, 0 masked
+	// 	 1:3 mop:
+	// 	     - 000 unit-stride
+	// 	     - 010 strided
+	// 	     - 011 indexed (unordered)
+	// 	     - 111 indexed (ordered)
+	// 	 4:6 nf - number of fields = nf+1
+
+	switch instr.Op {
 
 	case isa.OldVredsumVs:
 		vlmul := vpu.VType.VLMUL()

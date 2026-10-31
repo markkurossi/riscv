@@ -1478,28 +1478,28 @@ func Decode(raw uint32) (Instr, error) {
 		case 0b000: // OPIVV
 			switch funct7 >> 1 {
 			case 0b000000:
-				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = OldVaddVv
+				instr.SetVPU(VaddVv, uint32(funct7&0b1))
 
 			case 0b000110:
-				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = OldVmaxuVv
+				instr.SetVPU(VmaxuVv, uint32(funct7&0b1))
 
 			case 0b001001:
-				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = OldVandVv
+				instr.SetVPU(VandVv, uint32(funct7&0b1))
 
 			case 0b001011:
-				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = OldVxorVv
+				instr.SetVPU(VxorVv, uint32(funct7&0b1))
 
 			case 0b001010:
-				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = OldVorVv
+				instr.SetVPU(VorVv, uint32(funct7&0b1))
 
 			case 0b001100:
-				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = OldVrgatherVv
+				if instr.Rd == instr.Rs1 {
+					return instr, fmt.Errorf("vrgather.vv: vd == vs1")
+				}
+				if instr.Rd == instr.Rs2 {
+					return instr, fmt.Errorf("vrgather.vv: vd == vs2")
+				}
+				instr.SetVPU(VrgatherVv, uint32(funct7&0b1))
 
 			case 0b010111:
 				if funct7&0b1 == 1 {
@@ -1509,8 +1509,7 @@ func Decode(raw uint32) (Instr, error) {
 				}
 
 			case 0b011001:
-				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = OldVmsneVv
+				instr.SetVPU(VmsneVv, uint32(funct7&0b1))
 
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
@@ -1685,8 +1684,7 @@ func Decode(raw uint32) (Instr, error) {
 		case 0b100: // OPIVX
 			switch funct7 >> 1 {
 			case 0b000000:
-				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = OldVaddVx
+				instr.SetVPU(VaddVx, uint32(funct7&0b1))
 
 			case 0b001001:
 				instr.SetVPU(VandVx, uint32(funct7&0b1))
@@ -1714,12 +1712,10 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = OldVmvSX
 
 			case 0b001111:
-				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = OldVslide1downVx
+				instr.SetVPU(Vslide1downVx, uint32(funct7&0b1))
 
 			case 0b100101:
-				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = OldVmulVx
+				instr.SetVPU(VmulVx, uint32(funct7&0b1))
 
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
