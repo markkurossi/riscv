@@ -1631,7 +1631,7 @@ func Decode(raw uint32) (Instr, error) {
 				if funct7&1 == 1 {
 					instr.Op = OldVmvVI
 				} else {
-					instr.Op = OldVmergeVim
+					instr.SetVPU(VmergeVim, 0)
 				}
 
 			case 0b100101:
@@ -1689,16 +1689,14 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = OldVaddVx
 
 			case 0b001001:
-				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = OldVandVx
+				instr.SetVPU(VandVx, uint32(funct7&0b1))
 
 			case 0b010111:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
 				instr.Op = OldVmvVX
 
 			case 0b101000:
-				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM
-				instr.Op = OldVsrlVx
+				instr.SetVPU(VsrlVx, uint32(funct7&0b1))
 
 			case 0b101100:
 				instr.Imm = int32(funct7 & 0b1) // Store bit 0: VM

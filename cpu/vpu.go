@@ -53,9 +53,19 @@ func NewVPU(cpu *CPU) *VPU {
 }
 
 func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
+	if vpuDebug {
+		vpu.cpu.tracef(raw, instr, "pc=%x", vpu.cpu.PC)
+		vpu.cpu.DebugTrace = true
+	}
+	if vpu.cpu.mstatus.VS() == isa.RegOff {
+		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+			fmt.Errorf("VS=%v", vpu.cpu.mstatus.VS()))
+	}
+
 	op, flags, imm := instr.VPU()
 
-	_ = flags
+	// The flags are hardcoded in decode:
+	vm := flags & 0b0001
 
 	switch op {
 	case isa.Vsetvl:
@@ -121,6 +131,105 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
+	case isa.VmergeVim:
+		sew := vpu.VType.VSEW()
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+
+			if vpu.maskElt(0, i) {
+				switch sew {
+				case isa.E8:
+					reg[ofs] = uint8(int8(imm))
+				case isa.E16:
+					memory.PutUint16(reg, ofs, uint16(int16(imm)))
+				case isa.E32:
+					memory.PutUint32(reg, ofs, uint32(int32(imm)))
+				case isa.E64:
+					memory.PutUint64(reg, ofs, uint64(int64(imm)))
+				}
+			} else {
+				vsreg, vsofs := vpu.elt(sew, uint64(instr.Rs2), i)
+				switch sew {
+				case isa.E8:
+					reg[ofs] = vsreg[vsofs]
+				case isa.E16:
+					memory.PutUint16(reg, ofs, memory.Uint16(vsreg, vsofs))
+				case isa.E32:
+					memory.PutUint32(reg, ofs, memory.Uint32(vsreg, vsofs))
+				case isa.E64:
+					memory.PutUint64(reg, ofs, memory.Uint64(vsreg, vsofs))
+				}
+			}
+		}
+		vpu.VStart = 0
+
+	case isa.VandVx:
+		sew := vpu.VType.VSEW()
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+			rs1 := vpu.cpu.X[instr.Rs1]
+			vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), i)
+
+			switch sew {
+			case isa.E8:
+				v := vs2reg[vs2ofs]
+				reg[ofs] = v & uint8(rs1)
+
+			case isa.E16:
+				v := memory.Uint16(vs2reg, vs2ofs)
+				memory.PutUint16(reg, ofs, v&uint16(rs1))
+
+			case isa.E32:
+				v := memory.Uint32(vs2reg, vs2ofs)
+				memory.PutUint32(reg, ofs, v&uint32(rs1))
+
+			case isa.E64:
+				v := memory.Uint64(vs2reg, vs2ofs)
+				memory.PutUint64(reg, ofs, v&uint64(rs1))
+			}
+		}
+		vpu.VStart = 0
+
+	case isa.VsrlVx:
+		sew := vpu.VType.VSEW()
+		rs1 := vpu.cpu.X[instr.Rs1] & (uint64(sew) - 1)
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+			vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), i)
+
+			switch sew {
+			case isa.E8:
+				v := vs2reg[vs2ofs]
+				reg[ofs] = v >> rs1
+
+			case isa.E16:
+				v := memory.Uint16(vs2reg, vs2ofs)
+				memory.PutUint16(reg, ofs, v>>rs1)
+
+			case isa.E32:
+				v := memory.Uint32(vs2reg, vs2ofs)
+				memory.PutUint32(reg, ofs, v>>rs1)
+
+			case isa.E64:
+				v := memory.Uint64(vs2reg, vs2ofs)
+				memory.PutUint64(reg, ofs, v>>rs1)
+			}
+		}
+		vpu.VStart = 0
+
 	default:
 		vpu.cpu.tracef(raw, instr, "not implemented")
 		vpu.cpu.Dump(vpu.cpu.PC)
@@ -159,137 +268,6 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 	// 	 4:6 nf - number of fields = nf+1
 
 	switch instr.Op {
-	case isa.OldVmergeVim:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-			err = vpu.requireAlign(raw, uint64(instr.Rs2), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
-		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-
-		for i := vpu.VStart; i < vpu.VL; i++ {
-			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
-
-			if vpu.maskElt(0, i) {
-				switch sew {
-				case isa.E8:
-					reg[ofs] = uint8(int8(instr.Imm))
-				case isa.E16:
-					memory.PutUint16(reg, ofs, uint16(int16(instr.Imm)))
-				case isa.E32:
-					memory.PutUint32(reg, ofs, uint32(int32(instr.Imm)))
-				case isa.E64:
-					memory.PutUint64(reg, ofs, uint64(int64(instr.Imm)))
-				}
-			} else {
-				vsreg, vsofs := vpu.elt(sew, uint64(instr.Rs2), i)
-				switch sew {
-				case isa.E8:
-					reg[ofs] = vsreg[vsofs]
-				case isa.E16:
-					memory.PutUint16(reg, ofs, memory.Uint16(vsreg, vsofs))
-				case isa.E32:
-					memory.PutUint32(reg, ofs, memory.Uint32(vsreg, vsofs))
-				case isa.E64:
-					memory.PutUint64(reg, ofs, memory.Uint64(vsreg, vsofs))
-				}
-			}
-		}
-		vpu.VStart = 0
-
-	case isa.OldVandVx:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
-		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
-
-		for i := vpu.VStart; i < vpu.VL; i++ {
-			if vm == 0 {
-				if !vpu.maskElt(0, i) {
-					continue
-				}
-			}
-			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
-			rs1 := vpu.cpu.X[instr.Rs1]
-			vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), i)
-
-			switch sew {
-			case isa.E8:
-				v := vs2reg[vs2ofs]
-				reg[ofs] = v & uint8(rs1)
-
-			case isa.E16:
-				v := memory.Uint16(vs2reg, vs2ofs)
-				memory.PutUint16(reg, ofs, v&uint16(rs1))
-
-			case isa.E32:
-				v := memory.Uint32(vs2reg, vs2ofs)
-				memory.PutUint32(reg, ofs, v&uint32(rs1))
-
-			case isa.E64:
-				v := memory.Uint64(vs2reg, vs2ofs)
-				memory.PutUint64(reg, ofs, v&uint64(rs1))
-			}
-		}
-		vpu.VStart = 0
-
-	case isa.OldVsrlVx:
-		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
-
-		rs1 := vpu.cpu.X[instr.Rs1] & (uint64(sew) - 1)
-
-		for i := vpu.VStart; i < vpu.VL; i++ {
-			if vm == 0 {
-				if !vpu.maskElt(0, i) {
-					continue
-				}
-			}
-			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
-			vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), i)
-
-			switch sew {
-			case isa.E8:
-				v := vs2reg[vs2ofs]
-				reg[ofs] = v >> rs1
-
-			case isa.E16:
-				v := memory.Uint16(vs2reg, vs2ofs)
-				memory.PutUint16(reg, ofs, v>>rs1)
-
-			case isa.E32:
-				v := memory.Uint32(vs2reg, vs2ofs)
-				memory.PutUint32(reg, ofs, v>>rs1)
-
-			case isa.E64:
-				v := memory.Uint64(vs2reg, vs2ofs)
-				memory.PutUint64(reg, ofs, v>>rs1)
-			}
-		}
-		vpu.VStart = 0
 
 	case isa.OldVmulVx:
 		vlmul := vpu.VType.VLMUL()
