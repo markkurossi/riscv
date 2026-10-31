@@ -52,58 +52,24 @@ func NewVPU(cpu *CPU) *VPU {
 	return vpu
 }
 
-func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
-	// Vector extension.
+func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
+	op, flags, imm := instr.VPU()
 
-	if vpuDebug {
-		vpu.cpu.tracef(raw, instr, "pc=%x", vpu.cpu.PC)
-		vpu.cpu.DebugTrace = true
-	}
+	_ = flags
 
-	if vpu.cpu.mstatus.VS() == isa.RegOff {
-		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-			fmt.Errorf("VS=%v", vpu.cpu.mstatus.VS()))
-	}
-
-	// Load and store instructions:
-	//
-	// 	 0:1 vm - 1 unmasked, 0 masked
-	// 	 1:3 mop:
-	// 	     - 000 unit-stride
-	// 	     - 010 strided
-	// 	     - 011 indexed (unordered)
-	// 	     - 111 indexed (ordered)
-	// 	 4:6 nf - number of fields = nf+1
-
-	switch instr.Op {
-	case isa.OldVsetvl:
+	switch op {
+	case isa.Vsetvl:
 		vpu.setVL(instr.Rd, instr.Rs1, vpu.cpu.X[instr.Rs1],
 			isa.VType(vpu.cpu.X[instr.Rs2]))
 
-	case isa.OldVsetvli:
-		vpu.setVL(instr.Rd, instr.Rs1, vpu.cpu.X[instr.Rs1],
-			isa.VType(instr.Imm))
+	case isa.Vsetvli:
+		vpu.setVL(instr.Rd, instr.Rs1, vpu.cpu.X[instr.Rs1], isa.VType(imm))
 
-	case isa.OldVsetivli:
-		vpu.setVL(instr.Rd, 0xff, uint64(instr.Rs1), isa.VType(instr.Imm))
+	case isa.Vsetivli:
+		vpu.setVL(instr.Rd, 0xff, uint64(instr.Rs1), isa.VType(imm))
 
-	case isa.OldVmvVV:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-			err = vpu.requireAlign(raw, uint64(instr.Rs1), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
+	case isa.VmvVV:
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
@@ -125,27 +91,8 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
-	case isa.OldVmergeVvm:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-			err = vpu.requireAlign(raw, uint64(instr.Rs1), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-			err = vpu.requireAlign(raw, uint64(instr.Rs2), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
+	case isa.VmergeVvm:
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
@@ -174,6 +121,44 @@ func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
 		}
 		vpu.VStart = 0
 
+	default:
+		vpu.cpu.tracef(raw, instr, "not implemented")
+		vpu.cpu.Dump(vpu.cpu.PC)
+		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+			fmt.Errorf("instruction %v[0x%x] not implemented yet",
+				instr, raw))
+	}
+
+	vpu.cpu.mstatus.SetVS(isa.RegDirty)
+	vpu.cpu.mstatus.SetSD(true)
+
+	return nil
+}
+
+func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
+	// Vector extension.
+
+	if vpuDebug {
+		vpu.cpu.tracef(raw, instr, "pc=%x", vpu.cpu.PC)
+		vpu.cpu.DebugTrace = true
+	}
+
+	if vpu.cpu.mstatus.VS() == isa.RegOff {
+		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+			fmt.Errorf("VS=%v", vpu.cpu.mstatus.VS()))
+	}
+
+	// Load and store instructions:
+	//
+	// 	 0:1 vm - 1 unmasked, 0 masked
+	// 	 1:3 mop:
+	// 	     - 000 unit-stride
+	// 	     - 010 strided
+	// 	     - 011 indexed (unordered)
+	// 	     - 111 indexed (ordered)
+	// 	 4:6 nf - number of fields = nf+1
+
+	switch instr.Op {
 	case isa.OldVmergeVim:
 		vlmul := vpu.VType.VLMUL()
 		if vlmul > 1 {

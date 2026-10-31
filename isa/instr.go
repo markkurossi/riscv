@@ -1439,6 +1439,14 @@ func (op Op) String() string {
 	return fmt.Sprintf("{Op %d}", op)
 }
 
+func (op VpuOp) String() string {
+	info, ok := VpuOperands[op]
+	if ok {
+		return info.Name
+	}
+	return fmt.Sprintf("{VpuOp %d}", op)
+}
+
 // Register defines RISC-V registers.
 type Register uint8
 
@@ -1529,7 +1537,26 @@ type Instr struct {
 	Imm int32
 }
 
-func pad(op Op) string {
+// VPU decodes the V extension instruction, flags, and imm from the
+// instruction. The function panics if instr.Op is not Vpu.
+func (instr Instr) VPU() (VpuOp, uint32, int32) {
+	if instr.Op != Vpu {
+		panic("not a vpu pseudo-instruction")
+	}
+	return VpuOp(instr.Imm & 0xff), uint32(instr.Imm >> 8 & 0b1111),
+		instr.Imm >> 12
+}
+
+// SetVPU encodes the V extension instruction op and flags into the
+// instruction. The instr.Imm must have been set before this call.
+func (instr *Instr) SetVPU(op VpuOp, flags uint32) {
+	instr.Imm <<= 12
+	instr.Imm |= int32(flags) << 8
+	instr.Imm |= int32(op)
+	instr.Op = Vpu
+}
+
+func pad(op fmt.Stringer) string {
 	name := op.String()
 	for len(name) < maxOpNameLen {
 		name += " "
@@ -1623,6 +1650,9 @@ func (instr Instr) String() string {
 			return fmt.Sprintf("%v %v,%b,%d",
 				pad(instr.Op), instr.Rd, CSR(instr.Imm), uint32(instr.Rs1))
 
+		case Vpu:
+			return instr.StringVPU()
+
 			// GroupOPV
 
 		case OldVsetvli:
@@ -1659,6 +1689,42 @@ func (instr Instr) String() string {
 	}
 
 	return instr.Op.String()
+}
+
+func (instr Instr) StringVPU() string {
+	op, _, imm := instr.VPU()
+
+	switch op {
+	// GroupOPV
+	case Vsetvli:
+		return fmt.Sprintf("%v %v,%v,%v",
+			pad(op), instr.Rd, instr.Rs1, VType(imm))
+	case Vsetivli:
+		return fmt.Sprintf("%v %v,%v,%v",
+			pad(op), instr.Rd, uint32(instr.Rs1), VType(imm))
+	case Vsetvl:
+		return fmt.Sprintf("%v %v,%v,%v",
+			pad(op), instr.Rd, instr.Rs1, VType(instr.Rs2))
+
+	case VmvVX:
+		result := fmt.Sprintf("%v v%v,%v", pad(op), int(instr.Rd), instr.Rs1)
+		if imm == 0 {
+			result += fmt.Sprintf(",v%d.t", int(instr.Rs2))
+		}
+		return result
+
+	case VmvVV:
+		return fmt.Sprintf("%v v%v,%v", pad(op), int(instr.Rd), int(instr.Rs1))
+
+	case VmvVI:
+		return fmt.Sprintf("%v v%v,%v", pad(op), int(instr.Rd), imm)
+
+		// Vector loads and stores.
+	case Vle8V, Vle16V, Vle32V, Vle64V, Vse8V, Vse16V, Vse32V, Vse64V:
+		return instr.vsString()
+	}
+
+	return op.String()
 }
 
 func (instr Instr) vsString() string {

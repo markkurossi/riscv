@@ -1503,9 +1503,9 @@ func Decode(raw uint32) (Instr, error) {
 
 			case 0b010111:
 				if funct7&0b1 == 1 {
-					instr.Op = OldVmvVV
+					instr.SetVPU(VmvVV, 0)
 				} else {
-					instr.Op = OldVmergeVvm
+					instr.SetVPU(VmergeVvm, 0)
 				}
 
 			case 0b011001:
@@ -1731,13 +1731,13 @@ func Decode(raw uint32) (Instr, error) {
 		case 0b111:
 			if raw&(1<<31) == 0 {
 				instr.Imm = int32((raw >> 20) & 0b111_11111111)
-				instr.Op = OldVsetvli
+				instr.SetVPU(Vsetvli, 0)
 			} else if raw&(1<<30) != 0 {
 				instr.Imm = int32((raw >> 20) & 0b011_11111111)
 				// Rs1 is uimm[4:0]
-				instr.Op = OldVsetivli
+				instr.SetVPU(Vsetivli, 0)
 			} else {
-				instr.Op = OldVsetvl
+				instr.SetVPU(Vsetvl, 0)
 			}
 
 		default:

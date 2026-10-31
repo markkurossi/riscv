@@ -1487,6 +1487,12 @@ dispatch:
 			}
 			cpu.X[instr.Rd] = result
 
+		case isa.Vpu:
+			err := cpu.vpu.execute(instr, raw)
+			if err != nil {
+				return err
+			}
+
 		default:
 			if isa.Flw <= instr.Op && instr.Op <= isa.FmaddD {
 				// Floating point extension.
