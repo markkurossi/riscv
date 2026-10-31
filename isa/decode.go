@@ -1598,6 +1598,9 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Imm = int32(instr.Rs1)
 				instr.SetVPU(VsllVi, uint32(funct7&0b1))
 
+			case 0b100111:
+				instr.SetVPU(VmvnfrV, 0)
+
 			case 0b101000:
 				instr.Imm = int32(instr.Rs1)
 				instr.SetVPU(VsrlVi, uint32(funct7&0b1))

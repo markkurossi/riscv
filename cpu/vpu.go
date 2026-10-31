@@ -1620,6 +1620,36 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 
+	case isa.VmvnfrV:
+		sew := vpu.VType.VSEW()
+		vd := uint64(instr.Rd)
+		vs2 := uint64(instr.Rs2)
+		len := uint64(instr.Rs1 + 1)
+		vlenb := vpu.VLEN / 8
+		size := len * vlenb
+		start := vpu.VStart * uint64(sew>>3)
+
+		if vd != vs2 && start < size {
+			i := start / vlenb
+			off := start % vlenb
+
+			if off != 0 {
+				for j := uint64(0); j < vlenb-off; j++ {
+					reg, ofs := vpu.elt(isa.E8, vd+i, off+j)
+					vs2reg, vs2ofs := vpu.elt(isa.E8, vs2+i, off+j)
+					reg[ofs] = vs2reg[vs2ofs]
+				}
+				i++
+			}
+			for ; i < len; i++ {
+				for j := uint64(0); j < vlenb; j++ {
+					reg, ofs := vpu.elt(isa.E8, vd+i, j)
+					vs2reg, vs2ofs := vpu.elt(isa.E8, vs2+i, j)
+					reg[ofs] = vs2reg[vs2ofs]
+				}
+			}
+		}
+
 	case isa.VsrlVi:
 		sew := vpu.VType.VSEW()
 
