@@ -1500,12 +1500,6 @@ dispatch:
 				if err != nil {
 					return err
 				}
-			} else if isa.OldVsetvli <= instr.Op && instr.Op <= isa.OldVsraVi {
-				// Vector extension.
-				err := cpu.vpu.executeOld(instr, raw)
-				if err != nil {
-					return err
-				}
 			} else {
 				cpu.tracef(raw, instr, "not implemented")
 				cpu.Dump(cpu.PC)

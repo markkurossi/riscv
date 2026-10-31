@@ -1715,42 +1715,6 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	return nil
 }
 
-func (vpu *VPU) executeOld(instr isa.Instr, raw uint32) error {
-	// Vector extension.
-
-	if vpuDebug {
-		vpu.cpu.tracef(raw, instr, "pc=%x", vpu.cpu.PC)
-		vpu.cpu.DebugTrace = true
-	}
-
-	if vpu.cpu.mstatus.VS() == isa.RegOff {
-		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-			fmt.Errorf("VS=%v", vpu.cpu.mstatus.VS()))
-	}
-
-	// Load and store instructions:
-	//
-	// 	 0:1 vm - 1 unmasked, 0 masked
-	// 	 1:3 mop:
-	// 	     - 000 unit-stride
-	// 	     - 010 strided
-	// 	     - 011 indexed (unordered)
-	// 	     - 111 indexed (ordered)
-	// 	 4:6 nf - number of fields = nf+1
-
-	switch instr.Op {
-
-	default:
-		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-			fmt.Errorf("%v not implemented yet", instr))
-	}
-
-	vpu.cpu.mstatus.SetVS(isa.RegDirty)
-	vpu.cpu.mstatus.SetSD(true)
-
-	return nil
-}
-
 func (vpu *VPU) requireAlign(raw uint32, val, pos uint64) error {
 	if pos == 0 || val&(pos-1) == 0 {
 		return nil

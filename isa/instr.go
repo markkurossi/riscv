@@ -88,7 +88,7 @@ func (g Group) String() string {
 // ISA (RV32I/RV64I) has about 40–50 instructions. The M (Multiply), A
 // (Atomic), F/D (Floating Point), and C (Compressed) extensions,
 // bring us around 120–150 unique opcodes. The current maximum value
-// Rorw is 200 so we have 54 opcodes left.
+// of the Vpu pseudo-instruction is 203 so we have 52 opcodes left.
 type Op uint8
 
 // Known RISC-V opcodes.
@@ -327,58 +327,6 @@ const (
 	// Floating-point Fused Multiply-Add
 	FmaddS
 	FmaddD
-
-	// Vector extension.
-
-	OldVsetvli
-	OldVsetivli
-	OldVsetvl
-	OldVandVx
-	OldVmulVx
-	OldVaddVx
-	OldVaddVv
-	OldVmaxuVv
-	OldVandVv
-	OldVxorVv
-	OldVorVv
-	OldVrgatherVv
-	OldVmsneVv
-	OldVredsumVs
-	OldVredxorVs
-	OldVmvXS
-	OldVcpopM
-	OldVfirstM
-	OldVslideupVi
-	OldVidV
-	OldVsextVf8
-	OldVsextVf4
-	OldVmorMM
-	OldVmvVX
-	OldVsrlVx
-	OldVnsrlWx
-	OldVmvSX
-	OldVslide1downVx
-	OldVmvVV
-	OldVmergeVvm
-	OldVmergeVim
-	OldVmvVI
-	OldVle8V
-	OldVle16V
-	OldVle32V
-	OldVle64V
-	OldVl1re8V
-	OldVlmV
-	OldVluxei64V
-	OldVse8V
-	OldVse16V
-	OldVse32V
-	OldVse64V
-	OldVrsubVi
-	OldVaddVi
-	OldVmseqVi
-	OldVsllVi
-	OldVsrlVi
-	OldVsraVi
 
 	// Zicond Extension (Conditional Integer Operations).
 	CzeroEqz
@@ -1018,154 +966,6 @@ var Operands = map[Op]OpInfo{
 		Name: "fmadd.d",
 	},
 
-	OldVsetvli: OpInfo{
-		Name: "vsetvli",
-	},
-	OldVsetivli: OpInfo{
-		Name: "vsetivli",
-	},
-	OldVsetvl: OpInfo{
-		Name: "vsetvl",
-	},
-	OldVandVx: OpInfo{
-		Name: "vand.vx",
-	},
-	OldVmulVx: OpInfo{
-		Name: "vmul.vx",
-	},
-	OldVaddVx: OpInfo{
-		Name: "vadd.vx",
-	},
-	OldVaddVv: OpInfo{
-		Name: "vadd.vv",
-	},
-	OldVmaxuVv: OpInfo{
-		Name: "vmaxu.vv",
-	},
-	OldVandVv: OpInfo{
-		Name: "vand.vv",
-	},
-	OldVxorVv: OpInfo{
-		Name: "vxor.vv",
-	},
-	OldVorVv: OpInfo{
-		Name: "vor.vv",
-	},
-	OldVrgatherVv: OpInfo{
-		Name: "vrgather.vv",
-	},
-	OldVmsneVv: OpInfo{
-		Name: "vmsne.vv",
-	},
-	OldVredsumVs: OpInfo{
-		Name: "vredsum.vs",
-	},
-	OldVredxorVs: OpInfo{
-		Name: "vredxor.vs",
-	},
-	OldVmvXS: OpInfo{
-		Name: "vmv.x.s",
-	},
-	OldVcpopM: OpInfo{
-		Name: "vcpop.m",
-	},
-	OldVfirstM: OpInfo{
-		Name: "vfirst.m",
-	},
-	OldVslideupVi: OpInfo{
-		Name: "vslideup.vi",
-	},
-	OldVidV: OpInfo{
-		Name: "vid.v",
-	},
-	OldVsextVf8: OpInfo{
-		Name: "vsext.vf8",
-	},
-	OldVsextVf4: OpInfo{
-		Name: "vsext.vf4",
-	},
-	OldVmorMM: OpInfo{
-		Name: "vmor.mm",
-	},
-	OldVmvVX: OpInfo{
-		Name: "vmv.v.x",
-	},
-	OldVsrlVx: OpInfo{
-		Name: "vsrl.vx",
-	},
-	OldVnsrlWx: OpInfo{
-		Name: "vnsrl.wx",
-	},
-	OldVmvSX: OpInfo{
-		Name: "vmv.s.x",
-	},
-	OldVslide1downVx: OpInfo{
-		Name: "vslide1down.vx",
-	},
-	OldVmvVV: OpInfo{
-		Name: "vmv.v.v",
-	},
-	OldVmergeVvm: OpInfo{
-		Name: "vmerge.vvm",
-	},
-	OldVmergeVim: OpInfo{
-		Name: "vmerge.vim",
-	},
-	OldVmvVI: OpInfo{
-		Name: "vmv.v.i",
-	},
-	OldVle8V: OpInfo{
-		Name: "vle8.v",
-	},
-	OldVle16V: OpInfo{
-		Name: "vle16.v",
-	},
-	OldVle32V: OpInfo{
-		Name: "vle32.v",
-	},
-	OldVle64V: OpInfo{
-		Name: "vle64.v",
-	},
-	OldVl1re8V: OpInfo{
-		Name: "vl1re8.v",
-	},
-	OldVlmV: OpInfo{
-		Name: "vlm.v",
-	},
-	OldVluxei64V: OpInfo{
-		Name: "vluxei64.v",
-	},
-	OldVse8V: OpInfo{
-		Name: "vse8.v",
-	},
-	OldVse16V: OpInfo{
-		Name: "vse16.v",
-	},
-	OldVse32V: OpInfo{
-		Name: "vse32.v",
-	},
-	OldVse64V: OpInfo{
-		Name: "vse64.v",
-	},
-	OldVrsubVi: OpInfo{
-		Name: "vrsub.vi",
-	},
-	OldVaddVi: OpInfo{
-		Name: "vadd.vi",
-	},
-	OldVmseqVi: OpInfo{
-		Name: "vmseq.vi",
-	},
-	OldVsllVi: OpInfo{
-		Name: "vsll.vi",
-	},
-	OldVsrlVi: OpInfo{
-		Name: "vsrl.vi",
-	},
-	OldVsraVi: OpInfo{
-		Name: "vsra.vi",
-	},
-
 	CzeroEqz: OpInfo{
 		Name: "czero.eqz",
 	},
@@ -1652,39 +1452,6 @@ func (instr Instr) String() string {
 
 		case Vpu:
 			return instr.StringVPU()
-
-			// GroupOPV
-
-		case OldVsetvli:
-			return fmt.Sprintf("%v %v,%v,%v",
-				pad(instr.Op), instr.Rd, instr.Rs1, VType(instr.Imm))
-		case OldVsetivli:
-			return fmt.Sprintf("%v %v,%v,%v",
-				pad(instr.Op), instr.Rd, uint32(instr.Rs1), VType(instr.Imm))
-		case OldVsetvl:
-			return fmt.Sprintf("%v %v,%v,%v",
-				pad(instr.Op), instr.Rd, instr.Rs1, VType(instr.Rs2))
-
-		case OldVmvVX:
-			result := fmt.Sprintf("%v v%v,%v",
-				pad(instr.Op), int(instr.Rd), instr.Rs1)
-			if instr.Imm == 0 {
-				result += fmt.Sprintf(",v%d.t", int(instr.Rs2))
-			}
-			return result
-
-		case OldVmvVV:
-			return fmt.Sprintf("%v v%v,%v",
-				pad(instr.Op), int(instr.Rd), int(instr.Rs1))
-
-		case OldVmvVI:
-			return fmt.Sprintf("%v v%v,%v",
-				pad(instr.Op), int(instr.Rd), instr.Imm)
-
-			// Vector loads and stores.
-		case OldVle8V, OldVle16V, OldVle32V, OldVle64V, OldVse8V, OldVse16V,
-			OldVse32V, OldVse64V:
-			return instr.vsString()
 		}
 	}
 
@@ -1721,13 +1488,13 @@ func (instr Instr) StringVPU() string {
 
 		// Vector loads and stores.
 	case Vle8V, Vle16V, Vle32V, Vle64V, Vse8V, Vse16V, Vse32V, Vse64V:
-		return instr.vsString()
+		return instr.vsString(op)
 	}
 
 	return op.String()
 }
 
-func (instr Instr) vsString() string {
+func (instr Instr) vsString(instrOp VpuOp) string {
 	var size, op, ff string
 
 	lumop := instr.Imm & 0b11111
@@ -1735,29 +1502,29 @@ func (instr Instr) vsString() string {
 		ff = "ff"
 	}
 
-	switch instr.Op {
-	case OldVle8V:
+	switch instrOp {
+	case Vle8V:
 		size = "8"
 		op = "l"
-	case OldVle16V:
+	case Vle16V:
 		size = "16"
 		op = "l"
-	case OldVle32V:
+	case Vle32V:
 		size = "32"
 		op = "l"
-	case OldVle64V:
+	case Vle64V:
 		size = "64"
 		op = "l"
-	case OldVse8V:
+	case Vse8V:
 		size = "8"
 		op = "s"
-	case OldVse16V:
+	case Vse16V:
 		size = "16"
 		op = "s"
-	case OldVse32V:
+	case Vse32V:
 		size = "32"
 		op = "s"
-	case OldVse64V:
+	case Vse64V:
 		size = "64"
 		op = "s"
 	default:
