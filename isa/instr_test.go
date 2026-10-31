@@ -43,7 +43,7 @@ func TestOpCount(t *testing.T) {
 }
 
 func TestVpuOpCount(t *testing.T) {
-	if VsraVi != 48 {
+	if VsraVi != 49 {
 		t.Errorf("max op %v = %d", VsraVi, int(VsraVi))
 	}
 }

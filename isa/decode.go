@@ -1558,6 +1558,9 @@ func Decode(raw uint32) (Instr, error) {
 						group, funct3, funct7>>1, int(instr.Rs1), raw)
 				}
 
+			case 0b010111:
+				instr.SetVPU(VcompressVm, uint32(funct7&0b1))
+
 			case 0b011010:
 				instr.SetVPU(VmorMM, uint32(funct7&0b1))
 

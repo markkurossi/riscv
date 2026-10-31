@@ -399,6 +399,7 @@ const (
 	VidV
 	VsextVf8
 	VsextVf4
+	VcompressVm
 	VmorMM
 	VmvVX
 	VsrlVx
@@ -1143,6 +1144,9 @@ var VpuOperands = map[VpuOp]OpInfo{
 	},
 	VsextVf4: OpInfo{
 		Name: "vsext.vf4",
+	},
+	VcompressVm: OpInfo{
+		Name: "vcompress.vm",
 	},
 	VmorMM: OpInfo{
 		Name: "vmor.mm",
