@@ -590,7 +590,15 @@ func TestBug(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%x: %v: %v", bug.raw, bug.name, err)
 		}
-		got := instr.Op.String()
+
+		var got string
+		if instr.Op == Vpu {
+			op, _, _ := instr.VPU()
+			got = op.String()
+		} else {
+			got = instr.Op.String()
+		}
+
 		if bug.name != got {
 			t.Errorf("%x: expected %v, got %v\n", bug.raw, bug.name, got)
 		}

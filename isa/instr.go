@@ -88,7 +88,7 @@ func (g Group) String() string {
 // ISA (RV32I/RV64I) has about 40–50 instructions. The M (Multiply), A
 // (Atomic), F/D (Floating Point), and C (Compressed) extensions,
 // bring us around 120–150 unique opcodes. The current maximum value
-// Rorw is 200 so we have 54 opcodes left.
+// of the Vpu pseudo-instruction is 203 so we have 52 opcodes left.
 type Op uint8
 
 // Known RISC-V opcodes.
@@ -328,9 +328,56 @@ const (
 	FmaddS
 	FmaddD
 
-	// Vector extension.
+	// Zicond Extension (Conditional Integer Operations).
+	CzeroEqz
+	CzeroNez
 
-	Vsetvli
+	// Zbs Extension for Single-bit instructions.
+	Bclr
+	Bclri
+	Bext
+	Bexti
+	Binv
+	Binvi
+	Bset
+	Bseti
+
+	// Zba & Zbb Bit-Manipulation Extensions and Zcb extensions.
+	AddUw
+	Orn
+	Andn
+	Clz
+	Clzw
+	Ctz
+	Cpop
+	Min
+	Minu
+	Max
+	Maxu
+	Rori
+	Roriw
+	Rev8
+	SextB
+	SextH
+	Sh1add
+	Sh2add
+	Sh3add
+	Sh1addUw
+	Sh2addUw
+	Sh3addUw
+	Rolw
+	Rorw
+
+	// Pseudo instruction for the vector extension.
+	Vpu
+)
+
+// VpuOp defines vector instruction opcodes.
+type VpuOp uint8
+
+// Vector extension opcodes.
+const (
+	Vsetvli VpuOp = iota
 	Vsetivli
 	Vsetvl
 	VandVx
@@ -379,49 +426,6 @@ const (
 	VsllVi
 	VsrlVi
 	VsraVi
-
-	// Zicond Extension (Conditional Integer Operations).
-	CzeroEqz
-	CzeroNez
-
-	// Zbs Extension for Single-bit instructions.
-	Bclr
-	Bclri
-	Bext
-	Bexti
-	Binv
-	Binvi
-	Bset
-	Bseti
-
-	// Zba & Zbb Bit-Manipulation Extensions and Zcb extensions.
-	AddUw
-	Orn
-	Andn
-	Clz
-	Clzw
-	Ctz
-	Cpop
-	Min
-	Minu
-	Max
-	Maxu
-	Rori
-	Roriw
-	Rev8
-	SextB
-	SextH
-	Sh1add
-	Sh2add
-	Sh3add
-	Sh1addUw
-	Sh2addUw
-	Sh3addUw
-	Rolw
-	Rorw
-
-	// Pseudo instruction for the vector extension.
-	Vpu
 )
 
 // OpInfo defines opcode information.
@@ -962,6 +966,118 @@ var Operands = map[Op]OpInfo{
 		Name: "fmadd.d",
 	},
 
+	CzeroEqz: OpInfo{
+		Name: "czero.eqz",
+	},
+	CzeroNez: OpInfo{
+		Name: "czero.nez",
+	},
+
+	Bclr: OpInfo{
+		Name: "bclr",
+	},
+	Bclri: OpInfo{
+		Name: "bclri",
+	},
+	Bext: OpInfo{
+		Name: "bext",
+	},
+	Bexti: OpInfo{
+		Name: "bexti",
+	},
+	Binv: OpInfo{
+		Name: "binv",
+	},
+	Binvi: OpInfo{
+		Name: "binvi",
+	},
+	Bset: OpInfo{
+		Name: "bset",
+	},
+	Bseti: OpInfo{
+		Name: "bseti",
+	},
+
+	AddUw: OpInfo{
+		Name: "add.uw",
+	},
+	Orn: OpInfo{
+		Name: "orn",
+	},
+	Andn: OpInfo{
+		Name: "andn",
+	},
+	Clz: OpInfo{
+		Name: "clz",
+	},
+	Clzw: OpInfo{
+		Name: "clzw",
+	},
+	Ctz: OpInfo{
+		Name: "ctz",
+	},
+	Cpop: OpInfo{
+		Name: "cpop",
+	},
+	Min: OpInfo{
+		Name: "min",
+	},
+	Minu: OpInfo{
+		Name: "minu",
+	},
+	Max: OpInfo{
+		Name: "max",
+	},
+	Maxu: OpInfo{
+		Name: "maxu",
+	},
+	Rori: OpInfo{
+		Name: "rori",
+	},
+	Roriw: OpInfo{
+		Name: "roriw",
+	},
+	Rev8: OpInfo{
+		Name: "rev8",
+	},
+	SextB: OpInfo{
+		Name: "sext.b",
+	},
+	SextH: OpInfo{
+		Name: "sext.h",
+	},
+	Sh1add: OpInfo{
+		Name: "sh1add",
+	},
+	Sh2add: OpInfo{
+		Name: "sh2add",
+	},
+	Sh3add: OpInfo{
+		Name: "sh3add",
+	},
+	Sh1addUw: OpInfo{
+		Name: "sh1add.uw",
+	},
+	Sh2addUw: OpInfo{
+		Name: "sh2add.uw",
+	},
+	Sh3addUw: OpInfo{
+		Name: "sh3add.uw",
+	},
+	Rolw: OpInfo{
+		Name: "rolw",
+	},
+	Rorw: OpInfo{
+		Name: "rorw",
+	},
+	Vpu: OpInfo{
+		Name: "vpu",
+		Desc: `Pseudo instruction encoding "V" vector extension instructions`,
+	},
+}
+
+// VpuOperands provide information about vector instructions.
+var VpuOperands = map[VpuOp]OpInfo{
 	Vsetvli: OpInfo{
 		Name: "vsetvli",
 	},
@@ -1109,115 +1225,6 @@ var Operands = map[Op]OpInfo{
 	VsraVi: OpInfo{
 		Name: "vsra.vi",
 	},
-
-	CzeroEqz: OpInfo{
-		Name: "czero.eqz",
-	},
-	CzeroNez: OpInfo{
-		Name: "czero.nez",
-	},
-
-	Bclr: OpInfo{
-		Name: "bclr",
-	},
-	Bclri: OpInfo{
-		Name: "bclri",
-	},
-	Bext: OpInfo{
-		Name: "bext",
-	},
-	Bexti: OpInfo{
-		Name: "bexti",
-	},
-	Binv: OpInfo{
-		Name: "binv",
-	},
-	Binvi: OpInfo{
-		Name: "binvi",
-	},
-	Bset: OpInfo{
-		Name: "bset",
-	},
-	Bseti: OpInfo{
-		Name: "bseti",
-	},
-
-	AddUw: OpInfo{
-		Name: "add.uw",
-	},
-	Orn: OpInfo{
-		Name: "orn",
-	},
-	Andn: OpInfo{
-		Name: "andn",
-	},
-	Clz: OpInfo{
-		Name: "clz",
-	},
-	Clzw: OpInfo{
-		Name: "clzw",
-	},
-	Ctz: OpInfo{
-		Name: "ctz",
-	},
-	Cpop: OpInfo{
-		Name: "cpop",
-	},
-	Min: OpInfo{
-		Name: "min",
-	},
-	Minu: OpInfo{
-		Name: "minu",
-	},
-	Max: OpInfo{
-		Name: "max",
-	},
-	Maxu: OpInfo{
-		Name: "maxu",
-	},
-	Rori: OpInfo{
-		Name: "rori",
-	},
-	Roriw: OpInfo{
-		Name: "roriw",
-	},
-	Rev8: OpInfo{
-		Name: "rev8",
-	},
-	SextB: OpInfo{
-		Name: "sext.b",
-	},
-	SextH: OpInfo{
-		Name: "sext.h",
-	},
-	Sh1add: OpInfo{
-		Name: "sh1add",
-	},
-	Sh2add: OpInfo{
-		Name: "sh2add",
-	},
-	Sh3add: OpInfo{
-		Name: "sh3add",
-	},
-	Sh1addUw: OpInfo{
-		Name: "sh1add.uw",
-	},
-	Sh2addUw: OpInfo{
-		Name: "sh2add.uw",
-	},
-	Sh3addUw: OpInfo{
-		Name: "sh3add.uw",
-	},
-	Rolw: OpInfo{
-		Name: "rolw",
-	},
-	Rorw: OpInfo{
-		Name: "rorw",
-	},
-	Vpu: OpInfo{
-		Name: "vpu",
-		Desc: `Pseudo instruction encoding "V" vector extension instructions`,
-	},
 }
 
 const (
@@ -1230,6 +1237,14 @@ func (op Op) String() string {
 		return info.Name
 	}
 	return fmt.Sprintf("{Op %d}", op)
+}
+
+func (op VpuOp) String() string {
+	info, ok := VpuOperands[op]
+	if ok {
+		return info.Name
+	}
+	return fmt.Sprintf("{VpuOp %d}", op)
 }
 
 // Register defines RISC-V registers.
@@ -1322,7 +1337,26 @@ type Instr struct {
 	Imm int32
 }
 
-func pad(op Op) string {
+// VPU decodes the V extension instruction, flags, and imm from the
+// instruction. The function panics if instr.Op is not Vpu.
+func (instr Instr) VPU() (VpuOp, uint32, int32) {
+	if instr.Op != Vpu {
+		panic("not a vpu pseudo-instruction")
+	}
+	return VpuOp(instr.Imm & 0xff), uint32(instr.Imm >> 8 & 0b1111),
+		instr.Imm >> 12
+}
+
+// SetVPU encodes the V extension instruction op and flags into the
+// instruction. The instr.Imm must have been set before this call.
+func (instr *Instr) SetVPU(op VpuOp, flags uint32) {
+	instr.Imm <<= 12
+	instr.Imm |= int32(flags) << 8
+	instr.Imm |= int32(op)
+	instr.Op = Vpu
+}
+
+func pad(op fmt.Stringer) string {
 	name := op.String()
 	for len(name) < maxOpNameLen {
 		name += " "
@@ -1416,44 +1450,51 @@ func (instr Instr) String() string {
 			return fmt.Sprintf("%v %v,%b,%d",
 				pad(instr.Op), instr.Rd, CSR(instr.Imm), uint32(instr.Rs1))
 
-			// GroupOPV
-
-		case Vsetvli:
-			return fmt.Sprintf("%v %v,%v,%v",
-				pad(instr.Op), instr.Rd, instr.Rs1, VType(instr.Imm))
-		case Vsetivli:
-			return fmt.Sprintf("%v %v,%v,%v",
-				pad(instr.Op), instr.Rd, uint32(instr.Rs1), VType(instr.Imm))
-		case Vsetvl:
-			return fmt.Sprintf("%v %v,%v,%v",
-				pad(instr.Op), instr.Rd, instr.Rs1, VType(instr.Rs2))
-
-		case VmvVX:
-			result := fmt.Sprintf("%v v%v,%v",
-				pad(instr.Op), int(instr.Rd), instr.Rs1)
-			if instr.Imm == 0 {
-				result += fmt.Sprintf(",v%d.t", int(instr.Rs2))
-			}
-			return result
-
-		case VmvVV:
-			return fmt.Sprintf("%v v%v,%v",
-				pad(instr.Op), int(instr.Rd), int(instr.Rs1))
-
-		case VmvVI:
-			return fmt.Sprintf("%v v%v,%v",
-				pad(instr.Op), int(instr.Rd), instr.Imm)
-
-			// Vector loads and stores.
-		case Vle8V, Vle16V, Vle32V, Vle64V, Vse8V, Vse16V, Vse32V, Vse64V:
-			return instr.vsString()
+		case Vpu:
+			return instr.StringVPU()
 		}
 	}
 
 	return instr.Op.String()
 }
 
-func (instr Instr) vsString() string {
+func (instr Instr) StringVPU() string {
+	op, _, imm := instr.VPU()
+
+	switch op {
+	// GroupOPV
+	case Vsetvli:
+		return fmt.Sprintf("%v %v,%v,%v",
+			pad(op), instr.Rd, instr.Rs1, VType(imm))
+	case Vsetivli:
+		return fmt.Sprintf("%v %v,%v,%v",
+			pad(op), instr.Rd, uint32(instr.Rs1), VType(imm))
+	case Vsetvl:
+		return fmt.Sprintf("%v %v,%v,%v",
+			pad(op), instr.Rd, instr.Rs1, VType(instr.Rs2))
+
+	case VmvVX:
+		result := fmt.Sprintf("%v v%v,%v", pad(op), int(instr.Rd), instr.Rs1)
+		if imm == 0 {
+			result += fmt.Sprintf(",v%d.t", int(instr.Rs2))
+		}
+		return result
+
+	case VmvVV:
+		return fmt.Sprintf("%v v%v,%v", pad(op), int(instr.Rd), int(instr.Rs1))
+
+	case VmvVI:
+		return fmt.Sprintf("%v v%v,%v", pad(op), int(instr.Rd), imm)
+
+		// Vector loads and stores.
+	case Vle8V, Vle16V, Vle32V, Vle64V, Vse8V, Vse16V, Vse32V, Vse64V:
+		return instr.vsString(op)
+	}
+
+	return op.String()
+}
+
+func (instr Instr) vsString(instrOp VpuOp) string {
 	var size, op, ff string
 
 	lumop := instr.Imm & 0b11111
@@ -1461,7 +1502,7 @@ func (instr Instr) vsString() string {
 		ff = "ff"
 	}
 
-	switch instr.Op {
+	switch instrOp {
 	case Vle8V:
 		size = "8"
 		op = "l"

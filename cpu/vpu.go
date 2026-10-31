@@ -53,57 +53,34 @@ func NewVPU(cpu *CPU) *VPU {
 }
 
 func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
-	// Vector extension.
-
 	if vpuDebug {
 		vpu.cpu.tracef(raw, instr, "pc=%x", vpu.cpu.PC)
 		vpu.cpu.DebugTrace = true
 	}
-
 	if vpu.cpu.mstatus.VS() == isa.RegOff {
 		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 			fmt.Errorf("VS=%v", vpu.cpu.mstatus.VS()))
 	}
 
-	// Load and store instructions:
-	//
-	// 	 0:1 vm - 1 unmasked, 0 masked
-	// 	 1:3 mop:
-	// 	     - 000 unit-stride
-	// 	     - 010 strided
-	// 	     - 011 indexed (unordered)
-	// 	     - 111 indexed (ordered)
-	// 	 4:6 nf - number of fields = nf+1
+	op, flags, imm := instr.VPU()
 
-	switch instr.Op {
+	// The flags are hardcoded in decode:
+	vm := flags & 0b0001
+	nf := uint64(flags>>1&0b111) + 1
+
+	switch op {
 	case isa.Vsetvl:
 		vpu.setVL(instr.Rd, instr.Rs1, vpu.cpu.X[instr.Rs1],
 			isa.VType(vpu.cpu.X[instr.Rs2]))
 
 	case isa.Vsetvli:
-		vpu.setVL(instr.Rd, instr.Rs1, vpu.cpu.X[instr.Rs1],
-			isa.VType(instr.Imm))
+		vpu.setVL(instr.Rd, instr.Rs1, vpu.cpu.X[instr.Rs1], isa.VType(imm))
 
 	case isa.Vsetivli:
-		vpu.setVL(instr.Rd, 0xff, uint64(instr.Rs1), isa.VType(instr.Imm))
+		vpu.setVL(instr.Rd, 0xff, uint64(instr.Rs1), isa.VType(imm))
 
 	case isa.VmvVV:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-			err = vpu.requireAlign(raw, uint64(instr.Rs1), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
@@ -123,29 +100,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, memory.Uint64(vs1reg, vs1ofs))
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VmergeVvm:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-			err = vpu.requireAlign(raw, uint64(instr.Rs1), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-			err = vpu.requireAlign(raw, uint64(instr.Rs2), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
@@ -172,25 +129,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, memory.Uint64(vsreg, vsofs))
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VmergeVim:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-			err = vpu.requireAlign(raw, uint64(instr.Rs2), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
@@ -198,13 +139,13 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			if vpu.maskElt(0, i) {
 				switch sew {
 				case isa.E8:
-					reg[ofs] = uint8(int8(instr.Imm))
+					reg[ofs] = uint8(int8(imm))
 				case isa.E16:
-					memory.PutUint16(reg, ofs, uint16(int16(instr.Imm)))
+					memory.PutUint16(reg, ofs, uint16(int16(imm)))
 				case isa.E32:
-					memory.PutUint32(reg, ofs, uint32(int32(instr.Imm)))
+					memory.PutUint32(reg, ofs, uint32(int32(imm)))
 				case isa.E64:
-					memory.PutUint64(reg, ofs, uint64(int64(instr.Imm)))
+					memory.PutUint64(reg, ofs, uint64(int64(imm)))
 				}
 			} else {
 				vsreg, vsofs := vpu.elt(sew, uint64(instr.Rs2), i)
@@ -220,22 +161,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				}
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VandVx:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -265,16 +193,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, v&uint64(rs1))
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VsrlVx:
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
-
 		rs1 := vpu.cpu.X[instr.Rs1] & (uint64(sew) - 1)
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
@@ -304,22 +225,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, v>>rs1)
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VmulVx:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -349,15 +257,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, v*uint64(rs1))
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.Vslide1downVx:
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -395,22 +297,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				}
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VaddVx:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -440,22 +329,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, v+uint64(rs1))
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VaddVv:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -489,22 +365,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, vs1+vs2)
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VandVv:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -538,22 +401,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, vs1&vs2)
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VxorVv:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -587,22 +437,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, vs1^vs2)
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VorVv:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -636,39 +473,11 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, vs1|vs2)
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VrgatherVv:
 		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-			err = vpu.requireAlign(raw, uint64(instr.Rs1), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-			err = vpu.requireAlign(raw, uint64(instr.Rs2), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
-		if instr.Rd == instr.Rs1 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("vd and vs1 are the same register"))
-		}
-		if instr.Rd == instr.Rs2 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("vd and vs2 are the same register"))
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
 		vlmax := uint64(float32(vpu.VLEN/uint64(sew)) * vlmul)
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -725,22 +534,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, v)
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VmaxuVv:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -790,31 +586,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				}
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VmsneVv:
-		// if (insn.rd() != insn.rs2())
-		//   requiire_nooever(insn.rd(), 1, insn.rs2(), P.VU.vflmul)
-		// #define require_noover(astart, asize, bstart, bsize) \
-		//   require(!is_overlapped(astart, asize, bstart, bsize))
-
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rs1), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-			err = vpu.requireAlign(raw, uint64(instr.Rs2), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -849,25 +623,11 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 			vpu.setMaskElt(uint64(instr.Rd), i, res)
 		}
-		vpu.VStart = 0
 
 	case isa.VredsumVs:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		reg, ofs := vpu.elt(sew, uint64(instr.Rd), 0)
-
 		var vd0res uint64
 
 		vs1reg, vs1ofs := vpu.elt(sew, uint64(instr.Rs1), 0)
@@ -913,25 +673,11 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, uint64(vd0res))
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VredxorVs:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		reg, ofs := vpu.elt(sew, uint64(instr.Rd), 0)
-
 		var vd0res uint64
 
 		vs1reg, vs1ofs := vpu.elt(sew, uint64(instr.Rs1), 0)
@@ -977,14 +723,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, uint64(vd0res))
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VmvXS:
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
 		vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), 0)
 		var val uint64
 
@@ -999,15 +740,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			val = uint64(memory.Uint64(vs2reg, vs2ofs))
 		}
 		vpu.cpu.X[instr.Rd] = val
-		vpu.VStart = 0
 
 	case isa.VcpopM:
-		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 		var popcount uint64
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
@@ -1018,15 +752,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 		vpu.cpu.X[instr.Rd] = popcount
-		vpu.VStart = 0
 
 	case isa.VfirstM:
-		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 		var pos uint64 = 0xffffffffffffffff
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
@@ -1041,34 +768,10 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 		vpu.cpu.X[instr.Rd] = pos
-		vpu.VStart = 0
 
 	case isa.VslideupVi:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-			err = vpu.requireAlign(raw, uint64(instr.Rs2), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
-		if instr.Rd == instr.Rs2 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("vd and vs2 are the same register"))
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		// The vm bit is bit 0.
-		vm := instr.Imm & 1
-
-		// Imm is shifted one bit left.
-		offset := uint64(instr.Imm) >> 1
+		offset := uint64(imm)
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -1093,22 +796,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, memory.Uint64(vs2reg, vs2ofs))
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VidV:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		vm := instr.Imm & 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -1132,16 +822,12 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, uint64(i))
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VsextVf8:
 		sew := vpu.VType.VSEW()
 		from := sew / 8 // div=8
 		pat := uint32(((sew >> 3) << 4) | from>>3)
 
-		// The vm bit is bit 0.
-		vm := instr.Imm & 1
-
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
 				if !vpu.maskElt(0, i) {
@@ -1175,16 +861,12 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 					fmt.Errorf("SEW=%v", sew))
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VsextVf4:
 		sew := vpu.VType.VSEW()
 		from := sew / 4 // div=4
 		pat := uint32(((sew >> 3) << 4) | from>>3)
 
-		// The vm bit is bit 0.
-		vm := instr.Imm & 1
-
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
 				if !vpu.maskElt(0, i) {
@@ -1218,36 +900,17 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 					fmt.Errorf("SEW=%v", sew))
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VmorMM:
-		sew := vpu.VType.VSEW()
-		if sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			vs1 := vpu.maskElt(uint64(instr.Rs1), i)
 			vs2 := vpu.maskElt(uint64(instr.Rs2), i)
 
 			vpu.setMaskElt(uint64(instr.Rd), i, vs1 || vs2)
 		}
-		vpu.VStart = 0
 
 	case isa.VmvVX:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
@@ -1267,18 +930,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, uint64(rs1))
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VnsrlWx:
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-
-		// The vm bit is bit 0.
-		vm := instr.Imm & 1
-
 		rs1 := vpu.cpu.X[instr.Rs1] & (uint64(sew)*2 - 1)
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
@@ -1306,14 +960,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint32(reg, ofs, uint32(v>>rs1))
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VmvSX:
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
 
 		if vpu.VStart < vpu.VL {
 			reg, ofs := vpu.elt(sew, uint64(instr.Rd), 0)
@@ -1333,51 +982,34 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, uint64(rs1))
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VmvVI:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
 
 			switch sew {
 			case isa.E8:
-				reg[ofs] = uint8(instr.Imm)
+				reg[ofs] = uint8(imm)
 
 			case isa.E16:
-				memory.PutUint16(reg, ofs, uint16(instr.Imm))
+				memory.PutUint16(reg, ofs, uint16(imm))
 
 			case isa.E32:
-				memory.PutUint32(reg, ofs, uint32(instr.Imm))
+				memory.PutUint32(reg, ofs, uint32(imm))
 
 			case isa.E64:
-				memory.PutUint64(reg, ofs, uint64(instr.Imm))
+				memory.PutUint64(reg, ofs, uint64(imm))
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.Vle8V:
-		lumop := instr.Imm & 0b11111
-		vm := instr.Imm >> 5 & 0b1
-		mop := instr.Imm >> 6 & 0b111
-		nf := uint64(instr.Imm>>9&0b111) + 1
+		lumop := imm
 
-		if mop != 0 || nf != 1 || (lumop != 0 && lumop != 0b10000) {
+		if nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
-					instr, mop, nf))
+				fmt.Errorf("%v: nf=%v", instr, nf))
 		}
 
 		var eltSize uint64 = 1 // sizeof(uint8)
@@ -1418,18 +1050,13 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				reg[ofs] = val
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.Vle16V:
-		lumop := instr.Imm & 0b11111
-		vm := instr.Imm >> 5 & 0b1
-		mop := instr.Imm >> 6 & 0b111
-		nf := uint64(instr.Imm>>9&0b111) + 1
+		lumop := imm
 
-		if mop != 0 || nf != 1 || (lumop != 0 && lumop != 0b10000) {
+		if nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
-					instr, mop, nf))
+				fmt.Errorf("%v: nf=%v", instr, nf))
 		}
 
 		var eltSize uint64 = 2 // sizeof(uint16)
@@ -1470,18 +1097,13 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint16(reg, ofs, val)
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.Vle32V:
-		lumop := instr.Imm & 0b11111
-		vm := instr.Imm >> 5 & 0b1
-		mop := instr.Imm >> 6 & 0b111
-		nf := uint64(instr.Imm>>9&0b111) + 1
+		lumop := imm
 
-		if mop != 0 || nf != 1 || (lumop != 0 && lumop != 0b10000) {
+		if nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
-					instr, mop, nf))
+				fmt.Errorf("%v: nf=%v", instr, nf))
 		}
 
 		var eltSize uint64 = 4 // sizeof(uint32)
@@ -1522,18 +1144,13 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint32(reg, ofs, val)
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.Vle64V:
-		lumop := instr.Imm & 0b11111
-		vm := instr.Imm >> 5 & 0b1
-		mop := instr.Imm >> 6 & 0b111
-		nf := uint64(instr.Imm>>9&0b111) + 1
+		lumop := imm
 
-		if mop != 0 || nf != 1 || (lumop != 0 && lumop != 0b10000) {
+		if nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
-					instr, mop, nf))
+				fmt.Errorf("%v: nf=%v", instr, nf))
 		}
 
 		var eltSize uint64 = 8 // sizeof(uint64)
@@ -1574,15 +1191,13 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, val)
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.Vl1re8V:
 		sew := vpu.VType.VSEW()
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vd := uint64(instr.Rd)
-		length := uint64(instr.Imm>>9&0b111) + 1
 		eltPerReg := vpu.VLEN / 8 / sew.Len()
-		size := length * eltPerReg
+		size := nf * eltPerReg
 
 		for i := vpu.VStart; i < size; i++ {
 			vpu.VStart = i
@@ -1593,17 +1208,11 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			reg, ofs := vpu.elt(sew, vd, i)
 			reg[ofs] = val
 		}
-		vpu.VStart = 0
 
 	case isa.VlmV:
-		vm := instr.Imm >> 5 & 0b1
-		mop := instr.Imm >> 6 & 0b111
-		nf := uint64(instr.Imm>>9&0b111) + 1
-
-		if mop != 0 || nf != 1 {
+		if nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
-					instr, mop, nf))
+				fmt.Errorf("%v: nf=%v", instr, nf))
 		}
 
 		var eltSize uint64 = 1 // sizeof(uint8)
@@ -1638,12 +1247,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				reg[ofs] = val
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.Vluxei64V:
-		vm := instr.Imm >> 5 & 0b1
-		nf := uint64(instr.Imm>>9&0b111) + 1
-
 		var flmul uint64
 		vlmul := vpu.VType.VLMUL()
 		if vlmul < 1 {
@@ -1705,17 +1310,11 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				}
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.Vse8V:
-		vm := instr.Imm & 0b1
-		mop := instr.Imm >> 1 & 0b111
-		nf := uint64(instr.Imm>>4&0b111) + 1
-
-		if mop != 0 || nf != 1 {
+		if nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
-					instr, mop, nf))
+				fmt.Errorf("%v: nf=%v", instr, nf))
 		}
 
 		var eltSize uint64 = 1 // sizeof(uint8)
@@ -1751,17 +1350,11 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				}
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.Vse16V:
-		vm := instr.Imm & 0b1
-		mop := instr.Imm >> 1 & 0b111
-		nf := uint64(instr.Imm>>4&0b111) + 1
-
-		if mop != 0 || nf != 1 {
+		if nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
-					instr, mop, nf))
+				fmt.Errorf("%v: nf=%v", instr, nf))
 		}
 
 		var eltSize uint64 = 2 // sizeof(uint16)
@@ -1796,17 +1389,11 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				}
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.Vse32V:
-		vm := instr.Imm & 0b1
-		mop := instr.Imm >> 1 & 0b111
-		nf := uint64(instr.Imm>>4&0b111) + 1
-
-		if mop != 0 || nf != 1 {
+		if nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
-					instr, mop, nf))
+				fmt.Errorf("%v: nf=%v", instr, nf))
 		}
 
 		var eltSize uint64 = 4 // sizeof(uint32)
@@ -1841,17 +1428,11 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				}
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.Vse64V:
-		vm := instr.Imm & 0b1
-		mop := instr.Imm >> 1 & 0b111
-		nf := uint64(instr.Imm>>4&0b111) + 1
-
-		if mop != 0 || nf != 1 {
+		if nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: not implemented yet: mop=%v, nf=%v",
-					instr, mop, nf))
+				fmt.Errorf("%v: nf=%v", instr, nf))
 		}
 
 		var eltSize uint64 = 8 // sizeof(uint64)
@@ -1886,76 +1467,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				}
 			}
 		}
-		vpu.VStart = 0
-
-	case isa.VrsubVi:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
-		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-
-		// The vm bit is bit 0.
-		vm := instr.Imm & 1
-
-		// Imm is shifted one bit left.
-		imm := instr.Imm >> 1
-
-		for i := vpu.VStart; i < vpu.VL; i++ {
-			if vm == 0 {
-				if !vpu.maskElt(0, i) {
-					continue
-				}
-			}
-			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
-			vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), i)
-
-			switch sew {
-			case isa.E8:
-				v := vs2reg[vs2ofs]
-				reg[ofs] = uint8(int8(imm) - int8(v))
-
-			case isa.E16:
-				v := memory.Uint16(vs2reg, vs2ofs)
-				memory.PutUint16(reg, ofs, uint16(int16(imm)-int16(v)))
-
-			case isa.E32:
-				v := memory.Uint32(vs2reg, vs2ofs)
-				memory.PutUint32(reg, ofs, uint32(int32(imm)-int32(v)))
-
-			case isa.E64:
-				v := memory.Uint64(vs2reg, vs2ofs)
-				memory.PutUint64(reg, ofs, uint64(int64(imm)-int64(v)))
-			}
-		}
-		vpu.VStart = 0
 
 	case isa.VaddVi:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-
-		// The vm bit is bit 0.
-		vm := instr.Imm & 1
-
-		// Imm is shifted one bit left.
-		imm := instr.Imm >> 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -1984,27 +1498,40 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, uint64(int64(v)+int64(imm)))
 			}
 		}
-		vpu.VStart = 0
 
-	case isa.VmseqVi:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rs2), uint64(vlmul))
-			if err != nil {
-				return err
+	case isa.VrsubVi:
+		sew := vpu.VType.VSEW()
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+			vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), i)
+
+			switch sew {
+			case isa.E8:
+				v := vs2reg[vs2ofs]
+				reg[ofs] = uint8(int8(imm) - int8(v))
+
+			case isa.E16:
+				v := memory.Uint16(vs2reg, vs2ofs)
+				memory.PutUint16(reg, ofs, uint16(int16(imm)-int16(v)))
+
+			case isa.E32:
+				v := memory.Uint32(vs2reg, vs2ofs)
+				memory.PutUint32(reg, ofs, uint32(int32(imm)-int32(v)))
+
+			case isa.E64:
+				v := memory.Uint64(vs2reg, vs2ofs)
+				memory.PutUint64(reg, ofs, uint64(int64(imm)-int64(v)))
 			}
 		}
+
+	case isa.VmseqVi:
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-
-		// The vm bit is bit 0.
-		vm := instr.Imm & 1
-
-		// Imm is shifted one bit left.
-		imm := instr.Imm >> 1
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -2034,27 +1561,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 			vpu.setMaskElt(uint64(instr.Rd), i, res)
 		}
-		vpu.VStart = 0
 
 	case isa.VsllVi:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		imm := uint32(instr.Imm)
-
-		// The vm bit is bit 31.
-		vm := imm & (1 << 31)
-
-		imm &^= 1 << 31
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -2083,27 +1592,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, v<<(imm&63))
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VsrlVi:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		imm := uint32(instr.Imm)
-
-		// The vm bit is bit 31.
-		vm := imm & (1 << 31)
-
-		imm &^= 1 << 31
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -2132,27 +1623,9 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, v>>(imm&63))
 			}
 		}
-		vpu.VStart = 0
 
 	case isa.VsraVi:
-		vlmul := vpu.VType.VLMUL()
-		if vlmul > 1 {
-			err := vpu.requireAlign(raw, uint64(instr.Rd), uint64(vlmul))
-			if err != nil {
-				return err
-			}
-		}
 		sew := vpu.VType.VSEW()
-		if sew < isa.E8 || sew > isa.E64 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("SEW=%v", sew))
-		}
-		imm := uint32(instr.Imm)
-
-		// The vm bit is bit 31.
-		vm := imm & (1 << 31)
-
-		imm &^= 1 << 31
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -2181,25 +1654,20 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				memory.PutUint64(reg, ofs, uint64(int64(v)>>(imm&63)))
 			}
 		}
-		vpu.VStart = 0
 
 	default:
+		vpu.cpu.tracef(raw, instr, "not implemented")
+		vpu.cpu.Dump(vpu.cpu.PC)
 		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-			fmt.Errorf("%v not implemented yet", instr))
+			fmt.Errorf("instruction %v[0x%x] not implemented yet",
+				instr, raw))
 	}
 
+	vpu.VStart = 0
 	vpu.cpu.mstatus.SetVS(isa.RegDirty)
 	vpu.cpu.mstatus.SetSD(true)
 
 	return nil
-}
-
-func (vpu *VPU) requireAlign(raw uint32, val, pos uint64) error {
-	if pos == 0 || val&(pos-1) == 0 {
-		return nil
-	}
-	return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-		fmt.Errorf("value %v not aligned at %v", val, pos))
 }
 
 func (vpu *VPU) setVL(rd, rs1 isa.Register, reqVL uint64, newType isa.VType) {
@@ -2244,7 +1712,6 @@ func (vpu *VPU) setVL(rd, rs1 isa.Register, reqVL uint64, newType isa.VType) {
 	}
 
 	vpu.cpu.X[rd] = vpu.VL
-	vpu.VStart = 0
 }
 
 func (vpu *VPU) elt(sew isa.SEW, vreg, n uint64) ([]byte, uint64) {
