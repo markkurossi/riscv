@@ -41,7 +41,7 @@ const (
 	CauseStoreGuestPageFault
 )
 
-var exceptionCauses = map[uint64]string{
+var ExceptionCauses = map[uint64]string{
 	CauseInstAddrMisaligned:  "Instruction address misaligned",
 	CauseInstAccessFault:     "Instruction access fault",
 	CauseIllegalInstr:        "Illegal instruction",
@@ -210,7 +210,7 @@ func (trap *Trap) Error() string {
 			name = fmt.Sprintf("Interrupt %d", cause)
 		}
 	} else {
-		name, ok = exceptionCauses[trap.Cause]
+		name, ok = ExceptionCauses[trap.Cause]
 		if !ok {
 			name = fmt.Sprintf("Exception %d", trap.Cause)
 		}

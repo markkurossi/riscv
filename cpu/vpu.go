@@ -1316,7 +1316,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 					uint64(int64(int32(memory.Uint32(vs2reg, vs2ofs)))))
 
 			default:
-				return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
 					fmt.Errorf("SEW=%v", sew))
 			}
 		}
@@ -1355,7 +1355,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 					uint64(memory.Uint32(vs2reg, vs2ofs)))
 
 			default:
-				return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
 					fmt.Errorf("SEW=%v", sew))
 			}
 		}
@@ -1394,7 +1394,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 					uint64(int64(int32(memory.Uint32(vs2reg, vs2ofs)))))
 
 			default:
-				return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
 					fmt.Errorf("SEW=%v", sew))
 			}
 		}
@@ -1433,7 +1433,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 					uint64(memory.Uint32(vs2reg, vs2ofs)))
 
 			default:
-				return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
 					fmt.Errorf("SEW=%v", sew))
 			}
 		}
@@ -1580,8 +1580,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		lumop := imm
 
 		if nf != 1 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: nf=%v", instr, nf))
+			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("nf=%v", nf))
 		}
 
 		var eltSize uint64 = 1 // sizeof(uint8)
@@ -1627,8 +1627,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		lumop := imm
 
 		if nf != 1 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: nf=%v", instr, nf))
+			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("nf=%v", nf))
 		}
 
 		var eltSize uint64 = 2 // sizeof(uint16)
@@ -1674,8 +1674,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		lumop := imm
 
 		if nf != 1 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: nf=%v", instr, nf))
+			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("nf=%v", nf))
 		}
 
 		var eltSize uint64 = 4 // sizeof(uint32)
@@ -1721,8 +1721,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		lumop := imm
 
 		if nf != 1 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: nf=%v", instr, nf))
+			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("nf=%v", nf))
 		}
 
 		var eltSize uint64 = 8 // sizeof(uint64)
@@ -1766,8 +1766,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 	case isa.Vlse32V:
 		if nf != 1 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: nf=%v", instr, nf))
+			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("nf=%v", nf))
 		}
 
 		var eltSize uint64 = 4 // sizeof(uint32)
@@ -1805,8 +1805,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 	case isa.Vlse64V:
 		if nf != 1 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: nf=%v", instr, nf))
+			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("nf=%v", nf))
 		}
 
 		var eltSize uint64 = 8 // sizeof(uint64)
@@ -1861,8 +1861,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 	case isa.VlmV:
 		if nf != 1 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: nf=%v", instr, nf))
+			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("nf=%v", nf))
 		}
 
 		var eltSize uint64 = 1 // sizeof(uint8)
@@ -1980,8 +1980,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 	case isa.Vse8V:
 		if nf != 1 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: nf=%v", instr, nf))
+			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("nf=%v", nf))
 		}
 
 		var eltSize uint64 = 1 // sizeof(uint8)
@@ -2020,8 +2020,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 	case isa.Vse16V:
 		if nf != 1 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: nf=%v", instr, nf))
+			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("nf=%v", nf))
 		}
 
 		var eltSize uint64 = 2 // sizeof(uint16)
@@ -2059,8 +2059,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 	case isa.Vse32V:
 		if nf != 1 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: nf=%v", instr, nf))
+			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("nf=%v", nf))
 		}
 
 		var eltSize uint64 = 4 // sizeof(uint32)
@@ -2098,8 +2098,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 	case isa.Vse64V:
 		if nf != 1 {
-			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("%v: nf=%v", instr, nf))
+			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("nf=%v", nf))
 		}
 
 		var eltSize uint64 = 8 // sizeof(uint64)
@@ -2508,6 +2508,12 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	vpu.cpu.mstatus.SetSD(true)
 
 	return nil
+}
+
+func (vpu *VPU) trap(raw uint32, instr isa.Instr, cause, tval uint64,
+	err error) error {
+	vpu.cpu.tracef(raw, instr, "%v: %v", isa.ExceptionCauses[cause], err)
+	return vpu.cpu.Trap(cause, tval, err)
 }
 
 func (vpu *VPU) setVL(rd, rs1 isa.Register, reqVL uint64, newType isa.VType) {
