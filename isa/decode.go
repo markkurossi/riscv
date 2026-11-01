@@ -1630,6 +1630,10 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Imm = int32(raw<<12) >> 27
 				instr.SetVPU(VrsubVi, uint32(funct7&0b1))
 
+			case 0b001001:
+				instr.Imm = int32(raw<<12) >> 27
+				instr.SetVPU(VandVi, uint32(funct7&0b1))
+
 			case 0b001100:
 				if instr.Rd == instr.Rs2 {
 					return instr, fmt.Errorf("vrgather.vi: vd == vs2")
