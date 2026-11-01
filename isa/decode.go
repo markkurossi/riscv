@@ -1701,6 +1701,9 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b000000:
 				instr.SetVPU(VaddVx, uint32(funct7&0b1))
 
+			case 0b000011:
+				instr.SetVPU(VrsubVx, uint32(funct7&0b1))
+
 			case 0b001001:
 				instr.SetVPU(VandVx, uint32(funct7&0b1))
 
