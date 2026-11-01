@@ -803,6 +803,58 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			vpu.setMaskElt(uint64(instr.Rd), i, res)
 		}
 
+	case isa.VssubuVv:
+		sew := vpu.VType.VSEW()
+		_ = sew
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+			vs1reg, vs1ofs := vpu.elt(sew, uint64(instr.Rs1), i)
+			vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), i)
+
+			var sat bool
+
+			switch sew {
+			case isa.E8:
+				vs1 := vs1reg[vs1ofs]
+				vs2 := vs2reg[vs2ofs]
+
+				var v uint8
+				v, sat = satSubu[uint8](vs2, vs1)
+				reg[ofs] = v
+
+			case isa.E16:
+				vs1 := memory.Uint16(vs1reg, vs1ofs)
+				vs2 := memory.Uint16(vs2reg, vs2ofs)
+
+				var v uint16
+				v, sat = satSubu[uint16](vs2, vs1)
+				memory.PutUint16(reg, ofs, v)
+
+			case isa.E32:
+				vs1 := memory.Uint32(vs1reg, vs1ofs)
+				vs2 := memory.Uint32(vs2reg, vs2ofs)
+
+				var v uint32
+				v, sat = satSubu[uint32](vs2, vs1)
+				memory.PutUint32(reg, ofs, v)
+
+			case isa.E64:
+				vs1 := memory.Uint64(vs1reg, vs1ofs)
+				vs2 := memory.Uint64(vs2reg, vs2ofs)
+
+				var v uint64
+				v, sat = satSubu[uint64](vs2, vs1)
+				memory.PutUint64(reg, ofs, v)
+			}
+			_ = sat
+		}
+
 	case isa.VsrlVv:
 		sew := vpu.VType.VSEW()
 
@@ -2488,4 +2540,19 @@ func (vpu *VPU) setMaskElt(vreg, n uint64, v bool) {
 	} else {
 		reg[ofs] &^= bit
 	}
+}
+
+type Unsigned interface {
+	uint8 | uint16 | uint32 | uint64
+}
+
+func satSubu[T Unsigned](x, y T) (T, bool) {
+	res := x - y
+	sat := x < y
+
+	if sat {
+		res = 0
+	}
+
+	return res, sat
 }
