@@ -1583,6 +1583,8 @@ func Decode(raw uint32) (Instr, error) {
 					instr.SetVPU(VzextVf4, uint32(funct7&0b1))
 				case 0b00101:
 					instr.SetVPU(VsextVf4, uint32(funct7&0b1))
+				case 0b00110:
+					instr.SetVPU(VzextVf2, uint32(funct7&0b1))
 
 				default:
 					return instr, fmt.Errorf("%v/%03b/%06b, vs1=%05b, raw=%x",
