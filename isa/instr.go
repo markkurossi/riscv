@@ -441,7 +441,7 @@ const (
 	VsrlVi
 	VsraVi
 	VnsrlWi
-	VwsllVi
+	VwsllVi // Zvbb
 )
 
 // OpInfo defines opcode information.
