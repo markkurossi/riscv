@@ -1513,6 +1513,9 @@ func Decode(raw uint32) (Instr, error) {
 					instr.SetVPU(VmergeVvm, 0)
 				}
 
+			case 0b011000:
+				instr.SetVPU(VmseqVv, uint32(funct7&0b1))
+
 			case 0b011001:
 				instr.SetVPU(VmsneVv, uint32(funct7&0b1))
 
