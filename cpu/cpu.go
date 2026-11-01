@@ -2169,7 +2169,7 @@ func (cpu *CPU) pctrace(pc uint64, raw uint32, instr isa.Instr, msg string) {
 		}
 	}
 	if len(msg) > 0 {
-		for len(line) < commentColumn {
+		for len(line)%8 != 0 {
 			line += " "
 		}
 		line += fmt.Sprintf(" # %s", msg)

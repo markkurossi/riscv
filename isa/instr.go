@@ -1458,7 +1458,7 @@ func (instr *Instr) SetVPU(op VpuOp, flags uint32) {
 
 func pad(op fmt.Stringer) string {
 	name := op.String()
-	for len(name) < maxOpNameLen {
+	for len(name)%8 != 0 {
 		name += " "
 	}
 	return name
