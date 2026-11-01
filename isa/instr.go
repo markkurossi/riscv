@@ -393,6 +393,7 @@ const (
 	VrgatherVv
 	VmsneVv
 	VmsltuVv
+	VmsltVv
 	VsrlVv
 	VredsumVs
 	VredandVs
@@ -1143,6 +1144,9 @@ var VpuOperands = map[VpuOp]OpInfo{
 	},
 	VmsltuVv: OpInfo{
 		Name: "vmsltu.vv",
+	},
+	VmsltVv: OpInfo{
+		Name: "vmslt.vv",
 	},
 	VsrlVv: OpInfo{
 		Name: "vsrl.vv",
