@@ -2217,6 +2217,37 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 
+	case isa.VwsllVi:
+		sew := vpu.VType.VSEW()
+		zimm := uint64(imm & 0b11111)
+		shift := zimm & (uint64(sew)*2 - 1)
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), i)
+
+			switch sew {
+			case isa.E8:
+				v := vs2reg[vs2ofs]
+				reg, ofs := vpu.elt(isa.E16, uint64(instr.Rd), i)
+				memory.PutUint16(reg, ofs, uint16(v)<<shift)
+
+			case isa.E16:
+				v := memory.Uint16(vs2reg, vs2ofs)
+				reg, ofs := vpu.elt(isa.E32, uint64(instr.Rd), i)
+				memory.PutUint32(reg, ofs, uint32(v)<<shift)
+
+			case isa.E32:
+				v := memory.Uint32(vs2reg, vs2ofs)
+				reg, ofs := vpu.elt(isa.E64, uint64(instr.Rd), i)
+				memory.PutUint64(reg, ofs, uint64(v)<<shift)
+			}
+		}
+
 	default:
 		vpu.cpu.tracef(raw, instr, "not implemented")
 		vpu.cpu.Dump(vpu.cpu.PC)

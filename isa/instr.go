@@ -441,6 +441,7 @@ const (
 	VsrlVi
 	VsraVi
 	VnsrlWi
+	VwsllVi
 )
 
 // OpInfo defines opcode information.
@@ -1284,6 +1285,9 @@ var VpuOperands = map[VpuOp]OpInfo{
 	},
 	VnsrlWi: OpInfo{
 		Name: "vnsrl.wi",
+	},
+	VwsllVi: OpInfo{
+		Name: "vwsll.vi",
 	},
 }
 

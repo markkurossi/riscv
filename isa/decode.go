@@ -1660,6 +1660,10 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Imm = int32(instr.Rs1)
 				instr.SetVPU(VnsrlWi, uint32(funct7&0b1))
 
+			case 0b110101:
+				instr.Imm = int32(instr.Rs1)
+				instr.SetVPU(VwsllVi, uint32(funct7&0b1))
+
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
 					group, funct3, funct7>>1, raw)
