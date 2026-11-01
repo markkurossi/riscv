@@ -580,10 +580,14 @@ dispatch:
 			// nop
 
 		case isa.CboZero:
-			paddr := cpu.X[instr.Rs1]
+			vaddr := cpu.X[instr.Rs1]
+			paddr, err := cpu.MMU.Map(vaddr, mmu.AccessWrite)
+			if err != nil {
+				return cpu.Trap(isa.CauseStorePageFault, vaddr, err)
+			}
 			page, err := cpu.MMU.Mem.Page(memory.Page(paddr))
 			if err != nil {
-				return err
+				return cpu.Trap(isa.CauseStoreAccessFault, vaddr, err)
 			}
 			if false {
 				clear(page[:64])
