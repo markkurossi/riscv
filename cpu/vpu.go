@@ -2448,6 +2448,39 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			vpu.setMaskElt(uint64(instr.Rd), i, res)
 		}
 
+	case isa.VmsgtuVi:
+		sew := vpu.VType.VSEW()
+		const uint64Max = 0xffffffffffffffff
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), i)
+			var res bool
+
+			switch sew {
+			case isa.E8:
+				v := vs2reg[vs2ofs]
+				res = v > uint8(imm&0xff)
+
+			case isa.E16:
+				v := memory.Uint16(vs2reg, vs2ofs)
+				res = v > uint16(imm&0xffff)
+
+			case isa.E32:
+				v := memory.Uint32(vs2reg, vs2ofs)
+				res = v > uint32(imm)
+
+			case isa.E64:
+				v := memory.Uint64(vs2reg, vs2ofs)
+				res = v > uint64(imm)
+			}
+			vpu.setMaskElt(uint64(instr.Rd), i, res)
+		}
+
 	case isa.VsllVi:
 		sew := vpu.VType.VSEW()
 
