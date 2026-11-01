@@ -433,6 +433,7 @@ const (
 	VrgatherVi
 	VaddVi
 	VmseqVi
+	VmsneVi
 	VsllVi
 	VmvnfrV
 	VsrlVi
@@ -1257,6 +1258,9 @@ var VpuOperands = map[VpuOp]OpInfo{
 	},
 	VmseqVi: OpInfo{
 		Name: "vmseq.vi",
+	},
+	VmsneVi: OpInfo{
+		Name: "vmsne.vi",
 	},
 	VsllVi: OpInfo{
 		Name: "vsll.vi",
