@@ -1259,8 +1259,13 @@ func Decode(raw uint32) (Instr, error) {
 					return instr, fmt.Errorf("%v/%03b/%02b/%05b, raw=%08x",
 						group, funct3, mop, lumop, raw)
 				}
+
 			case 0b01: // indexed-unordered - vluxei<eew>
 				instr.SetVPU(Vluxei64V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+
+			case 0b10: // strided - vlse<eew>
+				instr.SetVPU(Vlse64V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+
 			default:
 				return instr, fmt.Errorf("%v/%03b/%02b, raw=%08x",
 					group, funct3, mop, raw)
