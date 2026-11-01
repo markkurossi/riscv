@@ -1503,6 +1503,23 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 
+	case isa.Vlnfre64V:
+		eltWidth := isa.E64
+		baseAddr := vpu.cpu.X[instr.Rs1]
+		vd := uint64(instr.Rd)
+		eltPerReg := vpu.VLEN / 8 / eltWidth.Len()
+		size := nf * eltPerReg
+
+		for i := vpu.VStart; i < size; i++ {
+			vpu.VStart = i
+			val, err := vpu.cpu.MMU.Load64(baseAddr + i*eltWidth.Len())
+			if err != nil {
+				return err
+			}
+			reg, ofs := vpu.elt(eltWidth, vd, i)
+			memory.PutUint64(reg, ofs, val)
+		}
+
 	case isa.Vse8V:
 		if nf != 1 {
 			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),

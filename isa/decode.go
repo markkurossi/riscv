@@ -1167,7 +1167,7 @@ func Decode(raw uint32) (Instr, error) {
 		//   0 0 0 0 0  | unit-stride load
 		//   0 1 0 0 0  | unit-stride, whole register load
 		//   0 1 0 1 1  | unit-stride, mask load, EEW=8
-		//   1 0 0 0 0  | unit-stride fault-only-rst
+		//   1 0 0 0 0  | unit-stride fault-only-first
 		//   x x x x x  | other encodings reserved
 		//
 		// Table 12. sumop:
@@ -1247,9 +1247,14 @@ func Decode(raw uint32) (Instr, error) {
 			switch mop {
 			case 0b00: // unit-stride - vle<eew>
 				switch lumop {
-				case 0b00000, 0b10000:
+				case 0b00000, 0b10000: // unit-stride load/fault-only-first
 					instr.Imm = lumop
 					instr.SetVPU(Vle64V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+
+				case 0b01000: // unit-stride, whole register load
+					instr.SetVPU(Vlnfre64V,
+						uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+
 				default:
 					return instr, fmt.Errorf("%v/%03b/%02b/%05b, raw=%08x",
 						group, funct3, mop, lumop, raw)
