@@ -2013,6 +2013,23 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			memory.PutUint16(reg, ofs, val)
 		}
 
+	case isa.Vl1re32V:
+		sew := vpu.VType.VSEW()
+		baseAddr := vpu.cpu.X[instr.Rs1]
+		vd := uint64(instr.Rd)
+		eltPerReg := vpu.VLEN / 8 / sew.Len()
+		size := nf * eltPerReg
+
+		for i := vpu.VStart; i < size; i++ {
+			vpu.VStart = i
+			val, err := vpu.cpu.MMU.Load32(baseAddr + i*sew.Len())
+			if err != nil {
+				return err
+			}
+			reg, ofs := vpu.elt(sew, vd, i)
+			memory.PutUint32(reg, ofs, val)
+		}
+
 	case isa.VlmV:
 		var eltSize uint64 = 1 // sizeof(uint8)
 		veew := eltSize * 8

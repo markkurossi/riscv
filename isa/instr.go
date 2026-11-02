@@ -437,6 +437,7 @@ const (
 	Vlse64V
 	Vl1re8V
 	Vl1re16V
+	Vl1re32V
 	VlmV
 	Vluxei64V
 	Vlnfre64V
@@ -1290,6 +1291,9 @@ var VpuOperands = map[VpuOp]OpInfo{
 	},
 	Vl1re16V: OpInfo{
 		Name: "vl1re16.v",
+	},
+	Vl1re32V: OpInfo{
+		Name: "vl1re32.v",
 	},
 	VlmV: OpInfo{
 		Name: "vlm.v",
