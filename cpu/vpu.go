@@ -1575,6 +1575,39 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 
+	case isa.VmseqVx:
+		sew := vpu.VType.VSEW()
+		rs1 := vpu.cpu.X[instr.Rs1]
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), i)
+			var res bool
+
+			switch sew {
+			case isa.E8:
+				vs2 := vs2reg[vs2ofs]
+				res = vs2 == uint8(rs1)
+
+			case isa.E16:
+				vs2 := memory.Uint16(vs2reg, vs2ofs)
+				res = vs2 == uint16(rs1)
+
+			case isa.E32:
+				vs2 := memory.Uint32(vs2reg, vs2ofs)
+				res = vs2 == uint32(rs1)
+
+			case isa.E64:
+				vs2 := memory.Uint64(vs2reg, vs2ofs)
+				res = vs2 == rs1
+			}
+			vpu.setMaskElt(uint64(instr.Rd), i, res)
+		}
+
 	case isa.VmsltuVx:
 		sew := vpu.VType.VSEW()
 		rs1 := vpu.cpu.X[instr.Rs1]
