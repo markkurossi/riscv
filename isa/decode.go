@@ -1214,6 +1214,8 @@ func Decode(raw uint32) (Instr, error) {
 				case 0b00000, 0b10000:
 					instr.Imm = lumop
 					instr.SetVPU(Vle16V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+				case 0b01000:
+					instr.SetVPU(Vl1re16V, uint32(raw>>28&0b1110))
 				default:
 					return instr, fmt.Errorf("%v/%03b/%02b/%05b, raw=%08x",
 						group, funct3, mop, lumop, raw)
