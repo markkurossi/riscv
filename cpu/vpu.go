@@ -1683,14 +1683,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 	case isa.Vle8V:
 		lumop := imm
-
-		if nf != 1 {
-			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("nf=%v", nf))
-		}
-
 		var eltSize uint64 = 1 // sizeof(uint8)
-
 		veew := eltSize * 8
 		vemul := float32(veew) / float32(vpu.VType.VSEW()) * vpu.VType.VLMUL()
 
@@ -1730,14 +1723,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 	case isa.Vle16V:
 		lumop := imm
-
-		if nf != 1 {
-			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("nf=%v", nf))
-		}
-
 		var eltSize uint64 = 2 // sizeof(uint16)
-
 		veew := eltSize * 8
 		vemul := float32(veew) / float32(vpu.VType.VSEW()) * vpu.VType.VLMUL()
 
@@ -1777,14 +1763,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 	case isa.Vle32V:
 		lumop := imm
-
-		if nf != 1 {
-			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("nf=%v", nf))
-		}
-
 		var eltSize uint64 = 4 // sizeof(uint32)
-
 		veew := eltSize * 8
 		vemul := float32(veew) / float32(vpu.VType.VSEW()) * vpu.VType.VLMUL()
 
@@ -1824,14 +1803,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 	case isa.Vle64V:
 		lumop := imm
-
-		if nf != 1 {
-			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("nf=%v", nf))
-		}
-
 		var eltSize uint64 = 8 // sizeof(uint64)
-
 		veew := eltSize * 8
 		vemul := float32(veew) / float32(vpu.VType.VSEW()) * vpu.VType.VLMUL()
 
@@ -1870,13 +1842,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 
 	case isa.Vlse32V:
-		if nf != 1 {
-			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("nf=%v", nf))
-		}
-
 		var eltSize uint64 = 4 // sizeof(uint32)
-
 		veew := eltSize * 8
 		vemul := float32(veew) / float32(vpu.VType.VSEW()) * vpu.VType.VLMUL()
 
@@ -1909,13 +1875,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 
 	case isa.Vlse64V:
-		if nf != 1 {
-			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("nf=%v", nf))
-		}
-
 		var eltSize uint64 = 8 // sizeof(uint64)
-
 		veew := eltSize * 8
 		vemul := float32(veew) / float32(vpu.VType.VSEW()) * vpu.VType.VLMUL()
 
@@ -1965,13 +1925,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 
 	case isa.VlmV:
-		if nf != 1 {
-			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("nf=%v", nf))
-		}
-
 		var eltSize uint64 = 1 // sizeof(uint8)
-
 		veew := eltSize * 8
 		vemul := float32(veew) / float32(vpu.VType.VSEW()) * vpu.VType.VLMUL()
 
@@ -2084,13 +2038,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 
 	case isa.Vse8V:
-		if nf != 1 {
-			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("nf=%v", nf))
-		}
-
 		var eltSize uint64 = 1 // sizeof(uint8)
-
 		veew := eltSize * 8
 		vemul := float32(veew) / float32(vpu.VType.VSEW()) * vpu.VType.VLMUL()
 
@@ -2124,13 +2072,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 
 	case isa.Vse16V:
-		if nf != 1 {
-			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("nf=%v", nf))
-		}
-
 		var eltSize uint64 = 2 // sizeof(uint16)
-
 		veew := eltSize * 8
 		vemul := float32(veew) / float32(vpu.VType.VSEW()) * vpu.VType.VLMUL()
 
@@ -2163,13 +2105,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 
 	case isa.Vse32V:
-		if nf != 1 {
-			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("nf=%v", nf))
-		}
-
 		var eltSize uint64 = 4 // sizeof(uint32)
-
 		veew := eltSize * 8
 		vemul := float32(veew) / float32(vpu.VType.VSEW()) * vpu.VType.VLMUL()
 
@@ -2202,13 +2138,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 
 	case isa.Vse64V:
-		if nf != 1 {
-			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
-				fmt.Errorf("nf=%v", nf))
-		}
-
 		var eltSize uint64 = 8 // sizeof(uint64)
-
 		veew := eltSize * 8
 		vemul := float32(veew) / float32(vpu.VType.VSEW()) * vpu.VType.VLMUL()
 
