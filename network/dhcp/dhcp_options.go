@@ -54,6 +54,7 @@ const (
 	TagDomainServer               OptionTag = 6
 	TagHostname                   OptionTag = 12
 	TagDomainName                 OptionTag = 15
+	TagRootPath                   OptionTag = 17
 	TagMTUInterface               OptionTag = 26
 	TagBroadcastAddress           OptionTag = 28
 	TagStaticRoute                OptionTag = 33
@@ -73,6 +74,7 @@ const (
 	TagSIPServersDHCPOption       OptionTag = 120
 	TagClasslessStaticRouteOption OptionTag = 121
 	TagForcerenewNonceCapable     OptionTag = 145
+	TagEncryptedDNSServer         OptionTag = 162
 	TagEnd                        OptionTag = 255
 )
 
@@ -186,6 +188,7 @@ var options = map[OptionTag]OptType{
 	TagDomainServer:     {'I', "Domain Server"},
 	TagHostname:         {'s', "Hostname"},
 	TagDomainName:       {'s', "Domain Name"},
+	TagRootPath:         {'s', "Root Path"},
 	TagMTUInterface:     {'d', "MTU Interface"},
 	TagBroadcastAddress: {'i', "Broadcast Address"},
 	TagStaticRoute:      {'I', "Static Route"},
@@ -221,4 +224,8 @@ var options = map[OptionTag]OptType{
 	// RFC RFC8910 - Captive-Portal Identification in DHCP and Router
 	// Advertisements (RAs)
 	TagDHCPCaptivePortal: {'x', "DHCP Captive-Portal"},
+
+	// RFC 9463: DHCP and Router Advertisement Options for the
+	// Discovery of Network-designated Resolvers (DNR)
+	TagEncryptedDNSServer: {'x', "OPTION_V4_DNR"},
 }
