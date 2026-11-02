@@ -1591,6 +1591,8 @@ func Decode(raw uint32) (Instr, error) {
 				// 	 00101 | vsext.vf4
 				// 	 00110 | vzext.vf2
 				// 	 00111 | vsext.vf2
+				case 0b00010:
+					instr.SetVPU(VzextVf8, uint32(funct7&0b1))
 				case 0b00011:
 					instr.SetVPU(VsextVf8, uint32(funct7&0b1))
 				case 0b00100:
