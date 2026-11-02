@@ -2276,6 +2276,20 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 
+	case isa.Vs1rV:
+		baseAddr := vpu.cpu.X[instr.Rs1]
+		vs3 := uint64(instr.Rd)
+		size := nf * vpu.VLEN / 8
+
+		for i := vpu.VStart; i < size; i++ {
+			vpu.VStart = i
+			reg, ofs := vpu.elt(isa.E8, vs3, i)
+			err := vpu.cpu.MMU.Store8(baseAddr+i, reg[ofs])
+			if err != nil {
+				return err
+			}
+		}
+
 	case isa.VaddVi:
 		sew := vpu.VType.VSEW()
 

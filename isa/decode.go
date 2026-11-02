@@ -1280,6 +1280,8 @@ func Decode(raw uint32) (Instr, error) {
 		}
 
 	case GroupSTOREFP:
+		sumop := int32(raw >> 20 & 0b11111)
+
 		switch funct3 {
 		case 0b010:
 			instr.Imm = int32(raw&0b1111_10000000)>>7 |
@@ -1293,7 +1295,15 @@ func Decode(raw uint32) (Instr, error) {
 
 			// Vector stores.
 		case 0b000:
-			instr.SetVPU(Vse8V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+			switch sumop {
+			case 0b00000:
+				instr.SetVPU(Vse8V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+			case 0b01000:
+				instr.SetVPU(Vs1rV, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+			default:
+				return instr, fmt.Errorf("%v/%03b/%05b, raw=%08x",
+					group, funct3, sumop, raw)
+			}
 		case 0b101:
 			instr.SetVPU(Vse16V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
 		case 0b110:

@@ -445,6 +445,7 @@ const (
 	Vse16V
 	Vse32V
 	Vse64V
+	Vs1rV
 	VrsubVi
 	VandVi
 	VrgatherVi
@@ -1316,6 +1317,9 @@ var VpuOperands = map[VpuOp]OpInfo{
 	Vse64V: OpInfo{
 		Name: "vse64.v",
 	},
+	Vs1rV: OpInfo{
+		Name: "vs1r.v",
+	},
 	VrsubVi: OpInfo{
 		Name: "vrsub.vi",
 	},
@@ -1624,17 +1628,16 @@ func (instr Instr) StringVPU() string {
 
 		// Vector loads and stores.
 	case Vle8V, Vle16V, Vle32V, Vle64V, Vse8V, Vse16V, Vse32V, Vse64V:
-		return instr.vsString(op)
+		return instr.vsString(op, imm)
 	}
 
 	return op.String()
 }
 
-func (instr Instr) vsString(instrOp VpuOp) string {
+func (instr Instr) vsString(instrOp VpuOp, imm int32) string {
 	var size, op, ff string
 
-	lumop := instr.Imm & 0b11111
-	if lumop == 0b10000 {
+	if imm == 0b10000 {
 		ff = "ff"
 	}
 

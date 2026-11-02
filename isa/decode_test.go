@@ -7,6 +7,7 @@
 package isa
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -576,6 +577,8 @@ var bugs = []struct {
 	{0x5c22b157, "vmerge.vim"},
 	{0x0100000f, "fence"}, // `pause' is alias for `fence w, 0'
 	{0x42102657, "vmv.x.s"},
+	{0x03050087, "vle8ff.v"},
+	{0x028780a7, "vs1r.v"},
 }
 
 func TestBug(t *testing.T) {
@@ -591,13 +594,8 @@ func TestBug(t *testing.T) {
 			t.Fatalf("%x: %v: %v", bug.raw, bug.name, err)
 		}
 
-		var got string
-		if instr.Op == Vpu {
-			op, _, _ := instr.VPU()
-			got = op.String()
-		} else {
-			got = instr.Op.String()
-		}
+		parts := strings.Split(instr.String(), " ")
+		got := parts[0]
 
 		if bug.name != got {
 			t.Errorf("%x: expected %v, got %v\n", bug.raw, bug.name, got)
