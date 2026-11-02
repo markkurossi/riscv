@@ -1300,6 +1300,8 @@ func Decode(raw uint32) (Instr, error) {
 				instr.SetVPU(Vse8V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
 			case 0b01000:
 				instr.SetVPU(Vs1rV, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+			case 0b01011:
+				instr.SetVPU(VsmV, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
 			default:
 				return instr, fmt.Errorf("%v/%03b/%05b, raw=%08x",
 					group, funct3, sumop, raw)
