@@ -1598,6 +1598,14 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			vpu.setMaskElt(uint64(instr.Rd), i, vs1 || vs2)
 		}
 
+	case isa.VmnandMm:
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			vs1 := vpu.maskElt(uint64(instr.Rs1), i)
+			vs2 := vpu.maskElt(uint64(instr.Rs2), i)
+
+			vpu.setMaskElt(uint64(instr.Rd), i, !(vs2 && vs1))
+		}
+
 	case isa.VmaddVv:
 		sew := vpu.VType.VSEW()
 
