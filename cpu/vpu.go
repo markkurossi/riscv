@@ -1574,7 +1574,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			pos++
 		}
 
-	case isa.VmandnMM:
+	case isa.VmandnMm:
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			vs1 := vpu.maskElt(uint64(instr.Rs1), i)
 			vs2 := vpu.maskElt(uint64(instr.Rs2), i)
@@ -1582,7 +1582,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			vpu.setMaskElt(uint64(instr.Rd), i, vs2 && !vs1)
 		}
 
-	case isa.VmandMM:
+	case isa.VmandMm:
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			vs1 := vpu.maskElt(uint64(instr.Rs1), i)
 			vs2 := vpu.maskElt(uint64(instr.Rs2), i)
@@ -1590,7 +1590,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			vpu.setMaskElt(uint64(instr.Rd), i, vs2 && vs1)
 		}
 
-	case isa.VmorMM:
+	case isa.VmorMm:
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			vs1 := vpu.maskElt(uint64(instr.Rs1), i)
 			vs2 := vpu.maskElt(uint64(instr.Rs2), i)

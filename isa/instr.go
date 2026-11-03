@@ -421,9 +421,9 @@ const (
 	VsextVf4
 	VzextVf2
 	VcompressVm
-	VmandnMM
-	VmandMM
-	VmorMM
+	VmandnMm
+	VmandMm
+	VmorMm
 	VmnandMm
 	VmaddVv
 	VmaccVv
@@ -1249,13 +1249,13 @@ var VpuOperands = map[VpuOp]OpInfo{
 	VcompressVm: OpInfo{
 		Name: "vcompress.vm",
 	},
-	VmandnMM: OpInfo{
+	VmandnMm: OpInfo{
 		Name: "vmandn.mm",
 	},
-	VmandMM: OpInfo{
+	VmandMm: OpInfo{
 		Name: "vmand.mm",
 	},
-	VmorMM: OpInfo{
+	VmorMm: OpInfo{
 		Name: "vmor.mm",
 	},
 	VmnandMm: OpInfo{
