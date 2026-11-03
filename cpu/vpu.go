@@ -61,6 +61,8 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 			fmt.Errorf("VS=%v", vpu.cpu.mstatus.VS()))
 	}
+	vpu.cpu.mstatus.SetVS(isa.RegDirty)
+	vpu.cpu.mstatus.SetSD(true)
 
 	op, flags, imm := instr.VPU()
 
@@ -2822,8 +2824,6 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	}
 
 	vpu.VStart = 0
-	vpu.cpu.mstatus.SetVS(isa.RegDirty)
-	vpu.cpu.mstatus.SetSD(true)
 
 	return nil
 }
