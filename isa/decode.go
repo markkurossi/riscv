@@ -1361,6 +1361,9 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FsgnjnS
 			case 0b010:
 				instr.Op = FsgnjxS
+			default:
+				return instr, fmt.Errorf("OP-FP/%07b/%03b: raw=%08x",
+					funct7, funct3, raw)
 			}
 
 		case 0b0010100:
@@ -1369,6 +1372,9 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FminS
 			case 0b001:
 				instr.Op = FmaxS
+			default:
+				return instr, fmt.Errorf("OP-FP/%07b/%03b: raw=%08x",
+					funct7, funct3, raw)
 			}
 
 		case 0b0010101:
@@ -1377,6 +1383,9 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FminD
 			case 0b001:
 				instr.Op = FmaxD
+			default:
+				return instr, fmt.Errorf("OP-FP/%07b/%03b: raw=%08x",
+					funct7, funct3, raw)
 			}
 
 		case 0b0101100:
@@ -1392,7 +1401,11 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FltS
 			case 0b010:
 				instr.Op = FeqS
+			default:
+				return instr, fmt.Errorf("OP-FP/%07b/%03b: raw=%08x",
+					funct7, funct3, raw)
 			}
+
 		case 0b1010001:
 			switch funct3 {
 			case 0b000:
@@ -1401,6 +1414,9 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FltD
 			case 0b010:
 				instr.Op = FeqD
+			default:
+				return instr, fmt.Errorf("OP-FP/%07b/%03b: raw=%08x",
+					funct7, funct3, raw)
 			}
 
 		case 0b1100000:
@@ -1409,11 +1425,14 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b00000:
 				instr.Op = FcvtWS
 			case 0b00001:
-				instr.Op = FcvtWUS
+				instr.Op = FcvtWuS
 			case 0b00010:
 				instr.Op = FcvtLS
 			case 0b00011:
 				instr.Op = FcvtLUS
+			default:
+				return instr, fmt.Errorf("OP-FP/%07b/%05b: raw=%08x",
+					funct7, funct5, raw)
 			}
 
 		case 0b1100001:
@@ -1422,11 +1441,14 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b00000:
 				instr.Op = FcvtWD
 			case 0b00001:
-				instr.Op = FcvtWUD
+				instr.Op = FcvtWuD
 			case 0b00010:
 				instr.Op = FcvtLD
 			case 0b00011:
-				instr.Op = FcvtLUD
+				instr.Op = FcvtLuD
+			default:
+				return instr, fmt.Errorf("OP-FP/%07b/%05b: raw=%08x",
+					funct7, funct5, raw)
 			}
 
 		case 0b1101000:
@@ -1435,11 +1457,14 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b00000:
 				instr.Op = FcvtSW
 			case 0b00001:
-				instr.Op = FcvtSWU
+				instr.Op = FcvtSWu
 			case 0b0010:
 				instr.Op = FcvtSL
 			case 0b00011:
-				instr.Op = FcvtSLU
+				instr.Op = FcvtSLu
+			default:
+				return instr, fmt.Errorf("OP-FP/%07b/%05b: raw=%08x",
+					funct7, funct5, raw)
 			}
 
 		case 0b1101001:
@@ -1448,11 +1473,14 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b00000:
 				instr.Op = FcvtDW
 			case 0b00001:
-				instr.Op = FcvtDWU
+				instr.Op = FcvtDWu
 			case 0b00010:
 				instr.Op = FcvtDL
 			case 0b00011:
-				instr.Op = FcvtDLU
+				instr.Op = FcvtDLu
+			default:
+				return instr, fmt.Errorf("OP-FP/%07b/%05b: raw=%08x",
+					funct7, funct5, raw)
 			}
 
 		case 0b1110000:
@@ -1461,6 +1489,9 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FmvXW
 			case 0b001:
 				instr.Op = FclassS
+			default:
+				return instr, fmt.Errorf("OP-FP/%07b/%03b: raw=%08x",
+					funct7, funct3, raw)
 			}
 
 		case 0b1110001:
@@ -1469,12 +1500,31 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FmvXD
 			case 0b001:
 				instr.Op = FclassD
+			default:
+				return instr, fmt.Errorf("OP-FP/%07b/%03b: raw=%08x",
+					funct7, funct3, raw)
 			}
 
 		case 0b1111000:
-			instr.Op = FmvWX
+			switch instr.Rs2 {
+			case 0b00000:
+				instr.Op = FmvWX
+			case 0b00001:
+				instr.Op = FliS
+			default:
+				return instr, fmt.Errorf("OP-FP/%07b/%05b: raw=%08x",
+					funct7, instr.Rs2, raw)
+			}
 		case 0b1111001:
-			instr.Op = FmvDX
+			switch instr.Rs2 {
+			case 0b00000:
+				instr.Op = FmvDX
+			case 0b00001:
+				instr.Op = FliD
+			default:
+				return instr, fmt.Errorf("OP-FP/%07b/%05b: raw=%08x",
+					funct7, instr.Rs2, raw)
+			}
 
 		case 0b0010001:
 			switch funct3 {
@@ -1484,6 +1534,9 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FsgnjnD
 			case 0b010:
 				instr.Op = FsgnjxD
+			default:
+				return instr, fmt.Errorf("OP-FP/%07b/%03b: raw=%08x",
+					funct7, funct3, raw)
 			}
 
 		case 0b0100000:

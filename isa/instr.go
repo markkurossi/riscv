@@ -293,26 +293,26 @@ const (
 	// Conversions.
 
 	FcvtWS
-	FcvtWUS
+	FcvtWuS
 	FcvtLS
 	FcvtLUS
 
 	FcvtWD
-	FcvtWUD
+	FcvtWuD
 	FcvtLD
-	FcvtLUD
+	FcvtLuD
 
 	FcvtSW
-	FcvtSWU
+	FcvtSWu
 	FcvtSL
-	FcvtSLU
+	FcvtSLu
 	FcvtSD
 	FcvtDS
 
 	FcvtDW
-	FcvtDWU
+	FcvtDWu
 	FcvtDL
-	FcvtDLU
+	FcvtDLu
 
 	// Move / classify.
 
@@ -323,6 +323,10 @@ const (
 
 	FclassS
 	FclassD
+
+	// Zfa Extension for Additional Floating-Point Instructions
+	FliS
+	FliD
 
 	// Floating-point Fused Multiply-Add
 	FmaddS
@@ -927,8 +931,8 @@ var Operands = map[Op]OpInfo{
 	FcvtWS: OpInfo{
 		Name: "fcvt.w.s",
 	},
-	FcvtWUS: OpInfo{
-		Name: "fcvt.w.us",
+	FcvtWuS: OpInfo{
+		Name: "fcvt.wu.s",
 	},
 	FcvtLS: OpInfo{
 		Name: "fcvt.l.s",
@@ -939,25 +943,25 @@ var Operands = map[Op]OpInfo{
 	FcvtWD: OpInfo{
 		Name: "fcvt.w.d",
 	},
-	FcvtWUD: OpInfo{
+	FcvtWuD: OpInfo{
 		Name: "fcvt.wu.d",
 	},
 	FcvtLD: OpInfo{
 		Name: "fcvt.l.d",
 	},
-	FcvtLUD: OpInfo{
+	FcvtLuD: OpInfo{
 		Name: "fcvt.lu.d",
 	},
 	FcvtSW: OpInfo{
 		Name: "fcvt.s.w",
 	},
-	FcvtSWU: OpInfo{
+	FcvtSWu: OpInfo{
 		Name: "fcvt.s.wu",
 	},
 	FcvtSL: OpInfo{
 		Name: "fcvt.s.l",
 	},
-	FcvtSLU: OpInfo{
+	FcvtSLu: OpInfo{
 		Name: "fcvt.s.lu",
 	},
 	FcvtSD: OpInfo{
@@ -969,13 +973,13 @@ var Operands = map[Op]OpInfo{
 	FcvtDW: OpInfo{
 		Name: "fcvt.d.w",
 	},
-	FcvtDWU: OpInfo{
+	FcvtDWu: OpInfo{
 		Name: "fcvt.d.wu",
 	},
 	FcvtDL: OpInfo{
 		Name: "fcvt.d.l",
 	},
-	FcvtDLU: OpInfo{
+	FcvtDLu: OpInfo{
 		Name: "fcvt.d.lu",
 	},
 	FmvXW: OpInfo{
@@ -995,6 +999,12 @@ var Operands = map[Op]OpInfo{
 	},
 	FclassD: OpInfo{
 		Name: "fclass.d",
+	},
+	FliS: OpInfo{
+		Name: "fli.s",
+	},
+	FliD: OpInfo{
+		Name: "fli.d",
 	},
 	FmaddS: OpInfo{
 		Name: "fmadd.s",
@@ -1607,7 +1617,9 @@ func (instr Instr) String() string {
 }
 
 func (instr Instr) StringVPU() string {
-	op, _, imm := instr.VPU()
+	op, flags, imm := instr.VPU()
+
+	nf := uint64(flags>>1&0b111) + 1
 
 	switch op {
 	// GroupOPV
@@ -1633,6 +1645,10 @@ func (instr Instr) StringVPU() string {
 
 	case VmvVI:
 		return fmt.Sprintf("%v v%v,%v", pad(op), int(instr.Rd), imm)
+
+	case VmvnfrV:
+		return fmt.Sprintf("vmv%vr.v v%v,v%v",
+			nf, int(instr.Rd), int(instr.Rs2))
 
 		// Vector loads and stores.
 	case Vle8V, Vle16V, Vle32V, Vle64V, Vse8V, Vse16V, Vse32V, Vse64V:

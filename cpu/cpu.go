@@ -1705,6 +1705,13 @@ func (cpu *CPU) floatingPointExtension(instr isa.Instr, raw uint32) error {
 		cpu.X[instr.Rd] = uint64(fclassS(float32(cpu.F[instr.Rs1])))
 		dirty = false
 
+	case isa.FliS, isa.FliD: // F: dirty
+
+		// FliS uses uint32 table but
+		// since we convert it to float64, we share the bit-bit table
+		// for both instructions.
+		cpu.F[instr.Rd] = math.Float64frombits(flid[instr.Rs1])
+
 	case isa.FmaddS: // F: dirty
 		// Imm is Rs3
 		cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1])*
@@ -1720,12 +1727,12 @@ func (cpu *CPU) floatingPointExtension(instr isa.Instr, raw uint32) error {
 		// (Floating-point Control and Status Register)
 		cpu.F[instr.Rd] = float64(int64(cpu.X[instr.Rs1]))
 
-	case isa.FcvtDLU: // F: dirty
+	case isa.FcvtDLu: // F: dirty
 		// XXX The rounding mode (RM) is specified in the fcsr
 		// (Floating-point Control and Status Register)
 		cpu.F[instr.Rd] = float64(cpu.X[instr.Rs1])
 
-	case isa.FcvtDWU: // F: dirty
+	case isa.FcvtDWu: // F: dirty
 		cpu.F[instr.Rd] = float64(uint32(cpu.X[instr.Rs1]))
 
 	case isa.FcvtLD: // F: clean
@@ -1748,7 +1755,7 @@ func (cpu *CPU) floatingPointExtension(instr isa.Instr, raw uint32) error {
 		cpu.X[instr.Rd] = v
 		dirty = false
 
-	case isa.FcvtLUD: // F: clean
+	case isa.FcvtLuD: // F: clean
 		// XXX If the value is out of range, fcsr.fflags.NV is set
 		// to 1
 		f := cpu.F[instr.Rs1]
@@ -1772,7 +1779,7 @@ func (cpu *CPU) floatingPointExtension(instr isa.Instr, raw uint32) error {
 		cpu.X[instr.Rd] = uint64(int64(int32(cpu.F[instr.Rs1])))
 		dirty = false
 
-	case isa.FcvtWUD: // F: clean
+	case isa.FcvtWuD: // F: clean
 		cpu.X[instr.Rd] = uint64(uint32(cpu.F[instr.Rs1]))
 		dirty = false
 
@@ -1780,7 +1787,7 @@ func (cpu *CPU) floatingPointExtension(instr isa.Instr, raw uint32) error {
 		cpu.X[instr.Rd] = uint64(int64(int32(cpu.F[instr.Rs1])))
 		dirty = false
 
-	case isa.FcvtWUS: // F: clean
+	case isa.FcvtWuS: // F: clean
 		cpu.X[instr.Rd] = uint64(uint32(cpu.F[instr.Rs1]))
 		dirty = false
 
@@ -1798,13 +1805,13 @@ func (cpu *CPU) floatingPointExtension(instr isa.Instr, raw uint32) error {
 	case isa.FcvtSW: // F: dirty
 		cpu.F[instr.Rd] = float64(float32(int32(cpu.X[instr.Rs1])))
 
-	case isa.FcvtSWU: // F: dirty
+	case isa.FcvtSWu: // F: dirty
 		cpu.F[instr.Rd] = float64(float32(uint32(cpu.X[instr.Rs1])))
 
 	case isa.FcvtSL: // F: dirty
 		cpu.F[instr.Rd] = float64(float32(int64(cpu.X[instr.Rs1])))
 
-	case isa.FcvtSLU: // F: dirty
+	case isa.FcvtSLu: // F: dirty
 		cpu.F[instr.Rd] = float64(float32(cpu.X[instr.Rs1]))
 
 	case isa.FcvtDS: // F: dirty
@@ -1912,6 +1919,41 @@ func (cpu *CPU) floatingPointExtension(instr isa.Instr, raw uint32) error {
 	}
 
 	return nil
+}
+
+var flid = [32]uint64{
+	0xbff0000000000000, // 0b00000: -1.0
+	0x0010000000000000, // 0b00001: minimum positive normal
+	0x3ef0000000000000, // 0b00010: 1.0 * 2^-16
+	0x3f00000000000000, // 0b00011: 1.0 * 2^-15
+	0x3f70000000000000, // 0b00100: 1.0 * 2^-8
+	0x3f80000000000000, // 0b00101: 1.0 * 2^-7
+	0x3fb0000000000000, // 0b00110: 1.0 * 2^-4
+	0x3fc0000000000000, // 0b00111: 1.0 * 2^-3
+	0x3fd0000000000000, // 0b01000: 0.25
+	0x3fd4000000000000, // 0b01001: 0.3125
+	0x3fd8000000000000, // 0b01010: 0.375
+	0x3fdc000000000000, // 0b01011: 0.4375
+	0x3fe0000000000000, // 0b01100: 0.5
+	0x3fe4000000000000, // 0b01101: 0.625
+	0x3fe8000000000000, // 0b01110: 0.75
+	0x3fec000000000000, // 0b01111: 0.875
+	0x3ff0000000000000, // 0b10000: 1.0
+	0x3ff4000000000000, // 0b10001: 1.25
+	0x3ff8000000000000, // 0b10010: 1.5
+	0x3ffc000000000000, // 0b10011: 1.75
+	0x4000000000000000, // 0b10100: 2.0
+	0x4004000000000000, // 0b10101: 2.5
+	0x4008000000000000, // 0b10110: 3
+	0x4010000000000000, // 0b10111: 4
+	0x4020000000000000, // 0b11000: 8
+	0x4030000000000000, // 0b11001: 16
+	0x4060000000000000, // 0b11010: 2^7
+	0x4070000000000000, // 0b11011: 2^8
+	0x40e0000000000000, // 0b11100: 2^15
+	0x40f0000000000000, // 0b11101: 2^16
+	0x7ff0000000000000, // 0b11110: +inf
+	0x7FF8000000000000, // 0b11111: canonical NaN
 }
 
 func fclassD(fVal float64) uint64 {
