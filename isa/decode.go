@@ -655,7 +655,15 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b000010:
 				instr.Op = SlliUW
 			case 0b011000:
-				instr.Op = Clzw
+				switch instr.Rs2 {
+				case 0b00000:
+					instr.Op = Clzw
+				case 0b00010:
+					instr.Op = Cpopw
+				default:
+					return instr, fmt.Errorf("%v/%03b/%06b/%05b, raw=%x",
+						group, funct3, funct6, instr.Rs2, raw)
+				}
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b, raw=%x",
 					group, funct3, funct6, raw)

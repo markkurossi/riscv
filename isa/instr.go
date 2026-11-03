@@ -348,6 +348,7 @@ const (
 	Andn
 	Clz
 	Clzw
+	Cpopw
 	Ctz
 	Cpop
 	Min
@@ -1048,6 +1049,9 @@ var Operands = map[Op]OpInfo{
 	},
 	Clzw: OpInfo{
 		Name: "clzw",
+	},
+	Cpopw: OpInfo{
+		Name: "cpopw",
 	},
 	Ctz: OpInfo{
 		Name: "ctz",
