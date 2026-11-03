@@ -883,6 +883,15 @@ func Decode(raw uint32) (Instr, error) {
 					fmt.Errorf("%v/%07b/%03b: raw=%08x",
 						group, funct7, funct3, raw)
 			}
+		case 0b0110100:
+			switch funct3 {
+			case 0b001:
+				instr.Op = Binv
+			default:
+				return instr,
+					fmt.Errorf("%v/%07b/%03b: raw=%08x",
+						group, funct7, funct3, raw)
+			}
 
 			// Zba (Address Generation Instructions) extension.
 

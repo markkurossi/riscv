@@ -51,9 +51,6 @@ var skipISA = map[string]uint64{
 	"rv64uzbc-p-clmulh": 0,
 	"rv64uzbc-p-clmulr": 0,
 
-	// Zbs - single-bit instructions.
-	"rv64uzbs-p-binv": 0,
-
 	// Zbkb - bit-manipulation for Cryptography
 	"rv64uzbkb-p-brev8": 0,
 	"rv64uzbkb-p-pack":  0,
