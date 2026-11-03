@@ -1442,6 +1442,16 @@ dispatch:
 			}
 			cpu.X[instr.Rd] = i
 
+		case isa.Ctzw:
+			v := cpu.X[instr.Rs1]
+			var i uint64
+			for i = 0; i < 32; i++ {
+				if v&(1<<i) != 0 {
+					break
+				}
+			}
+			cpu.X[instr.Rd] = i
+
 		case isa.Cpopw:
 			v := cpu.X[instr.Rs1]
 			var count uint64

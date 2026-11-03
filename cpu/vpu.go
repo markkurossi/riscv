@@ -2007,6 +2007,72 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 
+	case isa.Vlse8V:
+		var eltSize uint64 = 1 // sizeof(uint8)
+		veew := eltSize * 8
+		vemul := float32(veew) / float32(vpu.VType.VSEW()) * vpu.VType.VLMUL()
+
+		var emul uint64 = 1
+		if vemul > 1 {
+			emul = uint64(vemul)
+		}
+
+		baseAddr := vpu.cpu.X[instr.Rs1]
+		rs2 := vpu.cpu.X[instr.Rs2]
+		vd := uint64(instr.Rd)
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			vpu.VStart = i
+
+			for fn := uint64(0); fn < nf; fn++ {
+				memAddr := baseAddr + i*rs2 + fn*eltSize
+				val, err := vpu.cpu.MMU.Load8(memAddr)
+				if err != nil {
+					return err
+				}
+				reg, ofs := vpu.elt(isa.E8, vd+fn*emul, i)
+				reg[ofs] = val
+			}
+		}
+
+	case isa.Vlse16V:
+		var eltSize uint64 = 2 // sizeof(uint16)
+		veew := eltSize * 8
+		vemul := float32(veew) / float32(vpu.VType.VSEW()) * vpu.VType.VLMUL()
+
+		var emul uint64 = 1
+		if vemul > 1 {
+			emul = uint64(vemul)
+		}
+
+		baseAddr := vpu.cpu.X[instr.Rs1]
+		rs2 := vpu.cpu.X[instr.Rs2]
+		vd := uint64(instr.Rd)
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			vpu.VStart = i
+
+			for fn := uint64(0); fn < nf; fn++ {
+				memAddr := baseAddr + i*rs2 + fn*eltSize
+				val, err := vpu.cpu.MMU.Load16(memAddr)
+				if err != nil {
+					return err
+				}
+				reg, ofs := vpu.elt(isa.E16, vd+fn*emul, i)
+				memory.PutUint16(reg, ofs, val)
+			}
+		}
+
 	case isa.Vlse32V:
 		var eltSize uint64 = 4 // sizeof(uint32)
 		veew := eltSize * 8

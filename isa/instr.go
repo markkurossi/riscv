@@ -352,6 +352,7 @@ const (
 	Andn
 	Clz
 	Clzw
+	Ctzw
 	Cpopw
 	Ctz
 	Cpop
@@ -442,6 +443,8 @@ const (
 	Vle16V
 	Vle32V
 	Vle64V
+	Vlse8V
+	Vlse16V
 	Vlse32V
 	Vlse64V
 	Vl1re8V
@@ -1066,6 +1069,9 @@ var Operands = map[Op]OpInfo{
 	Clzw: OpInfo{
 		Name: "clzw",
 	},
+	Ctzw: OpInfo{
+		Name: "ctzw",
+	},
 	Cpopw: OpInfo{
 		Name: "cpopw",
 	},
@@ -1313,6 +1319,12 @@ var VpuOperands = map[VpuOp]OpInfo{
 	},
 	Vle64V: OpInfo{
 		Name: "vle64.v",
+	},
+	Vlse8V: OpInfo{
+		Name: "vlse8.v",
+	},
+	Vlse16V: OpInfo{
+		Name: "vlse16.v",
 	},
 	Vlse32V: OpInfo{
 		Name: "vlse32.v",
