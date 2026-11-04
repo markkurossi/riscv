@@ -1241,13 +1241,13 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 		switch sew {
 		case isa.E8:
-			val = uint64(vs2reg[vs2ofs])
+			val = uint64(int64(int8(vs2reg[vs2ofs])))
 		case isa.E16:
-			val = uint64(memory.Uint16(vs2reg, vs2ofs))
+			val = uint64(int64(int16(memory.Uint16(vs2reg, vs2ofs))))
 		case isa.E32:
-			val = uint64(memory.Uint32(vs2reg, vs2ofs))
+			val = uint64(int64(int32(memory.Uint32(vs2reg, vs2ofs))))
 		case isa.E64:
-			val = uint64(memory.Uint64(vs2reg, vs2ofs))
+			val = memory.Uint64(vs2reg, vs2ofs)
 		}
 		vpu.cpu.X[instr.Rd] = val
 
