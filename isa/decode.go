@@ -1730,6 +1730,9 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b101101:
 				instr.SetVPU(VmaccVv, uint32(funct7&0b1))
 
+			case 0b110100:
+				instr.SetVPU(VwadduWv, uint32(funct7&0b1))
+
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
 					group, funct3, funct7>>1, raw)
