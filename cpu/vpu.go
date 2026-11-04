@@ -676,7 +676,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 			case isa.E16:
 				var v uint16
-				vs1 := uint64(vs1reg[vs1ofs])
+				vs1 := uint64(memory.Uint16(vs1reg, vs1ofs))
 				if vs1 >= vlmax {
 					v = 0
 				} else {
@@ -687,7 +687,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 			case isa.E32:
 				var v uint32
-				vs1 := uint64(vs1reg[vs1ofs])
+				vs1 := uint64(memory.Uint32(vs1reg, vs1ofs))
 				if vs1 >= vlmax {
 					v = 0
 				} else {
@@ -698,7 +698,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 			case isa.E64:
 				var v uint64
-				vs1 := uint64(vs1reg[vs1ofs])
+				vs1 := uint64(memory.Uint64(vs1reg, vs1ofs))
 				if vs1 >= vlmax {
 					v = 0
 				} else {
