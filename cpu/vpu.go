@@ -9,6 +9,7 @@ package cpu
 import (
 	"fmt"
 	"math"
+	"math/bits"
 
 	"github.com/markkurossi/riscv/isa"
 	"github.com/markkurossi/riscv/memory"
@@ -501,6 +502,57 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				vs1 := memory.Uint64(vs1reg, vs1ofs)
 				vs2 := memory.Uint64(vs2reg, vs2ofs)
 				memory.PutUint64(reg, ofs, vs2*vs1)
+			}
+		}
+
+	case isa.VmulhVv:
+		sew := vpu.VType.VSEW()
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+			vs1reg, vs1ofs := vpu.elt(sew, uint64(instr.Rs1), i)
+			vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), i)
+
+			switch sew {
+			case isa.E8:
+				vs1 := vs1reg[vs1ofs]
+				vs2 := vs2reg[vs2ofs]
+				v := uint8((int16(int8(vs2)) * int16(int8(vs1))) >> sew)
+				reg[ofs] = v
+
+			case isa.E16:
+				vs1 := memory.Uint16(vs1reg, vs1ofs)
+				vs2 := memory.Uint16(vs2reg, vs2ofs)
+				v := uint16(int32(int16(vs2)) * int32(int16(vs1)) >> sew)
+				memory.PutUint16(reg, ofs, v)
+
+			case isa.E32:
+				vs1 := memory.Uint32(vs1reg, vs1ofs)
+				vs2 := memory.Uint32(vs2reg, vs2ofs)
+				v := uint32(int64(int32(vs2)) * int64(int32(vs1)) >> sew)
+				memory.PutUint32(reg, ofs, v)
+
+			case isa.E64:
+				vs1 := memory.Uint64(vs1reg, vs1ofs)
+				vs2 := memory.Uint64(vs2reg, vs2ofs)
+				hi, _ := bits.Mul64(vs1, vs2)
+
+				// Adjust high 64 bits for signed 2's complement inputs:
+
+				// If vs1 is negative, subtract vs2 from high 64 bits.
+				if int64(vs1) < 0 {
+					hi -= vs2
+				}
+				// If vs2 is negative, subtract vs1 from high 64 bits.
+				if int64(vs2) < 0 {
+					hi -= vs1
+				}
+				memory.PutUint64(reg, ofs, hi)
 			}
 		}
 

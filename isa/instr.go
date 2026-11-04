@@ -394,6 +394,7 @@ const (
 	VaddVv
 	VsubVv
 	VmulVv
+	VmulhVv
 	VandnVv // Zvbb
 	VmaxuVv
 	VandVv
@@ -1175,6 +1176,9 @@ var VpuOperands = map[VpuOp]OpInfo{
 	},
 	VmulVv: OpInfo{
 		Name: "vmul.vv",
+	},
+	VmulhVv: OpInfo{
+		Name: "vmulh.vv",
 	},
 	VandnVv: OpInfo{
 		Name: "vandn.vv",
