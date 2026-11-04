@@ -1306,6 +1306,11 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	case isa.VcpopM:
 		var popcount uint64
 
+		if vpu.VStart != 0 {
+			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("VStart=%v", vpu.VStart))
+		}
+
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vpu.maskElt(uint64(instr.Rs2), i) {
 				if vm == 1 || vpu.maskElt(0, i) {
@@ -1317,6 +1322,11 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 
 	case isa.VfirstM:
 		var pos uint64 = 0xffffffffffffffff
+
+		if vpu.VStart != 0 {
+			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("VStart=%v", vpu.VStart))
+		}
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if vm == 0 {
@@ -1677,6 +1687,11 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	case isa.VcompressVm:
 		sew := vpu.VType.VSEW()
 		var pos uint64
+
+		if vpu.VStart != 0 {
+			return vpu.trap(raw, instr, isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("VStart=%v", vpu.VStart))
+		}
 
 		for i := vpu.VStart; i < vpu.VL; i++ {
 			if !vpu.maskElt(uint64(instr.Rs1), i) {
@@ -3228,7 +3243,7 @@ func (vpu *VPU) setVL(rd, rs1 isa.Register, reqVL uint64, newType isa.VType) {
 
 	if vpu.VType != newType {
 		vlmul := newType.VLMUL()
-		vsew := isa.SEW(math.Min(float64(vlmul), 1.0) * ELEN)
+		vsew := isa.SEW(math.Min(float64(vlmul)*ELEN, ELEN))
 		vl = uint64(float32(vpu.VLEN/uint64(newType.VSEW())) * vlmul)
 
 		vill := !(vlmul >= 0.125 && vlmul <= 8) ||
