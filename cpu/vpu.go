@@ -1843,7 +1843,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	case isa.VmvSX:
 		sew := vpu.VType.VSEW()
 
-		if vpu.VStart < vpu.VL {
+		if vpu.VL > 0 && vpu.VStart < vpu.VL {
 			reg, ofs := vpu.elt(sew, uint64(instr.Rd), 0)
 			rs1 := vpu.cpu.X[instr.Rs1]
 
