@@ -2176,53 +2176,53 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 
 	case isa.Vl1re8V:
-		sew := vpu.VType.VSEW()
+		eltWidth := isa.E8
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vd := uint64(instr.Rd)
-		eltPerReg := vpu.VLEN / 8 / sew.Len()
+		eltPerReg := vpu.VLEN / 8 / eltWidth.Len()
 		size := nf * eltPerReg
 
 		for i := vpu.VStart; i < size; i++ {
 			vpu.VStart = i
-			val, err := vpu.cpu.MMU.Load8(baseAddr + i*sew.Len())
+			val, err := vpu.cpu.MMU.Load8(baseAddr + i*eltWidth.Len())
 			if err != nil {
 				return err
 			}
-			reg, ofs := vpu.elt(sew, vd, i)
+			reg, ofs := vpu.elt(eltWidth, vd, i)
 			reg[ofs] = val
 		}
 
 	case isa.Vl1re16V:
-		sew := vpu.VType.VSEW()
+		eltWidth := isa.E16
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vd := uint64(instr.Rd)
-		eltPerReg := vpu.VLEN / 8 / sew.Len()
+		eltPerReg := vpu.VLEN / 8 / eltWidth.Len()
 		size := nf * eltPerReg
 
 		for i := vpu.VStart; i < size; i++ {
 			vpu.VStart = i
-			val, err := vpu.cpu.MMU.Load16(baseAddr + i*sew.Len())
+			val, err := vpu.cpu.MMU.Load16(baseAddr + i*eltWidth.Len())
 			if err != nil {
 				return err
 			}
-			reg, ofs := vpu.elt(sew, vd, i)
+			reg, ofs := vpu.elt(eltWidth, vd, i)
 			memory.PutUint16(reg, ofs, val)
 		}
 
 	case isa.Vl1re32V:
-		sew := vpu.VType.VSEW()
+		eltWidth := isa.E32
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vd := uint64(instr.Rd)
-		eltPerReg := vpu.VLEN / 8 / sew.Len()
+		eltPerReg := vpu.VLEN / 8 / eltWidth.Len()
 		size := nf * eltPerReg
 
 		for i := vpu.VStart; i < size; i++ {
 			vpu.VStart = i
-			val, err := vpu.cpu.MMU.Load32(baseAddr + i*sew.Len())
+			val, err := vpu.cpu.MMU.Load32(baseAddr + i*eltWidth.Len())
 			if err != nil {
 				return err
 			}
-			reg, ofs := vpu.elt(sew, vd, i)
+			reg, ofs := vpu.elt(eltWidth, vd, i)
 			memory.PutUint32(reg, ofs, val)
 		}
 
