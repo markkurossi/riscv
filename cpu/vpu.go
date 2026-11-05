@@ -1880,6 +1880,45 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 
+	case isa.VwadduVv:
+		sew := vpu.VType.VSEW()
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			vs1reg, vs1ofs := vpu.elt(sew, uint64(instr.Rs1), i)
+			vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), i)
+
+			switch sew {
+			case isa.E8:
+				reg, ofs := vpu.elt(isa.E16, uint64(instr.Rd), i)
+				vs1 := vs1reg[vs1ofs]
+				vs2 := vs2reg[vs2ofs]
+				memory.PutUint16(reg, ofs, uint16(vs2)+uint16(vs1))
+
+			case isa.E16:
+				reg, ofs := vpu.elt(isa.E32, uint64(instr.Rd), i)
+				vs1 := memory.Uint16(vs1reg, vs1ofs)
+				vs2 := memory.Uint16(vs2reg, vs2ofs)
+				memory.PutUint32(reg, ofs, uint32(vs2)+uint32(vs1))
+
+			case isa.E32:
+				reg, ofs := vpu.elt(isa.E64, uint64(instr.Rd), i)
+				vs1 := memory.Uint32(vs1reg, vs1ofs)
+				vs2 := memory.Uint32(vs2reg, vs2ofs)
+				memory.PutUint64(reg, ofs, uint64(vs2)+uint64(vs1))
+
+			case isa.E64:
+				reg, ofs := vpu.elt(isa.E64, uint64(instr.Rd), i)
+				vs1 := memory.Uint64(vs1reg, vs1ofs)
+				vs2 := memory.Uint64(vs2reg, vs2ofs)
+				memory.PutUint64(reg, ofs, vs2+vs1)
+			}
+		}
+
 	case isa.VwadduWv:
 		sew := vpu.VType.VSEW()
 
@@ -1915,6 +1954,15 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				vs2reg, vs2ofs := vpu.elt(isa.E64, uint64(instr.Rs2), i)
 
 				vs1 := uint64(memory.Uint32(vs1reg, vs1ofs))
+				vs2 := memory.Uint64(vs2reg, vs2ofs)
+
+				memory.PutUint64(reg, ofs, vs2+vs1)
+
+			case isa.E64:
+				reg, ofs := vpu.elt(isa.E64, uint64(instr.Rd), i)
+				vs2reg, vs2ofs := vpu.elt(isa.E64, uint64(instr.Rs2), i)
+
+				vs1 := memory.Uint64(vs1reg, vs1ofs)
 				vs2 := memory.Uint64(vs2reg, vs2ofs)
 
 				memory.PutUint64(reg, ofs, vs2+vs1)
