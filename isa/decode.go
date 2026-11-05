@@ -1405,6 +1405,7 @@ func Decode(raw uint32) (Instr, error) {
 
 		case 0b0101101:
 			instr.Op = FsqrtD
+
 		case 0b1010000:
 			switch funct3 {
 			case 0b000:
@@ -1428,6 +1429,8 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FltD
 			case 0b010:
 				instr.Op = FeqD
+			case 0b101:
+				instr.Op = FltqD
 			default:
 				return instr, fmt.Errorf("OP-FP/%07b/%03b: raw=%08x",
 					funct7, funct3, raw)

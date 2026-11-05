@@ -328,6 +328,7 @@ const (
 	FliS
 	FliD
 	FleqS
+	FltqD
 
 	// Floating-point Fused Multiply-Add
 	FmaddS
@@ -1027,6 +1028,9 @@ var Operands = map[Op]OpInfo{
 	},
 	FleqS: OpInfo{
 		Name: "fleq.s",
+	},
+	FltqD: OpInfo{
+		Name: "fltq.d",
 	},
 	FmaddS: OpInfo{
 		Name: "fmadd.s",

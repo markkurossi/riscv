@@ -1733,6 +1733,14 @@ func (cpu *CPU) floatingPointExtension(instr isa.Instr, raw uint32) error {
 		}
 		dirty = false
 
+	case isa.FltqD: // F: clean
+		if cpu.F[instr.Rs1] < cpu.F[instr.Rs2] {
+			cpu.X[instr.Rd] = 1
+		} else {
+			cpu.X[instr.Rd] = 0
+		}
+		dirty = false
+
 	case isa.FmaddS: // F: dirty
 		// Imm is Rs3
 		cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1])*
