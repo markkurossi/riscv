@@ -3234,6 +3234,37 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 
+	case isa.VnsraWi:
+		sew := vpu.VType.VSEW()
+		zimm := uint64(imm & 0b11111)
+		shift := zimm & (uint64(sew)*2 - 1)
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+
+			switch sew {
+			case isa.E8:
+				vs2reg, vs2ofs := vpu.elt(isa.E16, uint64(instr.Rs2), i)
+				v := memory.Uint16(vs2reg, vs2ofs)
+				reg[ofs] = uint8(int16(v) >> shift)
+
+			case isa.E16:
+				vs2reg, vs2ofs := vpu.elt(isa.E32, uint64(instr.Rs2), i)
+				v := memory.Uint32(vs2reg, vs2ofs)
+				memory.PutUint16(reg, ofs, uint16(int32(v)>>shift))
+
+			case isa.E32:
+				vs2reg, vs2ofs := vpu.elt(isa.E64, uint64(instr.Rs2), i)
+				v := memory.Uint64(vs2reg, vs2ofs)
+				memory.PutUint32(reg, ofs, uint32(int64(v)>>shift))
+			}
+		}
+
 	case isa.VwsllVi:
 		sew := vpu.VType.VSEW()
 		zimm := uint64(imm & 0b11111)

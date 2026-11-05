@@ -480,6 +480,7 @@ const (
 	VsrlVi
 	VsraVi
 	VnsrlWi
+	VnsraWi
 	VwsllVi // Zvbb
 )
 
@@ -1435,6 +1436,9 @@ var VpuOperands = map[VpuOp]OpInfo{
 	},
 	VnsrlWi: OpInfo{
 		Name: "vnsrl.wi",
+	},
+	VnsraWi: OpInfo{
+		Name: "vnsra.wi",
 	},
 	VwsllVi: OpInfo{
 		Name: "vwsll.vi",
