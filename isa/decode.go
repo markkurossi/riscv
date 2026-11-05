@@ -1429,6 +1429,8 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FltD
 			case 0b010:
 				instr.Op = FeqD
+			case 0b100:
+				instr.Op = FleqD
 			case 0b101:
 				instr.Op = FltqD
 			default:
