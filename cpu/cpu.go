@@ -1725,6 +1725,14 @@ func (cpu *CPU) floatingPointExtension(instr isa.Instr, raw uint32) error {
 		// for both instructions.
 		cpu.F[instr.Rd] = math.Float64frombits(flid[instr.Rs1])
 
+	case isa.FleqS: // F: clean
+		if float32(cpu.F[instr.Rs1]) <= float32(cpu.F[instr.Rs2]) {
+			cpu.X[instr.Rd] = 1
+		} else {
+			cpu.X[instr.Rd] = 0
+		}
+		dirty = false
+
 	case isa.FmaddS: // F: dirty
 		// Imm is Rs3
 		cpu.F[instr.Rd] = float64(float32(cpu.F[instr.Rs1])*

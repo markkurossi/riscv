@@ -1413,6 +1413,8 @@ func Decode(raw uint32) (Instr, error) {
 				instr.Op = FltS
 			case 0b010:
 				instr.Op = FeqS
+			case 0b100:
+				instr.Op = FleqS
 			default:
 				return instr, fmt.Errorf("OP-FP/%07b/%03b: raw=%08x",
 					funct7, funct3, raw)

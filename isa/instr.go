@@ -327,6 +327,7 @@ const (
 	// Zfa Extension for Additional Floating-Point Instructions
 	FliS
 	FliD
+	FleqS
 
 	// Floating-point Fused Multiply-Add
 	FmaddS
@@ -1022,6 +1023,9 @@ var Operands = map[Op]OpInfo{
 	},
 	FliD: OpInfo{
 		Name: "fli.d",
+	},
+	FleqS: OpInfo{
+		Name: "fleq.s",
 	},
 	FmaddS: OpInfo{
 		Name: "fmadd.s",
