@@ -3068,29 +3068,24 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		sew := vpu.VType.VSEW()
 		vd := uint64(instr.Rd)
 		vs2 := uint64(instr.Rs2)
-		len := uint64(instr.Rs1 + 1)
+		numRegs := uint64(instr.Rs1 + 1)
 		vlenb := vpu.VLEN / 8
-		size := len * vlenb
-		start := vpu.VStart * uint64(sew>>3)
+		totalBytes := numRegs * vlenb
 
-		if vd != vs2 && start < size {
-			i := start / vlenb
-			off := start % vlenb
+		// Convert element-based VStart to byte offset. This must be
+		// kept in sync with VPU.elt().
+		eltBytes := sew.Len()
+		startByte := vpu.VStart * eltBytes
 
-			if off != 0 {
-				for j := uint64(0); j < vlenb-off; j++ {
-					reg, ofs := vpu.elt(isa.E8, vd+i, off+j)
-					vs2reg, vs2ofs := vpu.elt(isa.E8, vs2+i, off+j)
-					reg[ofs] = vs2reg[vs2ofs]
-				}
-				i++
-			}
-			for ; i < len; i++ {
-				for j := uint64(0); j < vlenb; j++ {
-					reg, ofs := vpu.elt(isa.E8, vd+i, j)
-					vs2reg, vs2ofs := vpu.elt(isa.E8, vs2+i, j)
-					reg[ofs] = vs2reg[vs2ofs]
-				}
+		for b := startByte; b < totalBytes; b++ {
+			regIdx := vd + (b / vlenb)
+			ofs := b % vlenb
+
+			vs2RegIdx := vs2 + (b / vlenb)
+			vs2Ofs := b % vlenb
+
+			if regIdx < 32 && vs2RegIdx < 32 {
+				vpu.VRegs[regIdx][ofs] = vpu.VRegs[vs2RegIdx][vs2Ofs]
 			}
 		}
 
