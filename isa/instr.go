@@ -373,6 +373,7 @@ const (
 	Sh3addUw
 	Rolw
 	Rorw
+	Xnor
 
 	// Pseudo instruction for the vector extension.
 	Vpu
@@ -1138,6 +1139,9 @@ var Operands = map[Op]OpInfo{
 	},
 	Rorw: OpInfo{
 		Name: "rorw",
+	},
+	Xnor: OpInfo{
+		Name: "xnor",
 	},
 	Vpu: OpInfo{
 		Name: "vpu",

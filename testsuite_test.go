@@ -42,7 +42,6 @@ var skipISA = map[string]uint64{
 	"rv64uzbb-p-rolw": 0,
 	"rv64uzbb-p-ror":  0,
 	"rv64uzbb-p-rorw": 0,
-	"rv64uzbb-p-xnor": 0,
 
 	// Zbc - carry-less multiplication
 	"rv64uzbc-p-clmul":  0,

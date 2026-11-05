@@ -867,6 +867,8 @@ func Decode(raw uint32) (Instr, error) {
 			switch funct3 {
 			case 0b000:
 				instr.Op = Sub
+			case 0b100:
+				instr.Op = Xnor
 			case 0b101:
 				instr.Op = Sra
 			case 0b110:

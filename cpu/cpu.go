@@ -1363,6 +1363,9 @@ dispatch:
 		case isa.SextH:
 			cpu.X[instr.Rd] = uint64(int64(int16(cpu.X[instr.Rs1])))
 
+		case isa.Xnor:
+			cpu.X[instr.Rd] = ^(cpu.X[instr.Rs1] ^ cpu.X[instr.Rs2])
+
 			// Zicond Extension (Conditional Integer Operations).
 
 		case isa.CzeroEqz:

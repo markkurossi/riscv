@@ -37,7 +37,7 @@ func TestOpNameLen(t *testing.T) {
 }
 
 func TestOpCount(t *testing.T) {
-	if Vpu != 207 {
+	if Vpu != 208 {
 		t.Errorf("max op %v = %d", Vpu, int(Vpu))
 	}
 }
