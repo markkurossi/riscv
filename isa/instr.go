@@ -417,6 +417,7 @@ const (
 	VredandVs
 	VredorVs
 	VredxorVs
+	VredmaxVs
 	VmvXS
 	VcpopM
 	VfirstM
@@ -1253,6 +1254,9 @@ var VpuOperands = map[VpuOp]OpInfo{
 	},
 	VredxorVs: OpInfo{
 		Name: "vredxor.vs",
+	},
+	VredmaxVs: OpInfo{
+		Name: "vredmax.vs",
 	},
 	VmvXS: OpInfo{
 		Name: "vmv.x.s",

@@ -1664,6 +1664,9 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b000011:
 				instr.SetVPU(VredxorVs, uint32(funct7&0b1))
 
+			case 0b000111:
+				instr.SetVPU(VredmaxVs, uint32(funct7&0b1))
+
 			case 0b010000:
 				switch instr.Rs1 {
 				// Table 21. VWXUNARY0 encoding space:
