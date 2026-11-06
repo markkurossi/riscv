@@ -1099,7 +1099,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				v, sat = satSubu[uint64](vs2, vs1)
 				memory.PutUint64(reg, ofs, v)
 			}
-			_ = sat
+			vpu.VXSat = sat
 		}
 
 	case isa.VsrlVv:

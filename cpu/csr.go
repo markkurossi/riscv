@@ -114,6 +114,20 @@ func (cpu *CPU) CSRLoad(csr isa.CSR, raw uint32, instr isa.Instr) (
 	case isa.CsrVstart:
 		v = cpu.vpu.VStart
 
+	case isa.CsrVxsat:
+		if cpu.vpu.VXSat {
+			v = 1
+		}
+
+	case isa.CsrVxrm:
+		v = uint64(cpu.vpu.VXRM & 0b11)
+
+	case isa.CsrVcsr:
+		if cpu.vpu.VXSat {
+			v = 1
+		}
+		v |= uint64(cpu.vpu.VXRM & 0b11 << 1)
+
 	case isa.CsrVl:
 		v = cpu.vpu.VL
 
@@ -248,6 +262,21 @@ func (cpu *CPU) SetCSRX(csr isa.CSR, v uint64, raw uint32,
 			cpu.traceFunc(cpu.PC)
 			cpu.tracef(raw, instr, "Satp: %v", satp)
 		}
+
+		// Vector extension.
+
+	case isa.CsrVstart:
+		cpu.vpu.VStart = v
+
+	case isa.CsrVxsat:
+		cpu.vpu.VXSat = v&0b1 == 1
+
+	case isa.CsrVxrm:
+		cpu.vpu.VXRM = uint8(v & 0b11)
+
+	case isa.CsrVcsr:
+		cpu.vpu.VXSat = v&0b1 == 1
+		cpu.vpu.VXRM = uint8(v >> 1 & 0b11)
 
 	case isa.CsrGoemuDebug:
 		cpu.DebugTrace = v&0b1 != 0
