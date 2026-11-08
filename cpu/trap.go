@@ -9,6 +9,7 @@ package cpu
 import (
 	"encoding/hex"
 	"fmt"
+	"log"
 
 	"github.com/markkurossi/riscv/isa"
 )
@@ -21,10 +22,28 @@ func (cpu *CPU) Trap(cause, tval uint64, err error) error {
 		return ierr
 	}
 
+	if debugLossage && cpu.DebugLossage {
+		log.Printf("%s: %v[%v]: lossage:",
+			fmtAddr(epc), isa.ExceptionCauses[cause], cause)
+		cpu.ViewLossage()
+	}
+	if cpuDebug && cpu.DebugTrapTrace {
+		log.Printf("%s: %v[%v] %x %v",
+			fmtAddr(epc), isa.ExceptionCauses[cause], cause, tval, err)
+	}
+
 	return isa.NewTrap(epc, cause, tval, err)
 }
 
 func (cpu *CPU) trap(epc, cause, tval uint64) error {
+
+	if debugLossage && cpu.DebugLossage {
+		cpu.addLossage(epc, isa.Instr{
+			Op:  isa.Debug,
+			Rd:  0,
+			Imm: int32(cause),
+		})
+	}
 
 	cpu.ReservationValid = false
 
@@ -90,6 +109,14 @@ func (cpu *CPU) trap(epc, cause, tval uint64) error {
 // Interrupt handles the interrupt cause delegating it to the target
 // mode.
 func (cpu *CPU) Interrupt(target isa.PrivilegeMode, cause uint64) {
+
+	if debugLossage && cpu.DebugLossage {
+		cpu.addLossage(cpu.PC, isa.Instr{
+			Op:  isa.Debug,
+			Rd:  1,
+			Imm: int32(cause),
+		})
+	}
 
 	cause |= 1 << 63
 

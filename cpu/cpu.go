@@ -98,9 +98,11 @@ type CPU struct {
 	csr802File     *os.File
 	csr802Refcount int
 
-	lastDescOp isa.Op
-	DebugTrace bool
-	LastSymbol *SymEntry
+	lastDescOp      isa.Op
+	DebugInstrTrace bool
+	DebugTrapTrace  bool
+	DebugLossage    bool
+	LastSymbol      *SymEntry
 
 	regTrace *regTrace
 
@@ -121,7 +123,7 @@ func New(mem *memory.Memory) *CPU {
 	cpu.MMU.Hart = cpu
 
 	if debugLossage {
-		cpu.lossage = make([]lossage, 128)
+		cpu.lossage = make([]lossage, 512)
 	}
 
 	return cpu
@@ -319,39 +321,27 @@ dispatch:
 			size = 2
 			instr = isa.DecodeCFast(uint16(raw))
 		}
-		if debugLossage {
-			cpu.lossage[cpu.lossageIdx].pc = cpu.PC
-			cpu.lossage[cpu.lossageIdx].instr = instr
-			cpu.lossageIdx = (cpu.lossageIdx + 1) % len(cpu.lossage)
+		if debugLossage && cpu.DebugLossage {
+			cpu.addLossage(cpu.PC, instr)
 		}
 
 		cpu.Instret++
 
-		if cpuDebug && cpu.DebugTrace {
+		if cpuDebug && cpu.DebugInstrTrace {
 			if cpu.Symtab != nil {
 				mapped, entry := cpu.kernelMap(cpu.PC)
 				if entry != nil && entry != cpu.LastSymbol {
-					if cpu.DebugTrace {
+					if cpu.DebugInstrTrace {
 						log.Printf("%v  <%s+0x%x>:\r\n",
 							fmtAddr(cpu.PC), entry.Name, mapped-entry.Start)
 					}
 					cpu.LastSymbol = entry
 				}
-				if entry != nil {
-					switch entry.Name {
-					case "__delay":
-						if false {
-							// cpu.MMU.Mem.Strings()
-							os.Exit(1)
-						}
-
-					case "mount_root_generic":
-						cpu.DebugTrace = true
-					}
-				}
 			}
-			if cpuDebug || cpu.DebugTrace {
-				cpu.traceRegs()
+			if cpuDebug || cpu.DebugInstrTrace {
+				if false {
+					cpu.traceRegs()
+				}
 				cpu.trace(raw, instr, "")
 			}
 		}
@@ -2188,8 +2178,14 @@ func (cpu *CPU) ColorOff() string {
 	return "\x1b[0m"
 }
 
+func (cpu *CPU) addLossage(pc uint64, instr isa.Instr) {
+	cpu.lossage[cpu.lossageIdx].pc = pc
+	cpu.lossage[cpu.lossageIdx].instr = instr
+	cpu.lossageIdx = (cpu.lossageIdx + 1) % len(cpu.lossage)
+}
+
 func (cpu *CPU) ViewLossage() {
-	if !debugLossage {
+	if !debugLossage || !cpu.DebugLossage {
 		return
 	}
 	i := (cpu.lossageIdx + 1) % len(cpu.lossage)
@@ -2285,22 +2281,19 @@ func (cpu *CPU) traceRegs() {
 
 	for i := 0; i < 32; i++ {
 		if cpu.X[i] != cpu.regTrace.x[i] {
-			fmt.Print(tracePrefix)
-			fmt.Printf("%v=%016x\n", isa.Register(i), cpu.X[i])
+			log.Printf("%v%v=%016x\n", tracePrefix, isa.Register(i), cpu.X[i])
 			cpu.regTrace.x[i] = cpu.X[i]
 		}
 	}
 	for i := 0; i < 32; i++ {
 		if cpu.F[i] != cpu.regTrace.f[i] {
-			fmt.Print(tracePrefix)
-			fmt.Printf("F%d=%016v\n", i, cpu.F[i])
+			log.Printf("%vF%d=%016v\n", tracePrefix, i, cpu.F[i])
 			cpu.regTrace.f[i] = cpu.F[i]
 		}
 	}
 	for i := 0; i < 32; i++ {
 		if !bytes.Equal(cpu.vpu.VRegs[i], cpu.regTrace.v[i]) {
-			fmt.Print(tracePrefix)
-			fmt.Printf("v%d=%016x\n", i, cpu.vpu.VRegs[i])
+			log.Printf("%vv%d=%016x\n", tracePrefix, i, cpu.vpu.VRegs[i])
 			copy(cpu.regTrace.v[i], cpu.vpu.VRegs[i])
 		}
 	}

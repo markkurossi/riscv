@@ -279,7 +279,9 @@ func (cpu *CPU) SetCSRX(csr isa.CSR, v uint64, raw uint32,
 		cpu.vpu.VXRM = uint8(v >> 1 & 0b11)
 
 	case isa.CsrGoemuDebug:
-		cpu.DebugTrace = v&0b1 != 0
+		cpu.DebugInstrTrace = v&0b1 != 0
+		cpu.DebugTrapTrace = v&0b10 != 0
+		cpu.DebugLossage = v&0b100 != 0
 		cpu.CSR[csr].Store(v)
 
 	case isa.CsrGoemuCPUProfile:
