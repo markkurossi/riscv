@@ -1754,6 +1754,10 @@ func (instr Instr) StringVPU() string {
 		return fmt.Sprintf("vmv%vr.v v%v,v%v",
 			nf, int(instr.Rd), int(instr.Rs2))
 
+	case Vlnfre64V:
+		return fmt.Sprintf("vl%vre64.v v%v,(%v)",
+			nf, int(instr.Rd), instr.Rs1)
+
 		// Vector loads and stores.
 	case Vle8V, Vle16V, Vle32V, Vle64V, Vse8V, Vse16V, Vse32V, Vse64V:
 		return instr.vsString(op, imm)
