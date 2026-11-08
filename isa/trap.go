@@ -8,6 +8,7 @@ package isa
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"runtime/debug"
 	"strings"
@@ -185,8 +186,8 @@ type Trap struct {
 // NewTrap creates a new trap.
 func NewTrap(pc, cause, tval uint64, err error) *Trap {
 	if false {
-		fmt.Printf("Trap: pc=%x, cause=%v, tval=%x, err=%v\n",
-			pc, cause, tval, err)
+		log.Printf("Trap: pc=%x, %v[%v], tval=%x, err=%v",
+			pc, ExceptionCauses[cause], cause, tval, err)
 		if false {
 			debug.PrintStack()
 			os.Exit(1)

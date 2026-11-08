@@ -160,8 +160,11 @@ func (cpu *CPU) Run() error {
 		if err != nil {
 			cpu.codePagenum = memory.InvalidPagenum
 			if trap, ok := errors.AsType[*isa.Trap](err); ok {
-				// The trap handler saved relevant CPU state and moved
-				// PC to trap handler. All done, let's continue
+				err = cpu.HandleTrap(trap.PC, trap.Cause, trap.Tval)
+				if err != nil {
+					return err
+				}
+
 				if false {
 					switch trap.Cause {
 					case isa.CauseEcallU, isa.CauseEcallS,
@@ -513,7 +516,7 @@ dispatch:
 					cpu.X[isa.A0], cpu.X[isa.A1])
 			}
 
-			err = cpu.trap(cpu.PC, cause, 0)
+			err = cpu.HandleTrap(cpu.PC, cause, 0)
 			if err != nil {
 				return err
 			}

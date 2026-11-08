@@ -18,24 +18,25 @@ import (
 func (cpu *CPU) Trap(cause, tval uint64, err error) error {
 	epc := cpu.PC
 
-	if ierr := cpu.trap(epc, cause, tval); ierr != nil {
-		return ierr
-	}
-
 	if debugLossage && cpu.DebugLossage {
 		log.Printf("%s: %v[%v]: lossage:",
 			fmtAddr(epc), isa.ExceptionCauses[cause], cause)
 		cpu.ViewLossage()
 	}
 	if cpuDebug && cpu.DebugTrapTrace {
-		log.Printf("%s: %v[%v] %x %v",
-			fmtAddr(epc), isa.ExceptionCauses[cause], cause, tval, err)
+		if err != nil {
+			log.Printf("%s: %v[%v] %x %v",
+				fmtAddr(epc), isa.ExceptionCauses[cause], cause, tval, err)
+		} else {
+			log.Printf("%s: %v[%v] %x",
+				fmtAddr(epc), isa.ExceptionCauses[cause], cause, tval)
+		}
 	}
 
 	return isa.NewTrap(epc, cause, tval, err)
 }
 
-func (cpu *CPU) trap(epc, cause, tval uint64) error {
+func (cpu *CPU) HandleTrap(epc, cause, tval uint64) error {
 
 	if debugLossage && cpu.DebugLossage {
 		cpu.addLossage(epc, isa.Instr{
