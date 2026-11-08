@@ -56,7 +56,7 @@ func NewVPU(cpu *CPU) *VPU {
 func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	if vpuDebug {
 		vpu.cpu.tracef(raw, instr, "pc=%x", vpu.cpu.PC)
-		vpu.cpu.DebugTrace = true
+		vpu.cpu.DebugInstrTrace = true
 	}
 	if vpu.cpu.mstatus.VS() == isa.RegOff {
 		return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
