@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <stdbool.h>
 #include <spawn.h>
 #include <sys/wait.h>
@@ -20,7 +21,31 @@ void print_riscv_extensions();
 static void
 usage()
 {
-  fprintf(stderr, "Usage: time [-i] [-p] program [args...]\n");
+  fprintf(stderr, "Usage: time [-i] [-p] [-t] [-T] [-l] program [args...]\n");
+  fprintf(stderr, "  -i print CPU information\n");
+  fprintf(stderr, "  -p enable CSR 802 CPU profiling\n");
+  fprintf(stderr, "  -t enable instruction tracing\n");
+  fprintf(stderr, "  -T enable trap tracing\n");
+  fprintf(stderr, "  -l enable instruction lossage debug\n");
+}
+
+static uint64_t debug_csr = 0;
+static bool cpu_profile = false;
+
+static void
+clear_csrs()
+{
+  if (debug_csr != 0)
+    {
+      riscv_write_csr(0x800, 0);
+      debug_csr = 0;
+    }
+
+  if (cpu_profile)
+    {
+      riscv_write_csr(0x802, 0);
+      cpu_profile = false;
+    }
 }
 
 int
@@ -33,11 +58,13 @@ main(int argc, char *argv[])
   unsigned long instret, cycle;
   unsigned long start, end;
   double elapsed;
-  bool cpu_profile = false;
+  bool instr_trace = false;
+  bool trap_trace = false;
+  bool lossage = false;
   bool info = false;
   int ch;
 
-  while ((ch = getopt(argc, argv, "ip")) != -1)
+  while ((ch = getopt(argc, argv, "iptTl")) != -1)
     {
       switch (ch)
         {
@@ -56,6 +83,18 @@ main(int argc, char *argv[])
           print_riscv_extensions();
           break;
 
+        case 't':
+          instr_trace = true;
+          break;
+
+        case 'T':
+          trap_trace = true;
+          break;
+
+        case 'l':
+          lossage = true;
+          break;
+
         case '?':
         default:
           usage();
@@ -72,8 +111,21 @@ main(int argc, char *argv[])
       return 1;
     }
 
+  atexit(clear_csrs);
+
   if (cpu_profile)
     riscv_write_csr(0x802, 1);
+
+  /* Debug CSR. */
+  debug_csr = 0;
+  if (instr_trace)
+    debug_csr |= 0x1;
+  if (trap_trace)
+    debug_csr |= 0x2;
+  if (lossage)
+    debug_csr |= 0x4;
+  if (debug_csr != 0)
+    riscv_write_csr(0x800, debug_csr);
 
   start = time_ns();
   cycle = riscv_read_csr(cycle);
@@ -92,8 +144,7 @@ main(int argc, char *argv[])
   instret = riscv_read_csr(instret) - instret;
   end = time_ns();
 
-  if (cpu_profile)
-    riscv_write_csr(0x802, 0);
+  clear_csrs();
 
   elapsed = ((double) end - (double) start) * 1e-9;
 
