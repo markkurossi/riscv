@@ -380,6 +380,9 @@ const (
 
 	// Pseudo instruction for the vector extension.
 	Vpu
+
+	// Debug pseudo instruction.
+	Debug
 )
 
 // VpuOp defines vector instruction opcodes.
@@ -445,6 +448,7 @@ const (
 	VmsltuVx
 	VsrlVx
 	VnsrlWx
+	VfmergeVfm
 	VmvSX
 	Vslide1downVx
 	VmvVV
@@ -1161,6 +1165,10 @@ var Operands = map[Op]OpInfo{
 		Name: "vpu",
 		Desc: `Pseudo instruction encoding "V" vector extension instructions`,
 	},
+	Debug: OpInfo{
+		Name: "debug",
+		Desc: "Debug pseudo instruction",
+	},
 }
 
 // VpuOperands provide information about vector instructions.
@@ -1338,6 +1346,9 @@ var VpuOperands = map[VpuOp]OpInfo{
 	},
 	VnsrlWx: OpInfo{
 		Name: "vnsrl.wx",
+	},
+	VfmergeVfm: OpInfo{
+		Name: "vfmerge.vfm",
 	},
 	VmvSX: OpInfo{
 		Name: "vmv.s.x",
@@ -1698,6 +1709,11 @@ func (instr Instr) String() string {
 
 		case Vpu:
 			return instr.StringVPU()
+
+		case Debug:
+			return fmt.Sprintf("%v %v,%v,%v,%v",
+				pad(instr.Op), int(instr.Rd), int(instr.Rs1), int(instr.Rs2),
+				instr.Imm)
 		}
 	}
 
