@@ -450,6 +450,7 @@ const (
 	VnsrlWx
 	VfmergeVfm
 	VmvSX
+	VslidedownVx
 	Vslide1downVx
 	VmvVV
 	VmergeVvm
@@ -1352,6 +1353,9 @@ var VpuOperands = map[VpuOp]OpInfo{
 	},
 	VmvSX: OpInfo{
 		Name: "vmv.s.x",
+	},
+	VslidedownVx: OpInfo{
+		Name: "vslidedown.vx",
 	},
 	Vslide1downVx: OpInfo{
 		Name: "vslide1down.vx",

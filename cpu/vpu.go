@@ -293,6 +293,64 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 
+	case isa.VslidedownVx:
+		sew := vpu.VType.VSEW()
+		sh := vpu.cpu.X[instr.Rs1]
+		vlmul := vpu.VType.VLMUL()
+		vlmax := uint64(float32(vpu.VLEN/uint64(sew)) * vlmul)
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			var offset uint64
+			var isValid bool
+
+			// sh can be 0xffffffffffffffff so sh+1 wraps around and
+			// is smaller than vlmax. Instead of using uint128
+			// variables, we check the condition with two checks:
+			if sh < vlmax && i+sh < vlmax {
+				isValid = true
+			}
+			if isValid {
+				offset = sh
+			}
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+			vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), i+offset)
+
+			switch sew {
+			case isa.E8:
+				var v uint8
+				if isValid {
+					v = vs2reg[vs2ofs]
+				}
+				reg[ofs] = v
+
+			case isa.E16:
+				var v uint16
+				if isValid {
+					v = memory.Uint16(vs2reg, vs2ofs)
+				}
+				memory.PutUint16(reg, ofs, v)
+
+			case isa.E32:
+				var v uint32
+				if isValid {
+					v = memory.Uint32(vs2reg, vs2ofs)
+				}
+				memory.PutUint32(reg, ofs, v)
+
+			case isa.E64:
+				var v uint64
+				if isValid {
+					v = memory.Uint64(vs2reg, vs2ofs)
+				}
+				memory.PutUint64(reg, ofs, v)
+			}
+		}
+
 	case isa.Vslide1downVx:
 		sew := vpu.VType.VSEW()
 
