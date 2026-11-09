@@ -1458,6 +1458,25 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 
+	case isa.VfmvVF:
+		sew := vpu.VType.VSEW()
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+
+			switch sew {
+			case isa.E32:
+				f := float32(vpu.cpu.F[instr.Rs1])
+				v := math.Float32bits(f)
+				memory.PutUint32(reg, ofs, v)
+
+			case isa.E64:
+				f := vpu.cpu.F[instr.Rs1]
+				v := math.Float64bits(f)
+				memory.PutUint64(reg, ofs, v)
+			}
+		}
+
 	case isa.VmvXS:
 		sew := vpu.VType.VSEW()
 		vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), 0)

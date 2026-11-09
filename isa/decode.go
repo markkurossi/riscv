@@ -1900,10 +1900,11 @@ func Decode(raw uint32) (Instr, error) {
 			}
 
 		case 0b101: // OPFVF
-			switch funct7 >> 1 {
-			case 0b010111:
-				// vfmerge/vfmv
-				instr.SetVPU(VfmergeVfm, uint32(funct7&0b1))
+			switch funct7 {
+			case 0b0101110: // 010111, vm=0
+				instr.SetVPU(VfmergeVfm, 0)
+			case 0b0101111: // 010111, vm=1
+				instr.SetVPU(VfmvVF, 0)
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
 					group, funct3, funct7>>1, raw)
