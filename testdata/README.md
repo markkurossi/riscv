@@ -70,7 +70,30 @@ Each test:
 
 - install Spike
 
-``` bash
-make all -j$(nproc) --environment-overrides MARCH=rv64gcv PATTERN='^v.*'
-make all -j$(nproc) --environment-overrides VLEN=128 MARCH=rv64gcv PATTERN='^v.*'
+``` diff
+diff --git a/Makefile b/Makefile
+index 1cd6d8d..f2e23f4 100644
+--- a/Makefile
++++ b/Makefile
+@@ -74,7 +74,8 @@ OUTPUT_STAGE1_BIN = $(OUTPUT)/bin/stage1/
+ OUTPUT_STAGE2_BIN = $(OUTPUT)/bin/stage2/
+ CONFIGS = configs/
+
+-SPIKE = spike
++#SPIKE = spike
++SPIKE = /home/mtr/riscv/bin/spike
+ PATCHER_SPIKE = build/pspike
+ MABI = lp64d
+
 ```
+
+``` bash
+export SPIKE_INSTALL=$HOME/riscv
+make all -j$(nproc) --environment-overrides VLEN=128 MARCH=rv64gcv_zvbb PATTERN='^v.*'
+```
+
+# RISC-V Architecture Tests
+
+RISC-V Architectural Certification Tests:
+
+ - Repository: https://github.com/riscv/riscv-arch-test

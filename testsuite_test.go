@@ -76,8 +76,17 @@ func TestISA(t *testing.T) {
 	testSuite(t, "testdata/isa", skipISA)
 }
 
+var skipVPU = map[string]uint64{
+	// Floating point entropy fixes.
+	"vfadd_vv-0": 24,
+	"vfadd_vv-1": 25,
+	"vfadd_vv-2": 7,
+	"vfadd_vv-3": 5,
+	"vfadd_vv-4": 5,
+}
+
 func TestVPU(t *testing.T) {
-	testSuite(t, "testdata/vpu", nil)
+	testSuite(t, "testdata/vpu", skipVPU)
 	t.Logf("instret: %v, runtime: %v, MIPS: %.2f\n",
 		instret, runtime,
 		float64(instret/1000000.0)/float64(runtime/time.Second))

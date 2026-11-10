@@ -80,7 +80,7 @@ echo "exec twm" > ~/.xsession # Or replace 'twm' with your chosen window manager
 chmod +x ~/.xsession
 ```
 
-## ports
+# Ports
 
 ``` shell
 $ tar -xf ports-main.tar.gz -C /usr
