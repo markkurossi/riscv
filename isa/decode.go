@@ -1261,7 +1261,7 @@ func Decode(raw uint32) (Instr, error) {
 					group, funct3, mop, raw)
 			}
 
-		case 0b111: // vector loads
+		case 0b111:
 			switch mop {
 			case 0b00: // unit-stride - vle<eew>
 				switch lumop {

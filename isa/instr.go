@@ -1691,19 +1691,19 @@ func (instr Instr) String() string {
 				pad(instr.Op), instr.Rd, instr.Imm, instr.Rs1)
 
 		case Fld, Flw:
-			return fmt.Sprintf("%v F%v,%d(%v)",
+			return fmt.Sprintf("%v f%v,%d(%v)",
 				pad(instr.Op), int(instr.Rd), instr.Imm, instr.Rs1)
 
 		case Fsw:
-			return fmt.Sprintf("%v F%v,%d(%v)",
+			return fmt.Sprintf("%v f%v,%d(%v)",
 				pad(instr.Op), int(instr.Rs2), instr.Imm, instr.Rs1)
 
 		case FcvtDS:
-			return fmt.Sprintf("%v F%v,F%v",
+			return fmt.Sprintf("%v f%v,f%v",
 				pad(instr.Op), int(instr.Rd), int(instr.Rs1))
 
 		case FmvXD:
-			return fmt.Sprintf("%v %v,F%v",
+			return fmt.Sprintf("%v %v,f%v",
 				pad(instr.Op), instr.Rd, int(instr.Rs1))
 
 		case Lui: // GroupLUI
@@ -1790,14 +1790,15 @@ func (instr Instr) StringVPU() string {
 		return fmt.Sprintf("%v v%d,v%d", pad(op), instr.Rd, instr.Rs2)
 
 		// Vector loads and stores.
-	case Vle8V, Vle16V, Vle32V, Vle64V, Vse8V, Vse16V, Vse32V, Vse64V:
-		return instr.vsString(op, imm)
+	case Vle8V, Vle16V, Vle32V, Vle64V, Vse8V, Vse16V, Vse32V, Vse64V,
+		Vlse8V, Vlse16V, Vlse32V, Vlse64V:
+		return instr.vsString(op, nf, imm)
 	}
 
 	return op.String()
 }
 
-func (instr Instr) vsString(instrOp VpuOp, imm int32) string {
+func (instr Instr) vsString(instrOp VpuOp, nf uint64, imm int32) string {
 	var size, op, ff string
 
 	if imm == 0b10000 {
@@ -1829,16 +1830,26 @@ func (instr Instr) vsString(instrOp VpuOp, imm int32) string {
 	case Vse64V:
 		size = "64"
 		op = "s"
+	case Vlse8V:
+		size = "8"
+		op = "ls"
+	case Vlse16V:
+		size = "16"
+		op = "ls"
+	case Vlse32V:
+		size = "32"
+		op = "ls"
+	case Vlse64V:
+		size = "64"
+		op = "ls"
 	default:
 		panic(instr)
 	}
 
 	var seg string
-	nf := instr.Imm >> 4
-	if nf > 0 {
-		seg = fmt.Sprintf("seg%v", nf+1)
+	if nf > 1 {
+		seg = fmt.Sprintf("seg%v", nf)
 	}
-	_ = seg
 
 	var idx string
 	var idxReg string
@@ -1854,8 +1865,7 @@ func (instr Instr) vsString(instrOp VpuOp, imm int32) string {
 		idxReg = fmt.Sprintf(",%v", instr.Rs2)
 	}
 
-	//opname := fmt.Sprintf("v%v%v%ve%v%v.v", op, idx, seg, size, ff)
-	opname := fmt.Sprintf("v%v%ve%v%v.v", op, idx, size, ff)
+	opname := fmt.Sprintf("v%v%v%ve%v%v.v", op, idx, seg, size, ff)
 	for len(opname) < maxOpNameLen {
 		opname += " "
 	}
