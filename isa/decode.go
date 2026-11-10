@@ -1153,7 +1153,7 @@ func Decode(raw uint32) (Instr, error) {
 	case GroupLOADFP:
 		instr.Imm = int32(raw) >> 20
 
-		// The mop and lumop fields for vector loads/stores.
+		// The mop and lumop fields for vector loads.
 
 		// The vector addressing modes are encoded using the 2-bit
 		// mop[1:0] field.
@@ -1166,30 +1166,11 @@ func Decode(raw uint32) (Instr, error) {
 		//   0 1       | indexed-unordered | VLUXEI<EEW>
 		//   1 0       | strided           | VLSE<EEW>
 		//   1 1       | indexed-ordered   | VLOXEI<EEW>
-		//
-		// Table 10. encoding for stores:
-		//
-		//   mop [1:0] | Description       | Opcodes
-		//   ----------+-------------------+-------------
-		//   0 0       | unit-stride       | VSE<EEW>
-		//   0 1       | indexed-unordered | VSUXEI<EEW>
-		//   1 0       | strided           | VSSE<EEW>
-		//   1 1       | indexed-ordered   | VSOXEI<EEW>
 		mop := raw >> 26 & 0b11
 
 		// Additional unit-stride vector addressing modes are encoded
 		// using the 5-bit lumop and sumop fields in the unit-stride
 		// load and store instruction encodings respectively.
-		//
-		// Table 11. lumop:
-		//
-		//   lumop[4:0] | Description
-		//   -----------+---------------------------------
-		//   0 0 0 0 0  | unit-stride load
-		//   0 1 0 0 0  | unit-stride, whole register load
-		//   0 1 0 1 1  | unit-stride, mask load, EEW=8
-		//   1 0 0 0 0  | unit-stride fault-only-first
-		//   x x x x x  | other encodings reserved
 		//
 		// Table 12. sumop:
 		//
@@ -1202,7 +1183,15 @@ func Decode(raw uint32) (Instr, error) {
 		lumop := int32(raw >> 20 & 0b11111)
 
 		switch funct3 {
-		case 0b000: // vector loads
+		case 0b010:
+			instr.Op = Flw
+
+		case 0b011:
+			instr.Op = Fld
+
+			// Vector loads.
+
+		case 0b000:
 			switch mop {
 			case 0b00: // unit-stride - vle<eew>
 				switch lumop {
@@ -1218,6 +1207,8 @@ func Decode(raw uint32) (Instr, error) {
 						group, funct3, mop, lumop, raw)
 				}
 
+				// 0b01: indexed-unordered vsuxei<eew>
+
 			case 0b10: // strided - vlse<eew>
 				instr.SetVPU(Vlse8V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
 
@@ -1225,12 +1216,6 @@ func Decode(raw uint32) (Instr, error) {
 				return instr, fmt.Errorf("%v/%03b/%02b, raw=%08x",
 					group, funct3, mop, raw)
 			}
-
-		case 0b010:
-			instr.Op = Flw
-
-		case 0b011:
-			instr.Op = Fld
 
 		case 0b101:
 			switch mop {
@@ -1292,7 +1277,6 @@ func Decode(raw uint32) (Instr, error) {
 					return instr, fmt.Errorf("%v/%03b/%02b/%05b, raw=%08x",
 						group, funct3, mop, lumop, raw)
 				}
-
 			case 0b01: // indexed-unordered - vluxei<eew>
 				instr.SetVPU(Vluxei64V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
 
@@ -1309,6 +1293,33 @@ func Decode(raw uint32) (Instr, error) {
 		}
 
 	case GroupSTOREFP:
+		// The mop and sumop fields for vector stores.
+
+		// The vector addressing modes are encoded using the 2-bit
+		// mop[1:0] field.
+		//
+		// Table 10. encoding for stores:
+		//
+		//   mop [1:0] | Description       | Opcodes
+		//   ----------+-------------------+-------------
+		//   0 0       | unit-stride       | VSE<EEW>
+		//   0 1       | indexed-unordered | VSUXEI<EEW>
+		//   1 0       | strided           | VSSE<EEW>
+		//   1 1       | indexed-ordered   | VSOXEI<EEW>
+		mop := raw >> 26 & 0b11
+
+		// Additional unit-stride vector addressing modes are encoded
+		// using the 5-bit lumop and sumop fields in the unit-stride
+		// load and store instruction encodings respectively.
+		//
+		// Table 12. sumop:
+		//
+		//   sumop[4:0] | Description
+		//   -----------+----------------------------------
+		//   0 0 0 0 0  | unit-stride store
+		//   0 1 0 0 0  | unit-stride, whole register store
+		//   0 1 0 1 1  | unit-stride, mask store, EEW=8
+		//   x x x x x  | other encodings reserved
 		sumop := int32(raw >> 20 & 0b11111)
 
 		switch funct3 {
@@ -1323,24 +1334,76 @@ func Decode(raw uint32) (Instr, error) {
 			instr.Op = Fsd
 
 			// Vector stores.
+
 		case 0b000:
-			switch sumop {
-			case 0b00000:
-				instr.SetVPU(Vse8V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
-			case 0b01000:
-				instr.SetVPU(Vs1rV, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
-			case 0b01011:
-				instr.SetVPU(VsmV, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+			switch mop {
+			case 0b00: // unit-stride - vse<eew>
+				switch sumop {
+				case 0b00000:
+					instr.SetVPU(Vse8V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+				case 0b01000:
+					instr.SetVPU(Vs1rV, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+				case 0b01011:
+					instr.SetVPU(VsmV, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+				default:
+					return instr, fmt.Errorf("%v/%03b/%05b, raw=%08x",
+						group, funct3, sumop, raw)
+				}
+
 			default:
-				return instr, fmt.Errorf("%v/%03b/%05b, raw=%08x",
-					group, funct3, sumop, raw)
+				return instr, fmt.Errorf("%v/%03b/%02b, raw=%08x",
+					group, funct3, mop, raw)
 			}
+
 		case 0b101:
-			instr.SetVPU(Vse16V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+			switch mop {
+			case 0b00: // unit-stride - vse<eew>
+				switch sumop {
+				case 0b00000:
+					instr.SetVPU(Vse16V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+				default:
+					return instr, fmt.Errorf("%v/%03b/%02b/%05b, raw=%08x",
+						group, funct3, mop, sumop, raw)
+				}
+			default:
+				return instr, fmt.Errorf("%v/%03b/%02b, raw=%08x",
+					group, funct3, mop, raw)
+			}
+
 		case 0b110:
-			instr.SetVPU(Vse32V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+			switch mop {
+			case 0b00: // unit-stride - vle<eew>
+				switch sumop {
+				case 0b00000:
+					instr.SetVPU(Vse32V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+				default:
+					return instr, fmt.Errorf("%v/%03b/%02b/%05b, raw=%08x",
+						group, funct3, mop, sumop, raw)
+				}
+
+			default:
+				return instr, fmt.Errorf("%v/%03b/%02b, raw=%08x",
+					group, funct3, mop, raw)
+			}
+
 		case 0b111:
-			instr.SetVPU(Vse64V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+			switch mop {
+			case 0b00: // unit-stride - vle<eew>
+				switch sumop {
+				case 0b00000:
+					instr.SetVPU(Vse64V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+				default:
+					return instr, fmt.Errorf("%v/%03b/%02b/%05b, raw=%08x",
+						group, funct3, mop, sumop, raw)
+				}
+
+			case 0b01: // indexed-unordered - vsuxei<eew>
+				instr.SetVPU(Vsuxei64V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+
+			default:
+				return instr, fmt.Errorf("%v/%03b/%02b, raw=%08x",
+					group, funct3, mop, raw)
+			}
 
 		default:
 			return instr, fmt.Errorf("STORE-FP: funct3=%03b", funct3)
@@ -1647,6 +1710,19 @@ func Decode(raw uint32) (Instr, error) {
 
 			default:
 				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
+					group, funct3, funct7>>1, raw)
+			}
+
+		case 0b001: // OPFVV
+			switch funct7 >> 1 {
+			case 0b000000:
+				instr.SetVPU(VfaddVv, uint32(funct7&0b1))
+
+			case 0b101011:
+				instr.SetVPU(VfnmsubVv, uint32(funct7&0b1))
+
+			default:
+				return instr, fmt.Errorf("%v/%03b/%06b, raw=%x",
 					group, funct3, funct7>>1, raw)
 			}
 

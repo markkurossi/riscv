@@ -1457,6 +1457,34 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 
+	case isa.VfaddVv:
+		sew := vpu.VType.VSEW()
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+			vs1reg, vs1ofs := vpu.elt(sew, uint64(instr.Rs1), i)
+			vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), i)
+
+			switch sew {
+			case isa.E32:
+				v1 := math.Float32frombits(memory.Uint32(vs1reg, vs1ofs))
+				v2 := math.Float32frombits(memory.Uint32(vs2reg, vs2ofs))
+				v := math.Float32bits(v1 + v2)
+				memory.PutUint32(reg, ofs, v)
+
+			case isa.E64:
+				v1 := math.Float64frombits(memory.Uint64(vs1reg, vs1ofs))
+				v2 := math.Float64frombits(memory.Uint64(vs2reg, vs2ofs))
+				v := math.Float64bits(v1 + v2)
+				memory.PutUint64(reg, ofs, v)
+			}
+		}
+
 	case isa.VfmergeVfm:
 		sew := vpu.VType.VSEW()
 
@@ -2972,6 +3000,69 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				err := vpu.cpu.MMU.Store8(memAddr, val)
 				if err != nil {
 					return err
+				}
+			}
+		}
+
+	case isa.Vsuxei64V:
+		var flmul uint64
+		vlmul := vpu.VType.VLMUL()
+		if vlmul < 1 {
+			flmul = 1
+		} else {
+			flmul = uint64(vlmul)
+		}
+
+		eltWidth := isa.E64
+		vl := vpu.VL
+		baseAddr := vpu.cpu.X[instr.Rs1]
+		vd := uint64(instr.Rd)
+		sew := vpu.VType.VSEW()
+
+		for i := vpu.VStart; i < vl; i++ {
+			ireg, iofs := vpu.elt(eltWidth, uint64(instr.Rs2), i)
+			index := memory.Uint64(ireg, iofs)
+
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			vregInx := i
+
+			vpu.VStart = i
+			for fn := uint64(0); fn < nf; fn++ {
+				reg, ofs := vpu.elt(sew, vd+fn*flmul, vregInx)
+				memAddr := baseAddr + index + fn*sew.Len()
+
+				switch sew {
+				case isa.E8:
+					val := reg[ofs]
+					err := vpu.cpu.MMU.Store8(memAddr, val)
+					if err != nil {
+						return err
+					}
+
+				case isa.E16:
+					val := memory.Uint16(reg, ofs)
+					err := vpu.cpu.MMU.Store16(memAddr, val)
+					if err != nil {
+						return err
+					}
+
+				case isa.E32:
+					val := memory.Uint32(reg, ofs)
+					err := vpu.cpu.MMU.Store32(memAddr, val)
+					if err != nil {
+						return err
+					}
+
+				case isa.E64:
+					val := memory.Uint64(reg, ofs)
+					err := vpu.cpu.MMU.Store64(memAddr, val)
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}

@@ -579,6 +579,9 @@ var bugs = []struct {
 	{0x42102657, "vmv.x.s"},
 	{0x03050087, "vle8ff.v"},
 	{0x028780a7, "vs1r.v"},
+	{0xcd717057, "vsetivli"},
+
+	{0x068570a7, "vsuxei64.v"},
 }
 
 func TestBug(t *testing.T) {
@@ -598,7 +601,7 @@ func TestBug(t *testing.T) {
 		got := parts[0]
 
 		if bug.name != got {
-			t.Errorf("%x: expected %v, got %v\n", bug.raw, bug.name, got)
+			t.Errorf("%x: expected %v, got %v\n", bug.raw, bug.name, instr)
 		}
 	}
 }

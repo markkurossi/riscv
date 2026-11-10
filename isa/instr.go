@@ -448,6 +448,8 @@ const (
 	VmsltuVx
 	VsrlVx
 	VnsrlWx
+	VfaddVv
+	VfnmsubVv
 	VfmergeVfm
 	VfmvVF
 	VmvSX
@@ -477,6 +479,7 @@ const (
 	Vse64V
 	Vs1rV
 	VsmV
+	Vsuxei64V
 	VrsubVi
 	VandVi
 	VorVi
@@ -1349,6 +1352,12 @@ var VpuOperands = map[VpuOp]OpInfo{
 	VnsrlWx: OpInfo{
 		Name: "vnsrl.wx",
 	},
+	VfaddVv: OpInfo{
+		Name: "vfadd.vv",
+	},
+	VfnmsubVv: OpInfo{
+		Name: "vfnmsub.vv",
+	},
 	VfmergeVfm: OpInfo{
 		Name: "vfmerge.vfm",
 	},
@@ -1435,6 +1444,9 @@ var VpuOperands = map[VpuOp]OpInfo{
 	},
 	VsmV: OpInfo{
 		Name: "vsm.v",
+	},
+	Vsuxei64V: OpInfo{
+		Name: "vsuxei64.v",
 	},
 	VrsubVi: OpInfo{
 		Name: "vrsub.vi",
@@ -1765,6 +1777,9 @@ func (instr Instr) StringVPU() string {
 	case Vlnfre64V:
 		return fmt.Sprintf("vl%vre64.v v%v,(%v)",
 			nf, int(instr.Rd), instr.Rs1)
+
+	case VzextVf4, VsllVi:
+		return fmt.Sprintf("%v v%d,v%d", pad(op), instr.Rd, instr.Rs2)
 
 		// Vector loads and stores.
 	case Vle8V, Vle16V, Vle32V, Vle64V, Vse8V, Vse16V, Vse32V, Vse64V:
