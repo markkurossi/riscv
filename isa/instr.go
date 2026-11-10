@@ -437,6 +437,7 @@ const (
 	VmandnMm
 	VmandMm
 	VmorMm
+	VmxorMm
 	VmnandMm
 	VmaddVv
 	VmaccVv
@@ -1318,6 +1319,9 @@ var VpuOperands = map[VpuOp]OpInfo{
 	},
 	VmorMm: OpInfo{
 		Name: "vmor.mm",
+	},
+	VmxorMm: OpInfo{
+		Name: "vmxor.mm",
 	},
 	VmnandMm: OpInfo{
 		Name: "vmnand.mm",
