@@ -8,7 +8,6 @@ package cpu
 
 import (
 	"encoding/hex"
-	"fmt"
 	"log"
 
 	"github.com/markkurossi/riscv/isa"
@@ -167,53 +166,53 @@ func (cpu *CPU) Interrupt(target isa.PrivilegeMode, cause uint64) {
 
 // Dump the CPU state into standard output.
 func (cpu *CPU) Dump(epc uint64) {
-	fmt.Printf("CPU: 0 Mode: %v IC: %v Mstatus: %x\r\n",
+	log.Printf("CPU: 0 Mode: %v IC: %v Mstatus: %x",
 		cpu.mode, cpu.Instret, cpu.mstatus)
 
 	if cpu.Symtab != nil {
 		entry, mapped := cpu.FuncName(epc)
 		if entry != nil {
-			fmt.Printf("epc : %s+0x%x\r\n", entry.Name, mapped-entry.Start)
+			log.Printf("epc : %s+0x%x", entry.Name, mapped-entry.Start)
 		}
 		entry, mapped = cpu.FuncName(cpu.X[isa.Ra])
 		if entry != nil {
-			fmt.Printf(" ra : %s+0x%x\r\n", entry.Name, mapped-entry.Start)
+			log.Printf(" ra : %s+0x%x", entry.Name, mapped-entry.Start)
 		}
 	}
 
-	fmt.Printf("epc : %016x ra : %016x sp : %016x\r\n",
+	log.Printf("epc : %016x ra : %016x sp : %016x",
 		epc, cpu.X[isa.Ra], cpu.X[isa.Sp])
-	fmt.Printf(" gp : %016x tp : %016x t0 : %016x\r\n",
+	log.Printf(" gp : %016x tp : %016x t0 : %016x",
 		cpu.X[isa.Gp], cpu.X[isa.Tp], cpu.X[isa.T0])
-	fmt.Printf(" t1 : %016x t2 : %016x s0 : %016x\r\n",
+	log.Printf(" t1 : %016x t2 : %016x s0 : %016x",
 		cpu.X[isa.T1], cpu.X[isa.T2], cpu.X[isa.S0])
-	fmt.Printf(" s1 : %016x a0 : %016x a1 : %016x\r\n",
+	log.Printf(" s1 : %016x a0 : %016x a1 : %016x",
 		cpu.X[isa.S1], cpu.X[isa.A0], cpu.X[isa.A1])
-	fmt.Printf(" a2 : %016x a3 : %016x a4 : %016x\r\n",
+	log.Printf(" a2 : %016x a3 : %016x a4 : %016x",
 		cpu.X[isa.A2], cpu.X[isa.A3], cpu.X[isa.A4])
-	fmt.Printf(" a5 : %016x a6 : %016x a7 : %016x\r\n",
+	log.Printf(" a5 : %016x a6 : %016x a7 : %016x",
 		cpu.X[isa.A5], cpu.X[isa.A6], cpu.X[isa.A7])
-	fmt.Printf(" s2 : %016x s3 : %016x s4 : %016x\r\n",
+	log.Printf(" s2 : %016x s3 : %016x s4 : %016x",
 		cpu.X[isa.S2], cpu.X[isa.S3], cpu.X[isa.S4])
-	fmt.Printf(" s5 : %016x s6 : %016x s7 : %016x\r\n",
+	log.Printf(" s5 : %016x s6 : %016x s7 : %016x",
 		cpu.X[isa.S5], cpu.X[isa.S6], cpu.X[isa.S7])
-	fmt.Printf(" s8 : %016x s9 : %016x s10: %016x\r\n",
+	log.Printf(" s8 : %016x s9 : %016x s10: %016x",
 		cpu.X[isa.S8], cpu.X[isa.S9], cpu.X[isa.S10])
-	fmt.Printf(" s11: %016x t3 : %016x t4 : %016x\r\n",
+	log.Printf(" s11: %016x t3 : %016x t4 : %016x",
 		cpu.X[isa.S11], cpu.X[isa.T3], cpu.X[isa.T4])
-	fmt.Printf(" t5 : %016x t6 : %016x\r\n",
+	log.Printf(" t5 : %016x t6 : %016x",
 		cpu.X[isa.T5], cpu.X[isa.T6])
 
 	if false {
-		fmt.Printf("Satp: %v\r\n", cpu.MMU.Satp())
+		log.Printf("Satp: %v", cpu.MMU.Satp())
 
 		root := cpu.MMU.Satp().PPN()
 		if root != 0 {
 			page, err := cpu.MMU.Mem.Page(uint64(cpu.MMU.Satp().PPN()))
 			if err != nil {
-				fmt.Printf("Page table root not found: %v\r\n", err)
+				log.Printf("Page table root not found: %v", err)
 			} else {
-				fmt.Printf("Page table root:\r\n%s", hex.Dump(page))
+				log.Printf("Page table root:\n%s", hex.Dump(page))
 			}
 		}
 	}

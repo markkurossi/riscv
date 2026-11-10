@@ -314,7 +314,6 @@ dispatch:
 				instr, err = isa.Decode(raw)
 				if err != nil {
 					cpu.tracef(raw, instr, "decode failed: %v", err)
-					cpu.Dump(cpu.PC)
 					return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), err)
 				}
 				cpu.decodeCache[idx].Raw = raw
@@ -354,7 +353,6 @@ dispatch:
 			err = fmt.Errorf("invalid %v[0x%x]", instr, raw)
 			if raw != 0 {
 				cpu.tracef(raw, instr, "non-zero %x decoded as %v", raw, instr)
-				cpu.Dump(cpu.PC)
 				return err
 			} else {
 				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), err)
