@@ -1761,14 +1761,28 @@ func Decode(raw uint32) (Instr, error) {
 					instr.SetVPU(VcpopM, uint32(funct7&0b1))
 				case 0b10001:
 					instr.SetVPU(VfirstM, uint32(funct7&0b1))
-
 				default:
 					return instr, fmt.Errorf("%v/%03b/%06b, vs1=%05b, raw=%x",
 						group, funct3, funct7>>1, int(instr.Rs1), raw)
 				}
 
 			case 0b010100:
-				instr.SetVPU(VidV, uint32(funct7&0b1))
+				// Table 27. VMUNARY0 encoding space
+				//
+				// 	 vs1   | instruction
+				// 	 ------+------------
+				// 	 00001 | vmsbf
+				// 	 00010 | vmsof
+				// 	 00011 | vmsif
+				// 	 10000 | viota
+				// 	 10001 | vid
+				switch instr.Rs1 {
+				case 0b10001:
+					instr.SetVPU(VidV, uint32(funct7&0b1))
+				default:
+					return instr, fmt.Errorf("%v/%03b/%06b, vs1=%05b, raw=%x",
+						group, funct3, funct7>>1, int(instr.Rs1), raw)
+				}
 
 			case 0b010010:
 				switch instr.Rs1 {
@@ -1794,7 +1808,6 @@ func Decode(raw uint32) (Instr, error) {
 					instr.SetVPU(VzextVf2, uint32(funct7&0b1))
 				case 0b00111:
 					instr.SetVPU(VsextVf2, uint32(funct7&0b1))
-
 				default:
 					return instr, fmt.Errorf("%v/%03b/%06b, vs1=%05b, raw=%x",
 						group, funct3, funct7>>1, int(instr.Rs1), raw)
