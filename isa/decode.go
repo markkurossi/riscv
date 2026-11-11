@@ -636,7 +636,21 @@ func Decode(raw uint32) (Instr, error) {
 			instr.Imm &= 0b1111111
 
 		case 0b110:
-			instr.Op = Ori
+			// ORI / CMO extension's prefetch.{i,r,w}.
+			if instr.Rd == 0 {
+				switch instr.Rs2 {
+				case 0b00000:
+					instr.Op = PrefetchI
+				case 0b00001:
+					instr.Op = PrefetchR
+				case 0b00011:
+					instr.Op = PrefetchW
+				default:
+					instr.Op = Ori
+				}
+			} else {
+				instr.Op = Ori
+			}
 		case 0b111:
 			instr.Op = Andi
 		}
@@ -1030,20 +1044,6 @@ func Decode(raw uint32) (Instr, error) {
 			default:
 				return instr, fmt.Errorf("%v/%03b/%012b: raw=%x",
 					group, funct3, funct12, raw)
-			}
-
-		case 0b110: // ORI
-			funct5 := raw >> 20 & 0b11111
-			switch funct5 {
-			case 0b00000:
-				instr.Op = PrefetchI
-			case 0b00001:
-				instr.Op = PrefetchR
-			case 0b00011:
-				instr.Op = PrefetchW
-			default:
-				return instr, fmt.Errorf("%v/%03b/%05b: raw=%x",
-					group, funct3, funct5, raw)
 			}
 
 		default:
