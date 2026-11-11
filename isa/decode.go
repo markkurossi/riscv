@@ -1727,6 +1727,46 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b000000:
 				instr.SetVPU(VfaddVv, uint32(funct7&0b1))
 
+			case 0b010010:
+				// Table 25. VFUNARY0 encoding space:
+				//
+				//   vs1   | name
+				//   ------+-----------------
+				//   single-width converts
+				//   ------+-----------------
+				//   00000 | vfcvt.xu.f.v
+				//   00001 | vfcvt.x.f.v
+				//   00010 | vfcvt.f.xu.v
+				//   00011 | vfcvt.f.x.v
+				//   00110 | vfcvt.rtz.xu.f.v
+				//   00111 | vfcvt.rtz.x.f.v
+				//   ------+-----------------
+				//   widening converts
+				//   ------+-----------------
+				//   01000 | vfwcvt.xu.f.v
+				//   01001 | vfwcvt.x.f.v
+				//   01010 | vfwcvt.f.xu.v
+				//   01011 | vfwcvt.f.x.v
+				//   01100 | vfwcvt.f.f.v
+				//   01110 | vfwcvt.rtz.xu.f.v
+				//   01111 | vfwcvt.rtz.x.f.v
+				//   ------+-----------------
+				//   narrowing converts
+				//   ------+-----------------
+				//   10000 | vfncvt.xu.f.w
+				//   10001 | vfncvt.x.f.w
+				//   10010 | vfncvt.f.xu.w
+				//   10011 | vfncvt.f.x.w
+				//   10100 | vfncvt.f.f.w
+				//   10101 | vfncvt.rod.f.f.w
+				//   10110 | vfncvt.rtz.xu.f.w
+				//   10111 | vfncvt.rtz.x.f.w
+				switch instr.Rs1 {
+				default:
+					return instr, fmt.Errorf("%v/%03b/%06b, vs1=%05b, raw=%x",
+						group, funct3, funct7>>1, int(instr.Rs1), raw)
+				}
+
 			case 0b101011:
 				instr.SetVPU(VfnmsubVv, uint32(funct7&0b1))
 
@@ -1991,6 +2031,9 @@ func Decode(raw uint32) (Instr, error) {
 
 			case 0b101000:
 				instr.SetVPU(VsrlVx, uint32(funct7&0b1))
+
+			case 0b101001:
+				instr.SetVPU(VsraVx, uint32(funct7&0b1))
 
 			case 0b101100:
 				instr.SetVPU(VnsrlWx, uint32(funct7&0b1))

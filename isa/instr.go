@@ -450,6 +450,7 @@ const (
 	VmseqVx
 	VmsltuVx
 	VsrlVx
+	VsraVx
 	VnsrlWx
 	VfaddVv
 	VfnmsubVv
@@ -1361,6 +1362,9 @@ var VpuOperands = map[VpuOp]OpInfo{
 	},
 	VsrlVx: OpInfo{
 		Name: "vsrl.vx",
+	},
+	VsraVx: OpInfo{
+		Name: "vsra.vx",
 	},
 	VnsrlWx: OpInfo{
 		Name: "vnsrl.wx",
