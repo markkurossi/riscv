@@ -1683,6 +1683,9 @@ func Decode(raw uint32) (Instr, error) {
 				}
 				instr.SetVPU(VrgatherVv, uint32(funct7&0b1))
 
+			case 0b001110:
+				instr.SetVPU(Vrgatherei16Vv, uint32(funct7&0b1))
+
 			case 0b010111:
 				if funct7&0b1 == 1 {
 					instr.SetVPU(VmvVV, 0)

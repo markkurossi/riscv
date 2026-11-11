@@ -818,6 +818,67 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 
+	case isa.Vrgatherei16Vv:
+		vlmul := vpu.VType.VLMUL()
+		sew := vpu.VType.VSEW()
+		vlmax := uint64(float32(vpu.VLEN/uint64(sew)) * vlmul)
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+			vs1reg, vs1ofs := vpu.elt(isa.E16, uint64(instr.Rs1), i)
+
+			switch sew {
+			case isa.E8:
+				var v uint8
+				vs1 := uint64(memory.Uint16(vs1reg, vs1ofs))
+				if vs1 >= vlmax {
+					v = 0
+				} else {
+					vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), vs1)
+					v = vs2reg[vs2ofs]
+				}
+				reg[ofs] = v
+
+			case isa.E16:
+				var v uint16
+				vs1 := uint64(memory.Uint16(vs1reg, vs1ofs))
+				if vs1 >= vlmax {
+					v = 0
+				} else {
+					vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), vs1)
+					v = memory.Uint16(vs2reg, vs2ofs)
+				}
+				memory.PutUint16(reg, ofs, v)
+
+			case isa.E32:
+				var v uint32
+				vs1 := uint64(memory.Uint16(vs1reg, vs1ofs))
+				if vs1 >= vlmax {
+					v = 0
+				} else {
+					vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), vs1)
+					v = memory.Uint32(vs2reg, vs2ofs)
+				}
+				memory.PutUint32(reg, ofs, v)
+
+			case isa.E64:
+				var v uint64
+				vs1 := uint64(memory.Uint16(vs1reg, vs1ofs))
+				if vs1 >= vlmax {
+					v = 0
+				} else {
+					vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), vs1)
+					v = memory.Uint64(vs2reg, vs2ofs)
+				}
+				memory.PutUint64(reg, ofs, v)
+			}
+		}
+
 	case isa.VmaxuVv:
 		sew := vpu.VType.VSEW()
 

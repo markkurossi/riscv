@@ -409,6 +409,7 @@ const (
 	VxorVv
 	VorVv
 	VrgatherVv
+	Vrgatherei16Vv
 	VmseqVv
 	VmsneVv
 	VmsltuVv
@@ -1238,6 +1239,9 @@ var VpuOperands = map[VpuOp]OpInfo{
 	VrgatherVv: OpInfo{
 		Name: "vrgather.vv",
 	},
+	Vrgatherei16Vv: OpInfo{
+		Name: "vrgatherei16.vv",
+	},
 	VmseqVv: OpInfo{
 		Name: "vmseq.vv",
 	},
@@ -1517,7 +1521,7 @@ var VpuOperands = map[VpuOp]OpInfo{
 }
 
 const (
-	maxOpNameLen = 14
+	maxOpNameLen = 15
 )
 
 func (op Op) String() string {
