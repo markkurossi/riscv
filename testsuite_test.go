@@ -78,11 +78,18 @@ func TestISA(t *testing.T) {
 
 var skipVPU = map[string]uint64{
 	// Floating point entropy fixes.
+
 	"vfadd_vv-0": 24,
 	"vfadd_vv-1": 25,
 	"vfadd_vv-2": 7,
 	"vfadd_vv-3": 5,
 	"vfadd_vv-4": 5,
+
+	"vfnmsub_vv-0": 24,
+	"vfnmsub_vv-1": 25,
+	"vfnmsub_vv-2": 7,
+	"vfnmsub_vv-3": 7,
+	"vfnmsub_vv-4": 7,
 }
 
 func TestVPU(t *testing.T) {

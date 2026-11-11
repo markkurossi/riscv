@@ -1485,6 +1485,36 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 
+	case isa.VfnmsubVv:
+		sew := vpu.VType.VSEW()
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+			vs1reg, vs1ofs := vpu.elt(sew, uint64(instr.Rs1), i)
+			vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), i)
+
+			switch sew {
+			case isa.E32:
+				vd := math.Float32frombits(memory.Uint32(reg, ofs))
+				v1 := math.Float32frombits(memory.Uint32(vs1reg, vs1ofs))
+				v2 := math.Float32frombits(memory.Uint32(vs2reg, vs2ofs))
+				v := math.Float32bits(-(vd * v1) + v2)
+				memory.PutUint32(reg, ofs, v)
+
+			case isa.E64:
+				vd := math.Float64frombits(memory.Uint64(reg, ofs))
+				v1 := math.Float64frombits(memory.Uint64(vs1reg, vs1ofs))
+				v2 := math.Float64frombits(memory.Uint64(vs2reg, vs2ofs))
+				v := math.Float64bits(-(vd * v1) + v2)
+				memory.PutUint64(reg, ofs, v)
+			}
+		}
+
 	case isa.VfmergeVfm:
 		sew := vpu.VType.VSEW()
 
