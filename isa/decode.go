@@ -1762,6 +1762,8 @@ func Decode(raw uint32) (Instr, error) {
 				//   10110 | vfncvt.rtz.xu.f.w
 				//   10111 | vfncvt.rtz.x.f.w
 				switch instr.Rs1 {
+				case 0b00010:
+					instr.SetVPU(VfcvtFXuV, uint32(funct7&0b1))
 				default:
 					return instr, fmt.Errorf("%v/%03b/%06b, vs1=%05b, raw=%x",
 						group, funct3, funct7>>1, int(instr.Rs1), raw)
