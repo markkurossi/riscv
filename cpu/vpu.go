@@ -3400,6 +3400,40 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 
+	case isa.Vsse32V:
+		var eltSize uint64 = 4 // sizeof(uint32)
+		veew := eltSize * 8
+		vemul := float32(veew) / float32(vpu.VType.VSEW()) * vpu.VType.VLMUL()
+
+		var emul uint64 = 1
+		if vemul > 1 {
+			emul = uint64(vemul)
+		}
+
+		vl := vpu.VL
+		baseAddr := vpu.cpu.X[instr.Rs1]
+		vs3 := uint64(instr.Rd)
+
+		for i := vpu.VStart; i < vl; i++ {
+			if vm == 0 {
+				if !vpu.maskElt(0, i) {
+					continue
+				}
+			}
+			vpu.VStart = i
+			stride := i * vpu.cpu.X[instr.Rs2]
+
+			for fn := uint64(0); fn < nf; fn++ {
+				reg, ofs := vpu.elt(isa.E32, vs3+fn*emul, i)
+				val := memory.Uint32(reg, ofs)
+
+				err := vpu.cpu.MMU.Store32(baseAddr+stride+fn*eltSize, val)
+				if err != nil {
+					return err
+				}
+			}
+		}
+
 	case isa.Vsse64V:
 		var eltSize uint64 = 8 // sizeof(uint64)
 		veew := eltSize * 8

@@ -1381,6 +1381,9 @@ func Decode(raw uint32) (Instr, error) {
 						group, funct3, mop, sumop, raw)
 				}
 
+			case 0b10: // strided - vsse<eew>
+				instr.SetVPU(Vsse32V, uint32((raw>>28&0b1110)|(raw>>25&0b1)))
+
 			default:
 				return instr, fmt.Errorf("%v/%03b/%02b, raw=%08x",
 					group, funct3, mop, raw)

@@ -489,6 +489,7 @@ const (
 	Vs1rV
 	VsmV
 	Vsuxei64V
+	Vsse32V
 	Vsse64V
 	VrsubVi
 	VandVi
@@ -1485,6 +1486,9 @@ var VpuOperands = map[VpuOp]OpInfo{
 	},
 	Vsuxei64V: OpInfo{
 		Name: "vsuxei64.v",
+	},
+	Vsse32V: OpInfo{
+		Name: "vsse32.v",
 	},
 	Vsse64V: OpInfo{
 		Name: "vsse64.v",
