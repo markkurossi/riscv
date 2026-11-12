@@ -52,9 +52,6 @@ operating systems, the RISC-V privileged architecture, and vector
 instruction execution.
 
 ![FreeBSD](docs/freebsd.png)
-![Linux Boot](docs/linux-shell.png)
-![NetBSD](docs/netbsd.png)
-![X11](docs/x11.png)
 
 ## RISC-V Vector Extension
 
@@ -384,10 +381,10 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 
 ## Network routing
 
-On macOS host:
+### On macOS Host
 
 ``` shell
-$ sudo sysctl -w net.inet.ip.forwarding=1
+sudo sysctl -w net.inet.ip.forwarding=1
 ```
 
 Create `pf.conf`
@@ -399,8 +396,65 @@ nat on en0 from 192.168.42.0/24 to any -> (en0)
 Load conf:
 
 ``` shell
-$ sudo pfctl -f pf.conf
-$ sudo pfctl -e
+sudo pfctl -f pf.conf
+sudo pfctl -e
+```
+
+### On Linux Host
+
+Network interfaces are:
+- `tun0`: guest network, host address `192.168.42.254`
+- Guest: `192.168.42.2`
+- `enp196s0`: host Internet interface
+- `net.ipv4.ip_forward` set to `1`.
+
+``` shell
+sudo sysctl -w net.ipv4.ip_forward=1
+```
+
+IPv4 forwarding persisted in `/etc/sysctl.d/99-goemu.conf`:
+
+``` ini
+net.ipv4.ip_forward=1
+```
+
+Configure NAT:
+
+``` shell
+sudo iptables -t nat -A POSTROUTING \
+    -s 192.168.42.0/24 \
+    -o enp196s0 \
+    -j MASQUERADE
+```
+
+Allow forwarding:
+
+``` shell
+sudo iptables -A FORWARD \
+    -i tun0 -o enp196s0 \
+    -s 192.168.42.0/24 \
+    -j ACCEPT
+
+sudo iptables -A FORWARD \
+    -i enp196s0 -o tun0 \
+    -d 192.168.42.0/24 \
+    -m conntrack --ctstate ESTABLISHED,RELATED \
+    -j ACCEPT
+```
+
+Persist rules:
+
+``` shell
+sudo apt install iptables-persistent
+sudo iptables-save | sudo tee /etc/iptables/rules.v4
+```
+
+Verify configuration:
+
+``` shell
+cat /proc/sys/net/ipv4/ip_forward
+sudo iptables -t nat -S POSTROUTING
+sudo iptables -S FORWARD
 ```
 
 ## The Longest Goemu Run
