@@ -37,6 +37,15 @@ const (
 	debugLossage = false
 )
 
+type DebugInstrInfo uint64
+
+const (
+	InstrInfoNone DebugInstrInfo = iota
+	InstrInfoRegs
+	InstrInfoDesc
+	InstrInfoVPU
+)
+
 type TrapHandler func(cpu *CPU, trap *isa.Trap) (bool, error)
 
 // Maybe: Interrupt, Breakpoint, SingleStep, GuestException, Diagnostics.
@@ -2227,7 +2236,12 @@ func (cpu *CPU) pctrace(pc uint64, raw uint32, instr isa.Instr, msg string) {
 		line = fmt.Sprintf("%s:  %04x       %v", addr, raw, instr)
 	}
 	if len(msg) == 0 {
-		if true {
+
+		switch DebugInstrInfo(cpu.CSR[isa.CsrGoemuInstrInfo].Load()) {
+		case InstrInfoNone:
+
+		case InstrInfoRegs:
+			// Trace registers, this is somewhat incomplete.
 			switch instr.Op {
 			case isa.Auipc:
 				msg = fmt.Sprintf("pc=%x, imm=%x", cpu.PC, instr.Imm)
@@ -2250,11 +2264,19 @@ func (cpu *CPU) pctrace(pc uint64, raw uint32, instr isa.Instr, msg string) {
 					msg += fmt.Sprintf("%v=%x", instr.Rs2, cpu.X[instr.Rs2])
 				}
 			}
-		} else {
+
+		case InstrInfoDesc:
+			// Print opcode description i.e. pretty-print.
 			op, ok := isa.Operands[instr.Op]
 			if ok && len(op.Desc) > 0 && instr.Op != cpu.lastDescOp {
 				cpu.lastDescOp = instr.Op
 				msg = op.Desc
+			}
+
+		case InstrInfoVPU:
+			// Vector processing unit info.
+			if instr.Op == isa.Vpu {
+				msg = fmt.Sprintf("vtype=%v, vl=%v", cpu.vpu.VType, cpu.vpu.VL)
 			}
 		}
 	}

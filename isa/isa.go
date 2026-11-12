@@ -493,6 +493,7 @@ const (
 	CsrGoemuDebug      = 0x800
 	CsrGoemuTime       = 0x801
 	CsrGoemuCPUProfile = 0x802
+	CsrGoemuInstrInfo  = 0x803
 )
 
 var csrs = map[int]string{
