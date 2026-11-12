@@ -4,62 +4,106 @@
   <img src="resources/goemu-small.png" width="320">
 </p>
 
-<p align="center">
-RV64GC RISC-V emulator written in Go capable of booting Linux, NetBSD,
-FreeBSD, and OpenBSD through OpenSBI, U-Boot, EFI, and GRUB, with SV39
-virtual memory and VirtIO devices.
-</p>
+**goemu** is a readable, pure-Go implementation of a RISC-V computer
+system. It combines a RISC-V CPU emulator, privileged architecture,
+virtual memory, interrupt controllers, firmware, and virtual devices
+into a complete platform capable of running modern operating systems.
 
-<p align="center">
-OpenSBI &#8594; BuildRoot Linux<br>
-OpenSBI &#8594; U-Boot &#8594; EFI &#8594; {NetBSD,FreeBSD,OpenBSD}<br>
-OpenSBI &#8594; U-Boot &#8594; EFI &#8594; GRUB &#8594; Ubuntu Linux
-</p>
+The project implements RV64GC and RVA23U64 functionality, including
+the RISC-V Vector Extension (RVV 1.0), and supports OpenSBI, U-Boot,
+EFI, GRUB, and VirtIO devices.
+
+The primary goal is correctness, readability, and maintainability. The
+CPU implementation serves as an architectural reference and as a
+foundation for experimenting with secure computation and a virtual MPC
+RISC-V processor.
+
+## Operating systems
+
+goemu has successfully booted and executed:
+
+| Operating system | Status                                  |
+| ---              | ---                                     |
+| Buildroot Linux  | Boot, userspace, and networking         |
+| Ubuntu 24.04 LTS | Full system and package upgrade         |
+| Ubuntu 26.04     | RVA23U64 userspace and RVV workloads    |
+| FreeBSD 15.1     | Long-running system and ports workloads |
+| NetBSD 11.x      | Boot, userspace, compilation            |
+| OpenBSD 7.9      | Boot and native kernel compilation      |
 
 ## Features
 
-- RV64GC instruction set support
-- Machine, Supervisor, and User privilege modes
-- SV39 virtual memory and page tables with TLB fastpaths
-- Custom Device Tree generation for hardware peripherals
-- OpenSBI support
-- VirtIO support (block, net, rng, gpu) with stable multi-hour async
-  DMA handling
-- Operating Systems:
-  - OpenSBI
-  - U-Boot
-  - EFI Boot
-  - Buildroot Linux
-  - Ubuntu 24.04 (tested with full package upgrade cycles)
-  - NetBSD 11.99
-  - FreeBSD 15.1
-  - OpenBSD 7.9 (tested with kernel compilation inside guest)
-- Linux syscall emulation mode
-- Device emulation:
-  - NS16550A UART
-  - PLIC interrupt controller
-  - ACLINT MSWI and MTIMER devices
-  - Syscon poweroff device
-- Symbol-aware traces and debugging support
-- Instruction-level execution tracing
-- Compressed instruction support
 
-The project is intended as a readable and hackable implementation of a
+- RV64GC and RVA23U64 instruction support
+- RISC-V Vector Extension (RVV 1.0)
+- Machine, Supervisor, and User privilege modes
+- Sv39 virtual memory, page tables, and TLB fastpaths
+- CSR subsystem, interrupts, and exception handling
+- OpenSBI, U-Boot, EFI, and GRUB boot environments
+- Custom Device Tree generation
+- VirtIO block, network, RNG, and GPU devices
+- Asynchronous device interfaces and DMA
+- Symbol-aware debugging and instruction-level tracing
+- Linux syscall emulation mode
+
+goemu is designed as a readable and hackable implementation of a
 modern RISC-V platform, suitable for learning emulator internals,
-operating systems, and the RISC-V privileged architecture.
+operating systems, the RISC-V privileged architecture, and vector
+instruction execution.
 
 ![FreeBSD](docs/freebsd.png)
 ![Linux Boot](docs/linux-shell.png)
 ![NetBSD](docs/netbsd.png)
 ![X11](docs/x11.png)
 
+## RISC-V Vector Extension
+
+goemu implements RVV 1.0 vector instructions and supports
+vector-enabled RISC-V userspace.
+
+The vector implementation includes:
+
+- Vector register state and configurable vector length
+- SEW and LMUL configuration
+- Vector arithmetic and logical operations
+- Widening and narrowing operations
+- Vector loads and stores
+- Masked execution
+- Vector register grouping
+- Tail and mask policies
+
+RVV support enables goemu to execute modern RISC-V software compiled
+for vector-capable application processors.
+
+Ubuntu 26.04 has successfully booted and executed vector-enabled
+userspace under goemu.
+
+## Long-running workloads
+
+goemu has been tested with sustained operating-system workloads.
+
+### FreeBSD
+
+- 15+ days of continuous execution during ports build workloads
+- Hundreds of gigabytes of VirtIO block I/O
+- Network and asynchronous DMA testing
+
+### Longest execution
+
+- 104 days of guest uptime
+- 601 trillion retired instructions
+- 1 TB of guest disk writes
+- VirtIO block, network, and RNG workloads
+
+These tests demonstrate long-term execution stability and system-level
+device integration.
+
 ## TODO
 
 ### Release 1.0
 
-
 - [ ] Shortlist
-  - [ ] V extension
+  - [x] V extension (subset to boot Ubuntu-26)
   - [x] Check all `C.*` instruction decodings - do not be too liberal
   - [ ] mstatus.FS==RegOff => CauseIllegalInstr => BSDs fail to boot
 - [ ] Reimplement DTB creation
@@ -232,55 +276,7 @@ Hello, RISC-V!
 
 ## Benchmarks
 
-## Real Workloads
-
-### FreeBSD 15.1 (Port Builder Strain Test)
-
-- Sustained long-term execution as a automated ports package builder
-- Complete OS stability over 15+ days of in-guest uptime
-- High-stress VirtIO DMA throughput validation (370+ GB written)
-
-``` text
-Uptime: 15d 3h 15m 26s
-
-CPU:
-  instret : 129,725,158,326,644 instructions
-  runtime : 198h 19m 22s
-  MIPS    : 181.70
-
-I/O Telemetry:
-  virtio-blk : 1 GB read | 373 GB written
-  virtio-net : 492 MB rcvd | 51 MB sent
-  virtio-rng : 404 MB read
-```
-
-### OpenBSD 7.9
-
-- Boot to console via OpenSBI → U-Boot → EFI
-- Full native kernel compilation (`make build`) inside the guest environment
-- Verified memory management stability under heavy parallel compiler runs
-
-### NetBSD 11.99
-
-- Boot to login prompt
-- Compile Hello World with GCC
-- Run user binaries
-- Clean shutdown
-
-Example:
-
-``` shell
-$ time cc -o hello hello.c
-        4.20 real         2.62 user         1.00 sys
-```
-
-### Ubuntu 24.04 LTS
-
-- Complete unattended system package upgrade (apt upgrade)
-- Sustained high VirtIO disk and network I/O throughput over
-  multi-hour runs
-
-## Fibonacci
+### Fibonacci
 
 Performance improvements are tracked as the emulator evolves. The
 numbers below show the effect of individual optimizations. They are
