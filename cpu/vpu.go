@@ -37,6 +37,9 @@ type VPU struct {
 	VXRM   uint8     // Fixed-point rounding mode
 	VXSat  bool      // Fixed-point saturation flag
 
+	// The maximum VL value with the current vector configuration.
+	VLMax uint64
+
 	// Emulator-specific compile-time configuration
 	VLEN uint64 // Physical width of each register in bits (e.g., 128, 256, 512)
 }
@@ -4011,43 +4014,42 @@ func (vpu *VPU) trap(raw uint32, instr isa.Instr, cause, tval uint64,
 
 func (vpu *VPU) setVL(rd, rs1 isa.Register, reqVL uint64, newType isa.VType) {
 
-	var vl uint64
+	vlmax := vpu.VLMax
 
 	if vpu.VType != newType {
 		vlmul := newType.VLMUL()
 		vsew := isa.SEW(math.Min(float64(vlmul)*ELEN, ELEN))
-		vl = uint64(float32(vpu.VLEN/uint64(newType.VSEW())) * vlmul)
+		vlmax = uint64(float32(vpu.VLEN/uint64(newType.VSEW())) * vlmul)
 
 		vill := !(vlmul >= 0.125 && vlmul <= 8) ||
 			newType.VSEW() > vsew ||
 			(newType>>9) != 0 ||
 			newType.AltFmt() ||
-			(rd == 0 && rs1 == 0 && vpu.VL != vl)
+			(rd == 0 && rs1 == 0 && vpu.VLMax != vlmax)
 
 		if vill {
-			vl = 0
+			vlmax = 0
 			vpu.VType = isa.VType(1 << 63)
 		} else {
 			vpu.VType = newType
 		}
-	} else {
-		vlmul := newType.VLMUL()
-		vl = uint64(float32(vpu.VLEN/uint64(newType.VSEW())) * vlmul)
+
+		vpu.VLMax = vlmax
 	}
 
 	// XXX clear mtype
 
-	if vl == 0 {
+	if vlmax == 0 {
 		vpu.VL = 0
 	} else if rd == 0 && rs1 == 0 {
 		// Retain current VL.
 	} else if rd != 0 && rs1 == 0 {
-		vpu.VL = vl
+		vpu.VL = vlmax
 	} else if rs1 != 0 {
-		if vl > reqVL {
-			vl = reqVL
+		if vlmax > reqVL {
+			vlmax = reqVL
 		}
-		vpu.VL = vl
+		vpu.VL = vlmax
 	}
 
 	vpu.cpu.X[rd] = vpu.VL
