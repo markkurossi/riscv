@@ -1646,6 +1646,22 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 
+	case isa.VfmvFS:
+		var vs2 uint64
+		sew := vpu.VType.VSEW()
+
+		reg, ofs := vpu.elt(sew, uint64(instr.Rd), 0)
+
+		switch sew {
+		case isa.E16:
+			vs2 = uint64(memory.Uint16(reg, ofs))
+		case isa.E32:
+			vs2 = uint64(memory.Uint32(reg, ofs))
+		case isa.E64:
+			vs2 = uint64(memory.Uint64(reg, ofs))
+		}
+		vpu.cpu.F[instr.Rd] = float64(vs2)
+
 	case isa.VfcvtFXuV:
 		sew := vpu.VType.VSEW()
 
