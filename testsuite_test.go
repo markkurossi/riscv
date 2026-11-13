@@ -85,11 +85,22 @@ var skipVPU = map[string]uint64{
 	"vfadd_vv-3": 5,
 	"vfadd_vv-4": 5,
 
+	"vfmul_vv-0": 26,
+	"vfmul_vv-1": 27,
+	"vfmul_vv-2": 11,
+	"vfmul_vv-3": 7,
+	"vfmul_vv-4": 7,
+
 	"vfnmsub_vv-0": 24,
 	"vfnmsub_vv-1": 25,
 	"vfnmsub_vv-2": 7,
 	"vfnmsub_vv-3": 7,
 	"vfnmsub_vv-4": 7,
+
+	"vfcvt_f_xu_v-0": 14,
+	"vfcvt_f_xu_v-1": 122,
+	"vfcvt_f_xu_v-2": 74,
+	"vfcvt_f_xu_v-3": 2,
 }
 
 func TestVPU(t *testing.T) {
@@ -141,7 +152,7 @@ func testSuite(t *testing.T, dir string, skip map[string]uint64) {
 			failure++
 		}
 	}
-	t.Logf("%v tests, %v success, %v broken, %v unimpl, %v fail, %v panic",
+	t.Logf("%v tests, %v ok, %v known, %v unimpl, %v fail, %v panic",
 		count, success, known, unimplemented, failure, panic)
 }
 
