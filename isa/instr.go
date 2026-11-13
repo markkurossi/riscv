@@ -462,6 +462,7 @@ const (
 	VfaddVv
 	VfmvFS
 	VfcvtFXuV
+	VfmulVv
 	VfnmsubVv
 	VfmergeVfm
 	VfmvVF
@@ -1409,6 +1410,9 @@ var VpuOperands = map[VpuOp]OpInfo{
 	},
 	VfcvtFXuV: OpInfo{
 		Name: "vfcvt.f.xu.v",
+	},
+	VfmulVv: OpInfo{
+		Name: "vfmul.vv",
 	},
 	VfnmsubVv: OpInfo{
 		Name: "vfnmsub.vv",
