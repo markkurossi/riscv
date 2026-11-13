@@ -1706,20 +1706,18 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 
 	case isa.VfmvFS:
-		var vs2 uint64
 		sew := vpu.VType.VSEW()
 
-		reg, ofs := vpu.elt(sew, uint64(instr.Rd), 0)
+		var vs2 float64
+		vs2reg, vs2ofs := vpu.elt(sew, uint64(instr.Rs2), 0)
 
 		switch sew {
-		case isa.E16:
-			vs2 = uint64(memory.Uint16(reg, ofs))
 		case isa.E32:
-			vs2 = uint64(memory.Uint32(reg, ofs))
+			vs2 = float64(math.Float32frombits(memory.Uint32(vs2reg, vs2ofs)))
 		case isa.E64:
-			vs2 = uint64(memory.Uint64(reg, ofs))
+			vs2 = math.Float64frombits(memory.Uint64(vs2reg, vs2ofs))
 		}
-		vpu.cpu.F[instr.Rd] = float64(vs2)
+		vpu.cpu.F[instr.Rd] = vs2
 
 	case isa.VfcvtFXuV:
 		sew := vpu.VType.VSEW()
@@ -1802,6 +1800,21 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 				v2 := math.Float64frombits(memory.Uint64(vs2reg, vs2ofs))
 				v := math.Float64bits(-(vd * v1) + v2)
 				memory.PutUint64(reg, ofs, v)
+			}
+		}
+
+	case isa.VfmvSF:
+		sew := vpu.VType.VSEW()
+
+		if vpu.VL > 0 && vpu.VStart < vpu.VL {
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), 0)
+			v := vpu.cpu.F[instr.Rs1]
+
+			switch sew {
+			case isa.E32:
+				memory.PutUint32(reg, ofs, math.Float32bits(float32(v)))
+			case isa.E64:
+				memory.PutUint64(reg, ofs, math.Float64bits(v))
 			}
 		}
 

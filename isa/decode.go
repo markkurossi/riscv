@@ -1899,7 +1899,7 @@ func Decode(raw uint32) (Instr, error) {
 				}
 
 			case 0b010100:
-				// Table 27. VMUNARY0 encoding space
+				// Table 27. VMUNARY0 encoding space:
 				//
 				// 	 vs1   | instruction
 				// 	 ------+------------
@@ -2120,14 +2120,31 @@ func Decode(raw uint32) (Instr, error) {
 			}
 
 		case 0b101: // OPFVF
-			switch funct7 {
-			case 0b0101110: // 010111, vm=0
-				instr.SetVPU(VfmergeVfm, 0)
-			case 0b0101111: // 010111, vm=1
-				instr.SetVPU(VfmvVF, 0)
+			switch funct7 >> 1 {
+			case 0b010000:
+				// Table 23. VRFUNARY0 encoding space:
+				//
+				//   vs2   | instruction
+				// 	 ------+------------
+				// 	 00000 | vfmv.s.f
+				switch instr.Rs2 {
+				case 0b00000:
+					instr.SetVPU(VfmvSF, uint32(funct7&0b1))
+				default:
+					return instr, fmt.Errorf("%v/%03b/%06b, vs2=%05b, raw=%x",
+						group, funct3, funct7>>1, int(instr.Rs2), raw)
+				}
+			case 0b010111:
+				if funct7&0b1 == 0 {
+					// vm=0
+					instr.SetVPU(VfmergeVfm, 0)
+				} else {
+					// vm = 1
+					instr.SetVPU(VfmvVF, 0)
+				}
 			default:
-				return instr, fmt.Errorf("%v/%03b/%06b: raw=%x",
-					group, funct3, funct7>>1, raw)
+				return instr, fmt.Errorf("%v/%03b/%06b: %07b, raw=%x",
+					group, funct3, funct7>>1, funct7, raw)
 			}
 
 		case 0b110: // OPMVX
