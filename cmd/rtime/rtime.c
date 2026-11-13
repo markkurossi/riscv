@@ -48,6 +48,14 @@ clear_csrs()
     }
 }
 
+static char *instr_infos[] =
+{
+  "none",
+  "regs",
+  "desc",
+  "vpu",
+};
+
 int
 main(int argc, char *argv[])
 {
@@ -63,8 +71,10 @@ main(int argc, char *argv[])
   bool lossage = false;
   bool info = false;
   int ch;
+  int i;
+  uint64_t instr_info = 0xffffffffffffffff;
 
-  while ((ch = getopt(argc, argv, "iptTl")) != -1)
+  while ((ch = getopt(argc, argv, "iptTlI:")) != -1)
     {
       switch (ch)
         {
@@ -95,6 +105,28 @@ main(int argc, char *argv[])
           lossage = true;
           break;
 
+        case 'I':
+          for (i = 0; i < sizeof(instr_infos) / sizeof(instr_infos[0]); i++)
+            if (strcmp(optarg, instr_infos[i]) == 0)
+              {
+                instr_info = i;
+                break;
+              }
+          if (instr_info == 0xffffffffffffffff)
+            {
+              fprintf(stderr, "unknown instruction info: %s\n", optarg);
+              fprintf(stderr, "known values: ");
+              for (i = 0; i < sizeof(instr_infos) / sizeof(instr_infos[0]); i++)
+                {
+                  if (i > 0)
+                    fprintf(stderr, ", ");
+                  fprintf(stderr, "%s", instr_infos[i]);
+                }
+              fprintf(stderr, "\n");
+              return 1;
+            }
+          break;
+
         case '?':
         default:
           usage();
@@ -115,6 +147,9 @@ main(int argc, char *argv[])
 
   if (cpu_profile)
     riscv_write_csr(0x802, 1);
+
+  if (instr_info != 0xffffffffffffffff)
+    riscv_write_csr(0x803, instr_info);
 
   /* Debug CSR. */
   debug_csr = 0;
