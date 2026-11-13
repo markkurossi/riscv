@@ -1875,6 +1875,7 @@ func Decode(raw uint32) (Instr, error) {
 				// 	 00101 | vsext.vf4
 				// 	 00110 | vzext.vf2
 				// 	 00111 | vsext.vf2
+				//   01110 | vcpop.v
 				case 0b00010:
 					instr.SetVPU(VzextVf8, uint32(funct7&0b1))
 				case 0b00011:
@@ -1887,6 +1888,8 @@ func Decode(raw uint32) (Instr, error) {
 					instr.SetVPU(VzextVf2, uint32(funct7&0b1))
 				case 0b00111:
 					instr.SetVPU(VsextVf2, uint32(funct7&0b1))
+				case 0b01110:
+					instr.SetVPU(VcpopV, uint32(funct7&0b1))
 				default:
 					return instr, fmt.Errorf("%v/%03b/%06b, vs1=%05b, raw=%x",
 						group, funct3, funct7>>1, int(instr.Rs1), raw)
