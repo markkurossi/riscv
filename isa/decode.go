@@ -152,7 +152,7 @@ func DecodeC(raw uint16) (Instr, error) {
 			instr.Op = Sd
 
 		default:
-			return instr, fmt.Errorf("C: Q0/%03b, raw=%04x", funct3, raw)
+			return instr, fmt.Errorf("c: Q0/%03b, raw=%04x", funct3, raw)
 		}
 
 	case 0b01: // Quadrant 1
@@ -338,13 +338,13 @@ func DecodeC(raw uint16) (Instr, error) {
 					}
 
 				default:
-					return instr, fmt.Errorf("C: Q1/100/11/%03b, raw=%04x",
+					return instr, fmt.Errorf("c: Q1/100/11/%03b, raw=%04x",
 						f3, raw)
 				}
 
 			default:
 				return instr,
-					fmt.Errorf("C: Q1/%03b/%02b, raw=%04x", funct3, funct2, raw)
+					fmt.Errorf("c: Q1/%03b/%02b, raw=%04x", funct3, funct2, raw)
 			}
 
 		case 0b101: // C.J
@@ -381,7 +381,7 @@ func DecodeC(raw uint16) (Instr, error) {
 
 		default:
 			return instr,
-				fmt.Errorf("C: Q1/%03b, raw=%04x", funct3, raw)
+				fmt.Errorf("c: Q1/%03b, raw=%04x", funct3, raw)
 		}
 
 	case 0b10: // Quadrant 2
@@ -431,7 +431,7 @@ func DecodeC(raw uint16) (Instr, error) {
 						instr.Op = Add
 					}
 				} else {
-					return instr, fmt.Errorf("C: Q2, raw=%04x", raw)
+					return instr, fmt.Errorf("c: Q2, raw=%04x", raw)
 				}
 			} else {
 				if rds1 == 0 {
@@ -439,7 +439,7 @@ func DecodeC(raw uint16) (Instr, error) {
 						// C.EBREAK
 						instr.Op = Ebreak
 					} else {
-						return instr, fmt.Errorf("C: Q2, raw=%04x", raw)
+						return instr, fmt.Errorf("c: Q2, raw=%04x", raw)
 					}
 				} else {
 					if rs2 == 0 {
@@ -479,11 +479,11 @@ func DecodeC(raw uint16) (Instr, error) {
 			instr.Op = Sd
 
 		default:
-			return instr, fmt.Errorf("C: Q2/%03b, raw=%04x", funct3, raw)
+			return instr, fmt.Errorf("c: Q2/%03b, raw=%04x", funct3, raw)
 		}
 
 	default:
-		return instr, fmt.Errorf("C: Q%v, raw=%04x", raw&0b11, raw)
+		return instr, fmt.Errorf("c: Q%v, raw=%04x", raw&0b11, raw)
 	}
 
 	return instr, nil
