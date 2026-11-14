@@ -1045,12 +1045,12 @@ func (vio *GPU) cmdResourceCreateBlob(hdr *GPUCtrlHdr, hdrBuf []byte,
 	vio.Logf(" - BlobID=%v", req.BlobID)
 	vio.Logf(" - Size=%v", req.Size)
 
-	resource, ok := vio.resources[req.ResourceID]
+	_, ok := vio.resources[req.ResourceID]
 	if ok {
 		vio.Errorf("resource %v already defined", req.ResourceID)
 		return 0, fmt.Errorf("resource %v already defined", req.ResourceID)
 	}
-	resource = &GPUResource{
+	resource := &GPUResource{
 		ID: req.ResourceID,
 		Blob: &GPUBlob{
 			Mem:   req.BlobMem,

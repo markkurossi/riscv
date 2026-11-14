@@ -7,6 +7,8 @@
 // Package virtio implements the Virtual I/O Device (VIRTIO) Version 1.1.
 package virtio
 
+//lint:file-ignore ST1003 to match the C coding style for constants.
+
 import (
 	"encoding/binary"
 	"fmt"

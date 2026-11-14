@@ -10,7 +10,7 @@ import (
 	"embed"
 )
 
-// resource holds our static emulator resources.
+// Resources holds our static emulator resources.
 //
 //go:embed resources/*
 var Resources embed.FS
