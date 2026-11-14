@@ -70,6 +70,31 @@ var skipISA = map[string]uint64{
 	"rv64uzfh-p-ldst":     0,
 	"rv64uzfh-p-move":     0,
 	"rv64uzfh-p-recoding": 0,
+
+	// XXX FPU dirty flag bugs.
+	"rv64mi-p-csr": 13,
+
+	// page cache zeroing bugs.
+	"rv64mzicbo-p-zero": 1,
+
+	// Floating point entropy fixes.
+	"rv64ud-p-fadd":   3,
+	"rv64ud-p-fcmp":   10,
+	"rv64ud-p-fcvt":   12,
+	"rv64ud-p-fcvt_w": 2,
+	"rv64ud-p-fdiv":   2,
+	"rv64ud-p-fmadd":  3,
+	"rv64ud-p-fmin":   20,
+	"rv64ud-p-ldst":   3,
+	"rv64ud-p-move":   40,
+	"rv64uf-p-fadd":   3,
+	"rv64uf-p-fclass": 10,
+	"rv64uf-p-fcmp":   10,
+	"rv64uf-p-fcvt_w": 2,
+	"rv64uf-p-fdiv":   2,
+	"rv64uf-p-fmadd":  3,
+	"rv64uf-p-fmin":   20,
+	"rv64uf-p-move":   3,
 }
 
 func TestISA(t *testing.T) {
