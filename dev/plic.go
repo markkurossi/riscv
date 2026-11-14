@@ -116,7 +116,7 @@ func (plic *PLIC) Load32(paddr uint64) (uint32, error) {
 	offset := paddr - plic.Start
 
 	switch {
-	case offset >= 0x000000 && offset <= 0x000080:
+	case offset <= 0x000080:
 		return plic.gateways[offset/4].priority, nil
 
 	case offset == 0x001000:
@@ -185,7 +185,7 @@ func (plic *PLIC) Store32(paddr uint64, val uint32) error {
 
 	switch {
 	// Interrupt Source Priorities (0x000000 - 0x000080).
-	case offset >= 0x000000 && offset <= 0x000080:
+	case offset <= 0x000080:
 		sourceID := offset / 4
 		if sourceID <= PLICMaxInterrupts {
 			plic.gateways[sourceID].priority = val
