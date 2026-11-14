@@ -8,6 +8,8 @@
 // (ISA).
 package isa
 
+//lint:file-ignore ST1003 to match CSR naming convention.
+
 import (
 	"fmt"
 )

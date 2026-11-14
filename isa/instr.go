@@ -8,6 +8,8 @@
 // (ISA).
 package isa
 
+//lint:file-ignore ST1003 to match instruction naming convention.
+
 import (
 	"fmt"
 )
