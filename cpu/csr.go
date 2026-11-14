@@ -135,7 +135,7 @@ func (cpu *CPU) CSRLoad(csr isa.CSR, raw uint32, instr isa.Instr) (
 		v = uint64(cpu.vpu.VType)
 
 	case isa.CsrVlenb:
-		v = uint64(cpu.vpu.VLEN / 8)
+		v = uint64(VLEN / 8)
 
 	case isa.CsrSeed:
 		var buf [2]byte

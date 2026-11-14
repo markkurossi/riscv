@@ -16,8 +16,13 @@ import (
 )
 
 const (
-	// ELEN defines the physical width of vector registers in bits.
-	ELEN     = 64
+	// ELEN defines the maximum size in bits of a single vector
+	// element that any operation can produce or consume.
+	ELEN = 64
+
+	// Physical width of each register in bits (e.g., 128, 256, 512).
+	VLEN uint64 = 128
+
 	vpuDebug = false
 )
 
@@ -39,19 +44,15 @@ type VPU struct {
 
 	// The maximum VL value with the current vector configuration.
 	VLMax uint64
-
-	// Emulator-specific compile-time configuration
-	VLEN uint64 // Physical width of each register in bits (e.g., 128, 256, 512)
 }
 
 // NewVPU creates a new Vector Processing Unit for the CPU.
 func NewVPU(cpu *CPU) *VPU {
 	vpu := &VPU{
-		cpu:  cpu,
-		VLEN: 128,
+		cpu: cpu,
 	}
 	for i := range vpu.VRegs {
-		vpu.VRegs[i] = make([]byte, vpu.VLEN/8)
+		vpu.VRegs[i] = make([]byte, VLEN/8)
 	}
 	return vpu
 }
@@ -3282,7 +3283,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		eltWidth := isa.E8
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vd := uint64(instr.Rd)
-		eltPerReg := vpu.VLEN / 8 / eltWidth.Len()
+		eltPerReg := VLEN / 8 / eltWidth.Len()
 		size := nf * eltPerReg
 
 		for i := vpu.VStart; i < size; i++ {
@@ -3299,7 +3300,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		eltWidth := isa.E16
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vd := uint64(instr.Rd)
-		eltPerReg := vpu.VLEN / 8 / eltWidth.Len()
+		eltPerReg := VLEN / 8 / eltWidth.Len()
 		size := nf * eltPerReg
 
 		for i := vpu.VStart; i < size; i++ {
@@ -3316,7 +3317,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		eltWidth := isa.E32
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vd := uint64(instr.Rd)
-		eltPerReg := vpu.VLEN / 8 / eltWidth.Len()
+		eltPerReg := VLEN / 8 / eltWidth.Len()
 		size := nf * eltPerReg
 
 		for i := vpu.VStart; i < size; i++ {
@@ -3429,7 +3430,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		eltWidth := isa.E64
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vd := uint64(instr.Rd)
-		eltPerReg := vpu.VLEN / 8 / eltWidth.Len()
+		eltPerReg := VLEN / 8 / eltWidth.Len()
 		size := nf * eltPerReg
 
 		for i := vpu.VStart; i < size; i++ {
@@ -3578,7 +3579,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	case isa.Vs1rV:
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vs3 := uint64(instr.Rd)
-		size := nf * vpu.VLEN / 8
+		size := nf * VLEN / 8
 
 		for i := vpu.VStart; i < size; i++ {
 			vpu.VStart = i
@@ -4186,7 +4187,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		vd := uint64(instr.Rd)
 		vs2 := uint64(instr.Rs2)
 		numRegs := uint64(instr.Rs1 + 1)
-		vlenb := vpu.VLEN / 8
+		vlenb := VLEN / 8
 		totalBytes := numRegs * vlenb
 
 		// Convert element-based VStart to byte offset. This must be
@@ -4387,7 +4388,7 @@ func (vpu *VPU) setVL(rd, rs1 isa.Register, reqVL uint64, newType isa.VType) {
 	if vpu.VType != newType {
 		vlmul := newType.VLMUL()
 		vsew := isa.SEW(math.Min(float64(vlmul)*ELEN, ELEN))
-		vlmax = uint64(float32(vpu.VLEN/uint64(newType.VSEW())) * vlmul)
+		vlmax = uint64(float32(VLEN/uint64(newType.VSEW())) * vlmul)
 
 		vill := !(vlmul >= 0.125 && vlmul <= 8) ||
 			newType.VSEW() > vsew ||
@@ -4424,18 +4425,13 @@ func (vpu *VPU) setVL(rd, rs1 isa.Register, reqVL uint64, newType isa.VType) {
 }
 
 func (vpu *VPU) elt(sew isa.SEW, vreg, n uint64) ([]byte, uint64) {
-	if vpu.VType.VSEW() == 0 {
-		panic("VSEW == 0")
-	}
-	if vpu.VLEN/sew.Len() == 0 {
-		panic("VLEN / SEW == 0")
-	}
-	eltsPerReg := (vpu.VLEN >> 3) / sew.Len()
+	sewl := uint64(sew) >> 3
+	eltsPerReg := (VLEN >> 3) / sewl
 
 	vreg += n / eltsPerReg
 	n = n % eltsPerReg
 
-	return vpu.VRegs[vreg], n * sew.Len()
+	return vpu.VRegs[vreg], n * sewl
 }
 
 func (vpu *VPU) maskElt(vreg, n uint64) bool {
