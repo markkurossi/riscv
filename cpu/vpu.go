@@ -23,6 +23,9 @@ const (
 	// Physical width of each register in bits (e.g., 128, 256, 512).
 	VLEN uint64 = 128
 
+	// Vector register length in bytes.
+	VLENB = VLEN / 8
+
 	vpuDebug = false
 )
 
@@ -30,17 +33,26 @@ const (
 type VPU struct {
 	cpu *CPU
 
-	// 32 Vector Registers. Each register can hold up to VLEN bits.
-	// Stored as a flat byte slice per register for easy, dynamic
-	// element casting.
-	VRegs [32][]byte
+	// 32 vector registers: 32*VLENB bytes. Each register can hold up
+	// to VLEN bits.
+	VRegs []byte
 
-	// Vector Control and Status Registers (VCSRs)
-	VType  isa.VType // Tracks VSEW, VLMUL, VTA, VMA
-	VL     uint64    // Active vector length (dynamic element count)
-	VStart uint64    // Elements processing start index (for traps/resumes)
-	VXRM   uint8     // Fixed-point rounding mode
-	VXSat  bool      // Fixed-point saturation flag
+	// Vector Control and Status Registers (VCSRs).
+
+	// Tracks VSEW, VLMUL, VTA, VMA.
+	VType isa.VType
+
+	// Active vector length (dynamic element count).
+	VL uint64
+
+	// Elements processing start index (for traps/resumes).
+	VStart uint64
+
+	// Fixed-point rounding mode.
+	VXRM uint8
+
+	// Fixed-point saturation flag.
+	VXSat bool
 
 	// The maximum VL value with the current vector configuration.
 	VLMax uint64
@@ -49,10 +61,8 @@ type VPU struct {
 // NewVPU creates a new Vector Processing Unit for the CPU.
 func NewVPU(cpu *CPU) *VPU {
 	vpu := &VPU{
-		cpu: cpu,
-	}
-	for i := range vpu.VRegs {
-		vpu.VRegs[i] = make([]byte, VLEN/8)
+		cpu:   cpu,
+		VRegs: make([]byte, 32*VLENB),
 	}
 	return vpu
 }
@@ -3283,7 +3293,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		eltWidth := isa.E8
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vd := uint64(instr.Rd)
-		eltPerReg := VLEN / 8 / eltWidth.Len()
+		eltPerReg := VLENB / eltWidth.Len()
 		size := nf * eltPerReg
 
 		for i := vpu.VStart; i < size; i++ {
@@ -3300,7 +3310,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		eltWidth := isa.E16
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vd := uint64(instr.Rd)
-		eltPerReg := VLEN / 8 / eltWidth.Len()
+		eltPerReg := VLENB / eltWidth.Len()
 		size := nf * eltPerReg
 
 		for i := vpu.VStart; i < size; i++ {
@@ -3317,7 +3327,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		eltWidth := isa.E32
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vd := uint64(instr.Rd)
-		eltPerReg := VLEN / 8 / eltWidth.Len()
+		eltPerReg := VLENB / eltWidth.Len()
 		size := nf * eltPerReg
 
 		for i := vpu.VStart; i < size; i++ {
@@ -3430,7 +3440,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		eltWidth := isa.E64
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vd := uint64(instr.Rd)
-		eltPerReg := VLEN / 8 / eltWidth.Len()
+		eltPerReg := VLENB / eltWidth.Len()
 		size := nf * eltPerReg
 
 		for i := vpu.VStart; i < size; i++ {
@@ -3579,7 +3589,7 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 	case isa.Vs1rV:
 		baseAddr := vpu.cpu.X[instr.Rs1]
 		vs3 := uint64(instr.Rd)
-		size := nf * VLEN / 8
+		size := nf * VLENB
 
 		for i := vpu.VStart; i < size; i++ {
 			vpu.VStart = i
@@ -4183,28 +4193,27 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 		}
 
 	case isa.VmvnfrV:
-		sew := vpu.VType.VSEW()
 		vd := uint64(instr.Rd)
 		vs2 := uint64(instr.Rs2)
 		numRegs := uint64(instr.Rs1 + 1)
-		vlenb := VLEN / 8
-		totalBytes := numRegs * vlenb
+		totalBytes := numRegs * VLENB
 
-		// Convert element-based VStart to byte offset. This must be
-		// kept in sync with VPU.elt().
-		eltBytes := sew.Len()
-		startByte := vpu.VStart * eltBytes
+		// Whole-register moves require vd and vs2 to be aligned to
+		// numRegs.
+		if (vd%numRegs) != 0 || (vs2%numRegs) != 0 {
+			return vpu.cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
+				fmt.Errorf("vd=%v, vs2=%v", vd, vs2))
+		}
 
-		for b := startByte; b < totalBytes; b++ {
-			regIdx := vd + (b / vlenb)
-			ofs := b % vlenb
+		startByte := vpu.VStart
 
-			vs2RegIdx := vs2 + (b / vlenb)
-			vs2Ofs := b % vlenb
+		if startByte < totalBytes && vd != vs2 {
+			copyLen := totalBytes - startByte
+			vdStart := vd*VLENB + startByte
+			vs2Start := vs2*VLENB + startByte
 
-			if regIdx < 32 && vs2RegIdx < 32 {
-				vpu.VRegs[regIdx][ofs] = vpu.VRegs[vs2RegIdx][vs2Ofs]
-			}
+			copy(vpu.VRegs[vdStart:vdStart+copyLen],
+				vpu.VRegs[vs2Start:vs2Start+copyLen])
 		}
 
 	case isa.VsrlVi:
@@ -4426,12 +4435,7 @@ func (vpu *VPU) setVL(rd, rs1 isa.Register, reqVL uint64, newType isa.VType) {
 
 func (vpu *VPU) elt(sew isa.SEW, vreg, n uint64) ([]byte, uint64) {
 	sewl := uint64(sew) >> 3
-	eltsPerReg := (VLEN >> 3) / sewl
-
-	vreg += n / eltsPerReg
-	n = n % eltsPerReg
-
-	return vpu.VRegs[vreg], n * sewl
+	return vpu.VRegs[:], vreg*VLENB + n*sewl
 }
 
 func (vpu *VPU) maskElt(vreg, n uint64) bool {

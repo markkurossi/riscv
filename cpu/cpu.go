@@ -2295,10 +2295,8 @@ func (cpu *CPU) traceRegs() {
 		copy(cpu.regTrace.x[:], cpu.X[:])
 		copy(cpu.regTrace.f[:], cpu.F[:])
 
-		for i := 0; i < 32; i++ {
-			cpu.regTrace.v[i] = make([]byte, len(cpu.vpu.VRegs[i]))
-			copy(cpu.regTrace.v[i], cpu.vpu.VRegs[i])
-		}
+		cpu.regTrace.v = make([]byte, len(cpu.vpu.VRegs))
+		copy(cpu.regTrace.v, cpu.vpu.VRegs)
 		return
 	}
 
@@ -2315,9 +2313,11 @@ func (cpu *CPU) traceRegs() {
 		}
 	}
 	for i := 0; i < 32; i++ {
-		if !bytes.Equal(cpu.vpu.VRegs[i], cpu.regTrace.v[i]) {
-			log.Printf("%vv%d=%016x\n", tracePrefix, i, cpu.vpu.VRegs[i])
-			copy(cpu.regTrace.v[i], cpu.vpu.VRegs[i])
+		s := i * int(VLENB)
+		e := (i + 1) * int(VLENB)
+		if !bytes.Equal(cpu.vpu.VRegs[s:e], cpu.regTrace.v[s:e]) {
+			log.Printf("%vv%d=%016x\n", tracePrefix, i, cpu.vpu.VRegs[s:e])
+			copy(cpu.regTrace.v[s:e], cpu.vpu.VRegs[s:e])
 		}
 	}
 }
@@ -2325,5 +2325,5 @@ func (cpu *CPU) traceRegs() {
 type regTrace struct {
 	x [32]uint64
 	f [32]float64
-	v [32][]byte
+	v []byte
 }
