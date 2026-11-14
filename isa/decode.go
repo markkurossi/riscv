@@ -1909,6 +1909,8 @@ func Decode(raw uint32) (Instr, error) {
 				// 	 10000 | viota
 				// 	 10001 | vid
 				switch instr.Rs1 {
+				case 0b10000:
+					instr.SetVPU(ViotaM, uint32(funct7&0b1))
 				case 0b10001:
 					instr.SetVPU(VidV, uint32(funct7&0b1))
 				default:

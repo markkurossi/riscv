@@ -2005,6 +2005,43 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 
+	case isa.ViotaM:
+		sew := vpu.VType.VSEW()
+		var cnt uint64
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			doMask := vpu.maskElt(0, i)
+
+			var hasOne bool
+			if vm == 1 || doMask {
+				if vpu.maskElt(uint64(instr.Rs2), i) {
+					hasOne = true
+				}
+			}
+
+			// Bypass masked-off elements.
+			if vm == 0 && !doMask {
+				continue
+			}
+
+			reg, ofs := vpu.elt(sew, uint64(instr.Rd), i)
+
+			switch sew {
+			case isa.E8:
+				reg[ofs] = uint8(cnt)
+			case isa.E16:
+				memory.PutUint16(reg, ofs, uint16(cnt))
+			case isa.E32:
+				memory.PutUint32(reg, ofs, uint32(cnt))
+			case isa.E64:
+				memory.PutUint64(reg, ofs, uint64(cnt))
+			}
+
+			if hasOne {
+				cnt++
+			}
+		}
+
 	case isa.VidV:
 		sew := vpu.VType.VSEW()
 
