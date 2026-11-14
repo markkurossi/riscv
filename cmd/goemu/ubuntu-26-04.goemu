@@ -1,19 +1,47 @@
 {
   "bios":    "opensbi/fw_jump.bin",
-  "kernel":  "linux-7.0.11/Image",
-  "symbols": "linux-7.0.11/System.map",
+  "_kernel":  "u-boot-2026.04/u-boot.bin",
+  "kernel":  "linux-7.2.10/Image",
+  "symbols": "linux-7.2.10/System.map",
   "append":  "earlycon=sbi console=ttyS0,115200 root=/dev/vda1 ro rootwait systemd.mask=systemd-networkd-wait-online.service",
+  "memory":  "4G",
   "drives": [
     {
       "id":     "hd0",
       "format": "raw",
-      "file":   "ubuntu-26.04/ubuntu-26.04-preinstalled-server-riscv64.img"
+      "file":   "ubuntu-26.04/ubuntu-26.04.1-preinstalled-server-riscv64.img"
+    }
+  ],
+  "netdevs": [
+    {
+      "id":         "eth0",
+      "ip":         "192.168.42.2",
+      "gw":         "192.168.42.254",
+      "hostname":   "ubuntu",
+      "domainname": "goemu.ephemelier.com"
+    }
+  ],
+  "gpus": [
+    {
+      "id":      "gpu",
+      "title":   "Ubuntu 24.04",
+      "width":   1024,
+      "height":  768,
+      "pointer": "touchpad"
     }
   ],
   "devices": [
     {
       "type":  "virtio-blk-device",
       "drive": "hd0"
+    },
+    {
+      "type":   "virtio-net-device",
+      "netdev": "eth0"
+    },
+    {
+      "type": "virtio-gpu-device",
+      "gpu":  "gpu"
     }
   ]
 }
