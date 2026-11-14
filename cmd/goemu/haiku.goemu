@@ -5,7 +5,7 @@
     {
       "id":     "hd0",
       "format": "raw",
-      "file":   "haiku/haiku-master-hrev60299-riscv64-mmc.image"
+      "file":   "haiku/haiku-master-hrev60411-riscv64-mmc.image"
     }
   ],
   "gpus": [
