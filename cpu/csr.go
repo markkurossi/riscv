@@ -334,3 +334,7 @@ func (cpu *CPU) updateMstatusSD() {
 func (cpu *CPU) Mstatus() isa.Mstatus {
 	return cpu.mstatus
 }
+
+func (cpu *CPU) SetMstatus(mstatus isa.Mstatus) {
+	cpu.mstatus = mstatus
+}
