@@ -37,8 +37,11 @@ const (
 	debugLossage = false
 )
 
+// DebugInstrInfo defines the information that is printed with the
+// debug instruction trace.
 type DebugInstrInfo uint64
 
+// DebugInstrInfo values.
 const (
 	InstrInfoNone DebugInstrInfo = iota
 	InstrInfoRegs
@@ -46,10 +49,11 @@ const (
 	InstrInfoVPU
 )
 
+// TrapHandler implements a userspace emulator trap handler.
 type TrapHandler func(cpu *CPU, trap *isa.Trap) (bool, error)
 
-// Maybe: Interrupt, Breakpoint, SingleStep, GuestException, Diagnostics.
-
+// GDB defines a remote debugging interface.  Maybe: Interrupt,
+// Breakpoint, SingleStep, GuestException, Diagnostics.
 type GDB interface {
 	Start()
 	Breakpoint()
@@ -60,6 +64,7 @@ type lossage struct {
 	instr isa.Instr
 }
 
+// CPU implements RISC-V hart.
 type CPU struct {
 	Trace bool
 
@@ -119,6 +124,7 @@ type CPU struct {
 	lossageIdx int
 }
 
+// New creates a new CPU using the memory mem.
 func New(mem *memory.Memory) *CPU {
 	cpu := &CPU{
 		mstatus: isa.Mstatus(uint64(2) << isa.MsUXL),
@@ -137,6 +143,7 @@ func New(mem *memory.Memory) *CPU {
 	return cpu
 }
 
+// Now returns the monotonically increasing CPU time.
 func (cpu *CPU) Now() uint64 {
 	return cpu.Time
 }
@@ -152,14 +159,17 @@ func (cpu *CPU) syncTime() uint64 {
 	return cpu.Time
 }
 
+// Mode returns the CPU privilege mode.
 func (cpu *CPU) Mode() isa.PrivilegeMode {
 	return cpu.mode
 }
 
+// SetMode sets the CPU privilege mode.
 func (cpu *CPU) SetMode(mode isa.PrivilegeMode) {
 	cpu.mode = mode
 }
 
+// Run runs the CPU.
 func (cpu *CPU) Run() error {
 	cpu.StartTime = time.Now()
 
@@ -201,10 +211,12 @@ func (cpu *CPU) Run() error {
 	return nil
 }
 
+// Shutdown implements isa.Hart.Shutdown.
 func (cpu *CPU) Shutdown() {
 	cpu.shutdown = true
 }
 
+// SetTrace implements isa.Hart.SetTrace.
 func (cpu *CPU) SetTrace(on bool) {
 	cpu.DebugInstrTrace = on
 }
@@ -362,9 +374,8 @@ dispatch:
 			if raw != 0 {
 				cpu.tracef(raw, instr, "non-zero %x decoded as %v", raw, instr)
 				return err
-			} else {
-				return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), err)
 			}
+			return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), err)
 
 		case isa.Add:
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] + cpu.X[instr.Rs2]
@@ -2091,15 +2102,19 @@ func fclassS(fVal float32) uint32 {
 	return mask
 }
 
+// ClearInterrupt implements isa.Hart.ClearInterrupt.
 func (cpu *CPU) ClearInterrupt(mask uint64) {
 	cpu.csr[isa.CsrMip].And(^mask)
 }
 
+// SetInterrupt implements isa.Hart.SetInterrupt.
 func (cpu *CPU) SetInterrupt(mask uint64) {
 	cpu.csr[isa.CsrMip].Or(mask)
 	cpu.c.Broadcast()
 }
 
+// FuncName maps the pc to its symbol table entry and its virtual
+// memory address.
 func (cpu *CPU) FuncName(pc uint64) (*SymEntry, uint64) {
 	if cpu.Symtab == nil {
 		return nil, 0
@@ -2149,6 +2164,7 @@ func (cpu *CPU) pctracef(pc uint64, raw uint32, instr isa.Instr,
 	cpu.pctrace(pc, raw, instr, fmt.Sprintf(format, args...))
 }
 
+// ColorOn selects the CPU output color based on CPU mode.
 func (cpu *CPU) ColorOn() string {
 	if !cpuColor {
 		return ""
@@ -2176,6 +2192,7 @@ func (cpu *CPU) ColorOn() string {
 	return fmt.Sprintf("\x1b[%sm", color)
 }
 
+// ColorOff clears the CPU output color.
 func (cpu *CPU) ColorOff() string {
 	if !cpuColor {
 		return ""
@@ -2189,6 +2206,7 @@ func (cpu *CPU) addLossage(pc uint64, instr isa.Instr) {
 	cpu.lossageIdx = (cpu.lossageIdx + 1) % len(cpu.lossage)
 }
 
+// ViewLossage prints the instruction lossage.
 func (cpu *CPU) ViewLossage() {
 	if !debugLossage || !cpu.DebugLossage {
 		return
@@ -2203,11 +2221,7 @@ func fmtAddr(addr uint64) string {
 	if addr < 0x100000000 {
 		return fmt.Sprintf("  %08x", addr)
 	} else if addr >= 0xffffffff00000000 {
-		if false {
-			return fmt.Sprintf("+f%08x", uint32(addr))
-		} else {
-			return fmt.Sprintf("%16x", addr)
-		}
+		return fmt.Sprintf("%16x", addr)
 	}
 	return fmt.Sprintf("%10x", addr)
 }
