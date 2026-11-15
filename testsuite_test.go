@@ -71,9 +71,6 @@ var skipISA = map[string]uint64{
 	"rv64uzfh-p-move":     0,
 	"rv64uzfh-p-recoding": 0,
 
-	// XXX FPU dirty flag bugs.
-	"rv64mi-p-csr": 13,
-
 	// page cache zeroing bugs.
 	"rv64mzicbo-p-zero": 1,
 
