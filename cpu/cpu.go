@@ -127,7 +127,6 @@ func New(mem *memory.Memory) *CPU {
 		},
 	}
 	cpu.vpu = NewVPU(cpu)
-	cpu.mstatus.SetFS(isa.RegInitial)
 	cpu.c = sync.NewCond(&cpu.m)
 	cpu.MMU.Hart = cpu
 
