@@ -20,10 +20,11 @@ const (
 	// element that any operation can produce or consume.
 	ELEN = 64
 
-	// Physical width of each register in bits (e.g., 128, 256, 512).
+	// VLEN defines the physical width of each register in bits (e.g.,
+	// 128, 256, 512).
 	VLEN uint64 = 128
 
-	// Vector register length in bytes.
+	// VLENB defines the vector register length in bytes.
 	VLENB = VLEN / 8
 
 	vpuDebug = false
@@ -4456,6 +4457,7 @@ func (vpu *VPU) setMaskElt(vreg, n uint64, v bool) {
 	}
 }
 
+// Unsigned defines unsigned integer numbers.
 type Unsigned interface {
 	uint8 | uint16 | uint32 | uint64
 }
