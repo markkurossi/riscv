@@ -207,7 +207,7 @@ func (cpu *CPU) Shutdown() {
 }
 
 func (cpu *CPU) SetTrace(on bool) {
-	// cpu.DebugTrace = on
+	cpu.DebugInstrTrace = on
 }
 
 func (cpu *CPU) loop() error {
