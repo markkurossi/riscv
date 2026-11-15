@@ -64,8 +64,15 @@ type MMU struct {
 	Mem     *memory.Memory
 	MMIO    MMIO
 	Overlay Overlay
+	Debug   bool
 
 	TLB [4096]TLBEntry
+}
+
+func (mmu *MMU) debugf(msg string, args ...interface{}) {
+	if debugMMU && mmu.Debug {
+		log.Printf(msg, args...)
+	}
 }
 
 // Satp returns the MMU's current Supervisor Address Translation and
@@ -419,9 +426,9 @@ func (mmu *MMU) mapSlow(mode isa.PrivilegeMode, vaddr, vpn uint64, access int) (
 	page, flags, level, err := mmu.MapSv39(mode, mmu.satp.PPN(), vaddr, access)
 	if err != nil {
 		if trap, ok := errors.AsType[*isa.Trap](err); ok && false {
-			fmt.Printf("mmu.MapSv39 failed: %v\n", trap)
+			log.Printf("mmu.MapSv39 failed: %v\n", trap)
 			if trap.Err != nil {
-				fmt.Printf("  caused by %v\n", trap.Err)
+				log.Printf("  caused by %v\n", trap.Err)
 			}
 		}
 		return 0, err
