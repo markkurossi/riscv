@@ -359,7 +359,28 @@ func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
 	if mmu.satp.Mode() == SatpModeBare {
 		return vaddr, nil
 	}
+
+	// RISC-V: 2.1. Machine-Level ISA, Version 1.13
+	//
+	// 2.1.1.6.4. Memory Privilege in mstatus Register
+	//
+	// The MPRV (Modify PRiVilege) bit modifies the effective
+	// privilege mode, i.e., the privilege level at which explicit
+	// memory accesses execute. When MPRV=0, explicit memory accesses
+	// behave as normal, using the translation and protection
+	// mechanisms of the current privilege mode. When MPRV=1, load and
+	// store memory addresses are translated and protected, and
+	// endianness is applied, as though the current privilege mode
+	// were set to MPP. Instruction address-translation and protection
+	// are unaffected by the setting of MPRV. MPRV is read-only 0 if
+	// U-mode is not supported.
 	mode := mmu.Hart.Mode()
+	if mode == isa.ModeM && access != AccessExec {
+		mstatus := mmu.Hart.Mstatus()
+		if mstatus.MPRV() {
+			mode = mstatus.MPP()
+		}
+	}
 	if mode == isa.ModeM {
 		return vaddr, nil
 	}
@@ -383,7 +404,7 @@ func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
 		tlb.Clear()
 	}
 
-	addr, err := mmu.mapSlow(vaddr, vpn, access)
+	addr, err := mmu.mapSlow(mode, vaddr, vpn, access)
 	if err != nil {
 		return 0, err
 	}
@@ -393,8 +414,9 @@ func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
 	return addr, nil
 }
 
-func (mmu *MMU) mapSlow(vaddr, vpn uint64, access int) (uint64, error) {
-	page, flags, level, err := mmu.MapSv39(mmu.satp.PPN(), vaddr, access)
+func (mmu *MMU) mapSlow(mode isa.PrivilegeMode, vaddr, vpn uint64, access int) (
+	uint64, error) {
+	page, flags, level, err := mmu.MapSv39(mode, mmu.satp.PPN(), vaddr, access)
 	if err != nil {
 		if trap, ok := errors.AsType[*isa.Trap](err); ok && false {
 			fmt.Printf("mmu.MapSv39 failed: %v\n", trap)
@@ -412,7 +434,7 @@ func (mmu *MMU) mapSlow(vaddr, vpn uint64, access int) (uint64, error) {
 		tlb.VPN = vpn
 		tlb.Page = page
 		tlb.Flags = flags | PteV
-		tlb.UserMode = mmu.Hart.Mode() == isa.ModeU
+		tlb.UserMode = mode == isa.ModeU
 	}
 
 	switch level {
@@ -430,8 +452,8 @@ func (mmu *MMU) mapSlow(vaddr, vpn uint64, access int) (uint64, error) {
 }
 
 // MapSv39 does a Sv39 page table lookup for the virtual address.
-func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
-	uint64, PTEFlags, int, error) {
+func (mmu *MMU) MapSv39(mode isa.PrivilegeMode, root, vaddr uint64,
+	access int) (uint64, PTEFlags, int, error) {
 
 	base := root << 12
 
@@ -459,7 +481,7 @@ func (mmu *MMU) MapSv39(root, vaddr uint64, access int) (
 				mmu.Hart.Trap(isa.CauseLoadPageFault, vaddr, err)
 		}
 		if pte.Leaf() {
-			return mmu.mapLeaf(pte, pteAddr, vaddr, level, access)
+			return mmu.mapLeaf(mode, pte, pteAddr, vaddr, level, access)
 		}
 
 		// Walk to the next level.
@@ -497,8 +519,8 @@ func acWithDesc(ac *AccessContext, desc string) *AccessContext {
 	return ac
 }
 
-func (mmu *MMU) mapLeaf(pte PTE, pteAddr, vaddr uint64, level, access int) (
-	uint64, PTEFlags, int, error) {
+func (mmu *MMU) mapLeaf(mode isa.PrivilegeMode, pte PTE, pteAddr, vaddr uint64,
+	level, access int) (uint64, PTEFlags, int, error) {
 
 	var ac *AccessContext
 
@@ -541,7 +563,7 @@ func (mmu *MMU) mapLeaf(pte PTE, pteAddr, vaddr uint64, level, access int) (
 
 	isUserPage := pte.User()
 
-	if mmu.Hart.Mode() == isa.ModeU {
+	if mode == isa.ModeU {
 		// User mode CANNOT access kernel pages (PteU == 0)
 		if !isUserPage {
 			if access&AccessExec != 0 {
@@ -555,7 +577,7 @@ func (mmu *MMU) mapLeaf(pte PTE, pteAddr, vaddr uint64, level, access int) (
 			return 0, 0, 0, mmu.Hart.Trap(isa.CauseLoadPageFault,
 				vaddr, acWithDesc(ac, "U-mode"))
 		}
-	} else if mmu.Hart.Mode() == isa.ModeS {
+	} else if mode == isa.ModeS {
 		// Supervisor mode accessing a User Page (PteU == 1)
 		if isUserPage {
 			// Rule A: Supervisor mode can NEVER execute code from a User page
