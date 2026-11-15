@@ -99,10 +99,6 @@ device integration.
 
 ### Release 1.0
 
-- [ ] Shortlist
-  - [x] V extension (subset to boot Ubuntu-26)
-  - [x] Check all `C.*` instruction decodings - do not be too liberal
-  - [ ] mstatus.FS==RegOff => CauseIllegalInstr => BSDs fail to boot
 - [ ] Reimplement DTB creation
   - [ ] `soc {interrupt-parent = <&plic>;}` instead of `interrupts-extended`
 - [ ] FreeBSD
