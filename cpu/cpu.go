@@ -1543,13 +1543,9 @@ dispatch:
 	}
 }
 
-const checkFSRegOff = false
-
 func (cpu *CPU) floatingPointExtension(instr isa.Instr, raw uint32) error {
 	if cpu.mstatus.FS() == isa.RegOff {
-		if checkFSRegOff {
-			return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
-		}
+		return cpu.Trap(isa.CauseIllegalInstr, uint64(raw), nil)
 	}
 
 	// Dirty as a default: #dirty = 38, #clean=15.

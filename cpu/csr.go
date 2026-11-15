@@ -39,7 +39,7 @@ func (cpu *CPU) CSRLoad(csr isa.CSR, raw uint32, instr isa.Instr) (
 
 	switch csr {
 	case isa.CsrFflags, isa.CsrFrm, isa.CsrFcsr:
-		if cpu.mstatus.FS() == isa.RegOff && checkFSRegOff {
+		if cpu.mstatus.FS() == isa.RegOff {
 			return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 				fmt.Errorf("read fcsr when FS is off"))
 		}
@@ -189,7 +189,7 @@ func (cpu *CPU) SetCSRX(csr isa.CSR, v uint64, raw uint32,
 	// by updating CPU state accordingly.
 	switch csr {
 	case isa.CsrFflags, isa.CsrFrm, isa.CsrFcsr:
-		if cpu.mstatus.FS() == isa.RegOff && checkFSRegOff {
+		if cpu.mstatus.FS() == isa.RegOff {
 			return cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 				fmt.Errorf("write fcsr when FS is off"))
 		}
