@@ -347,7 +347,7 @@ type TLBEntry struct {
 	Page       uint64
 	Flags      PTEFlags
 	OffsetMask uint32
-	UserMode   bool
+	Mode       isa.PrivilegeMode
 }
 
 // Clear clears the TLB entry.
@@ -356,7 +356,7 @@ func (te *TLBEntry) Clear() {
 	te.Page = 0
 	te.Flags = 0
 	te.OffsetMask = 0
-	te.UserMode = false
+	te.Mode = 0xff
 }
 
 // Map maps the virtual address to physical address. The map enforces
@@ -395,9 +395,7 @@ func (mmu *MMU) Map(vaddr uint64, access int) (uint64, error) {
 	vpn := vaddr >> 12
 	tlb := &mmu.TLB[vpn&0xfff]
 
-	if tlb.VPN == vpn && tlb.Flags&PteV != 0 &&
-		tlb.UserMode == (mode == isa.ModeU) {
-
+	if tlb.VPN == vpn && tlb.Flags&PteV != 0 && tlb.Mode == mode {
 		var dirtyOk bool
 		if access&AccessWrite != 0 {
 			dirtyOk = tlb.Flags.Dirty()
@@ -441,7 +439,7 @@ func (mmu *MMU) mapSlow(mode isa.PrivilegeMode, vaddr, vpn uint64, access int) (
 		tlb.VPN = vpn
 		tlb.Page = page
 		tlb.Flags = flags | PteV
-		tlb.UserMode = mode == isa.ModeU
+		tlb.Mode = mode
 	}
 
 	switch level {
