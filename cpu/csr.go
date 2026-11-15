@@ -251,16 +251,24 @@ func (cpu *CPU) SetCSRX(csr isa.CSR, v uint64, raw uint32,
 				fmt.Errorf("set satp with TVM set"))
 		}
 		satp := mmu.Satp(v)
-		cpu.MMU.SetSatp(satp)
-		cpu.codePagenum = memory.InvalidPagenum
-		cpu.codePage = nil
+		switch satp.Mode() {
+		case mmu.SatpModeBare, mmu.SatpModeSv39:
+			cpu.MMU.SetSatp(satp)
+			cpu.codePagenum = memory.InvalidPagenum
+			cpu.codePage = nil
 
-		// Save Satp to CSR so that it can be queried.
-		cpu.CSR[csr].Store(v)
+			// Save Satp to CSR so that it can be queried.
+			cpu.CSR[csr].Store(v)
 
-		if cpu.Trace {
-			cpu.traceFunc(cpu.PC)
-			cpu.tracef(raw, instr, "Satp: %v", satp)
+			if cpu.Trace {
+				cpu.traceFunc(cpu.PC)
+				cpu.tracef(raw, instr, "Satp: %v", satp)
+			}
+
+		default:
+			// Unsupported satp mode. Leave things unchanged so the
+			// caller can read the satp value and notice that we don't
+			// support this mode.
 		}
 
 		// Vector extension.
