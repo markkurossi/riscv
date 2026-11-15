@@ -29,7 +29,8 @@
       "id":     "gpu",
       "title":  "Debian 13.6.0",
       "width":  1024,
-      "height": 768
+      "height": 768,
+      "pointer": "touchpad"
     }
   ],
   "_devices": [
