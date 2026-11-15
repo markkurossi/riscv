@@ -69,7 +69,7 @@ type CPU struct {
 	mode     isa.PrivilegeMode
 	shutdown bool
 
-	CSR     [4096]atomic.Uint64
+	csr     [4096]atomic.Uint64
 	mstatus isa.Mstatus
 
 	PC uint64
@@ -231,19 +231,19 @@ dispatch:
 		if cpu.Time&0x3f == 0 {
 			// Sync time to wall clock.
 			now := cpu.syncTime()
-			stimecmp := cpu.CSR[isa.CsrStimecmp].Load()
+			stimecmp := cpu.csr[isa.CsrStimecmp].Load()
 
 			// Check timer interrupts.
 			if now >= stimecmp {
-				cpu.CSR[isa.CsrMip].Or(isa.IntSTIP)
+				cpu.csr[isa.CsrMip].Or(isa.IntSTIP)
 			}
 
-			mip := cpu.CSR[isa.CsrMip].Load()
-			mie := cpu.CSR[isa.CsrMie].Load()
+			mip := cpu.csr[isa.CsrMip].Load()
+			mie := cpu.csr[isa.CsrMie].Load()
 			pending := mip & mie
 
 			if pending != 0 {
-				mideleg := cpu.CSR[isa.CsrMideleg].Load()
+				mideleg := cpu.csr[isa.CsrMideleg].Load()
 				currentMode := cpu.Mode()
 				mie := cpu.mstatus.MIE()
 				sie := cpu.mstatus.SIE()
@@ -477,13 +477,13 @@ dispatch:
 			if cpu.Trace {
 				cpu.traceFunc(cpu.PC)
 				cpu.tracef(raw, instr, "mode=%v => %v, sepc=%x",
-					cpu.Mode(), cpu.mstatus.SPP(), cpu.CSR[isa.CsrSepc].Load())
+					cpu.Mode(), cpu.mstatus.SPP(), cpu.csr[isa.CsrSepc].Load())
 			}
 			cpu.mstatus.SetSIE(cpu.mstatus.SPIE())
 			cpu.mstatus.SetSPIE(true)
 			cpu.SetMode(cpu.mstatus.SPP())
 			cpu.mstatus.SetSPP(isa.ModeU)
-			cpu.PC = cpu.CSR[isa.CsrSepc].Load()
+			cpu.PC = cpu.csr[isa.CsrSepc].Load()
 			cpu.ReservationValid = false
 			continue
 
@@ -491,13 +491,13 @@ dispatch:
 			if cpu.Trace {
 				cpu.traceFunc(cpu.PC)
 				cpu.tracef(raw, instr, "mode=%v => %v, mepc=%x",
-					cpu.Mode(), cpu.mstatus.MPP(), cpu.CSR[isa.CsrMepc].Load())
+					cpu.Mode(), cpu.mstatus.MPP(), cpu.csr[isa.CsrMepc].Load())
 			}
 			cpu.mstatus.SetMIE(cpu.mstatus.MPIE())
 			cpu.mstatus.SetMPIE(true)
 			cpu.SetMode(cpu.mstatus.MPP())
 			cpu.mstatus.SetMPP(isa.ModeU)
-			cpu.PC = cpu.CSR[isa.CsrMepc].Load()
+			cpu.PC = cpu.csr[isa.CsrMepc].Load()
 			cpu.ReservationValid = false
 			continue
 
@@ -531,7 +531,7 @@ dispatch:
 		case isa.Wfi:
 			// Calculate delay to the next stimecmp interrupt.
 
-			stimecmp := cpu.CSR[isa.CsrStimecmp].Load()
+			stimecmp := cpu.csr[isa.CsrStimecmp].Load()
 			now := cpu.syncTime()
 
 			if stimecmp == 0xffffffffffffffff || now >= stimecmp {
@@ -553,7 +553,7 @@ dispatch:
 
 			// Wait for interrupt.
 			cpu.m.Lock()
-			for cpu.CSR[isa.CsrMip].Load()&cpu.CSR[isa.CsrMie].Load() == 0 &&
+			for cpu.csr[isa.CsrMip].Load()&cpu.csr[isa.CsrMie].Load() == 0 &&
 				!cpu.wfiTimeout {
 				cpu.c.Wait()
 			}
@@ -563,8 +563,8 @@ dispatch:
 			cpu.m.Unlock()
 
 			// Check timer interrupts.
-			if cpu.syncTime() >= cpu.CSR[isa.CsrStimecmp].Load() {
-				cpu.CSR[isa.CsrMip].Or(isa.IntSTIP)
+			if cpu.syncTime() >= cpu.csr[isa.CsrStimecmp].Load() {
+				cpu.csr[isa.CsrMip].Or(isa.IntSTIP)
 			}
 
 		case isa.Fence:
@@ -904,12 +904,12 @@ dispatch:
 
 		case isa.Csrrc:
 			csr := isa.CSR(instr.Imm)
-			t, err := cpu.CSRLoad(csr, raw, instr)
+			t, err := cpu.CSR(csr, raw, instr)
 			if err != nil {
 				return err
 			}
 			if instr.Rs1 != isa.Zero {
-				err = cpu.SetCSRX(csr, t & ^cpu.X[instr.Rs1], raw, instr)
+				err = cpu.SetCSR(csr, t & ^cpu.X[instr.Rs1], raw, instr)
 				if err != nil {
 					return err
 				}
@@ -918,13 +918,13 @@ dispatch:
 
 		case isa.Csrrci:
 			csr := isa.CSR(instr.Imm)
-			t, err := cpu.CSRLoad(csr, raw, instr)
+			t, err := cpu.CSR(csr, raw, instr)
 			if err != nil {
 				return err
 			}
 			// If zimm is zero, csrrsi is read-only.
 			if instr.Rs1 != isa.Zero {
-				err = cpu.SetCSRX(csr, t & ^uint64(instr.Rs1), raw, instr)
+				err = cpu.SetCSR(csr, t & ^uint64(instr.Rs1), raw, instr)
 				if err != nil {
 					return err
 				}
@@ -933,12 +933,12 @@ dispatch:
 
 		case isa.Csrrs:
 			csr := isa.CSR(instr.Imm)
-			t, err := cpu.CSRLoad(csr, raw, instr)
+			t, err := cpu.CSR(csr, raw, instr)
 			if err != nil {
 				return err
 			}
 			if instr.Rs1 != isa.Zero {
-				err = cpu.SetCSRX(csr, t|cpu.X[instr.Rs1], raw, instr)
+				err = cpu.SetCSR(csr, t|cpu.X[instr.Rs1], raw, instr)
 				if err != nil {
 					return err
 				}
@@ -947,13 +947,13 @@ dispatch:
 
 		case isa.Csrrsi:
 			csr := isa.CSR(instr.Imm)
-			t, err := cpu.CSRLoad(csr, raw, instr)
+			t, err := cpu.CSR(csr, raw, instr)
 			if err != nil {
 				return err
 			}
 			// If zimm is zero, csrrsi is read-only.
 			if instr.Rs1 != 0 {
-				err = cpu.SetCSRX(csr, t|uint64(instr.Rs1), raw, instr)
+				err = cpu.SetCSR(csr, t|uint64(instr.Rs1), raw, instr)
 				if err != nil {
 					return err
 				}
@@ -962,13 +962,13 @@ dispatch:
 
 		case isa.Csrrw:
 			csr := isa.CSR(instr.Imm)
-			oldCSR, err := cpu.CSRLoad(csr, raw, instr)
+			oldCSR, err := cpu.CSR(csr, raw, instr)
 			if err != nil {
 				return err
 			}
 			valToSet := cpu.X[instr.Rs1]
 
-			err = cpu.SetCSRX(csr, valToSet, raw, instr)
+			err = cpu.SetCSR(csr, valToSet, raw, instr)
 			if err != nil {
 				return err
 			}
@@ -976,11 +976,11 @@ dispatch:
 
 		case isa.Csrrwi:
 			csr := isa.CSR(instr.Imm)
-			oldCSR, err := cpu.CSRLoad(csr, raw, instr)
+			oldCSR, err := cpu.CSR(csr, raw, instr)
 			if err != nil {
 				return err
 			}
-			err = cpu.SetCSRX(csr, uint64(instr.Rs1), raw, instr)
+			err = cpu.SetCSR(csr, uint64(instr.Rs1), raw, instr)
 			if err != nil {
 				return err
 			}
@@ -2092,11 +2092,11 @@ func fclassS(fVal float32) uint32 {
 }
 
 func (cpu *CPU) ClearInterrupt(mask uint64) {
-	cpu.CSR[isa.CsrMip].And(^mask)
+	cpu.csr[isa.CsrMip].And(^mask)
 }
 
 func (cpu *CPU) SetInterrupt(mask uint64) {
-	cpu.CSR[isa.CsrMip].Or(mask)
+	cpu.csr[isa.CsrMip].Or(mask)
 	cpu.c.Broadcast()
 }
 
@@ -2232,7 +2232,7 @@ func (cpu *CPU) pctrace(pc uint64, raw uint32, instr isa.Instr, msg string) {
 	}
 	if len(msg) == 0 {
 
-		switch DebugInstrInfo(cpu.CSR[isa.CsrGoemuInstrInfo].Load()) {
+		switch DebugInstrInfo(cpu.csr[isa.CsrGoemuInstrInfo].Load()) {
 		case InstrInfoNone:
 
 		case InstrInfoRegs:

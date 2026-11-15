@@ -13,7 +13,7 @@ import (
 	"github.com/markkurossi/riscv/isa"
 )
 
-// Trap handles a synchronous interrupt cause, tval.
+// Trap creates a synchronous interrupt with cause and tval.
 func (cpu *CPU) Trap(cause, tval uint64, err error) error {
 	epc := cpu.PC
 
@@ -35,6 +35,7 @@ func (cpu *CPU) Trap(cause, tval uint64, err error) error {
 	return isa.NewTrap(epc, cause, tval, err)
 }
 
+// HandleTrap handles a synchronous interrut occurring at epc.
 func (cpu *CPU) HandleTrap(epc, cause, tval uint64) error {
 
 	if debugLossage && cpu.DebugLossage {
@@ -62,18 +63,18 @@ func (cpu *CPU) HandleTrap(epc, cause, tval uint64) error {
 	// Handler is determined by the medeleg (Machine Exception
 	// Delegation) register.
 	var tvec uint64
-	medeleg := cpu.CSR[isa.CsrMedeleg].Load()
+	medeleg := cpu.csr[isa.CsrMedeleg].Load()
 	if medeleg&(1<<cause) == 0 || cpu.Mode() == isa.ModeM {
 		// Trap to M-mode.
 		cpu.mstatus.SetMPP(cpu.Mode())
 		cpu.mstatus.SetMPIE(cpu.mstatus.MIE())
 		cpu.mstatus.SetMIE(false)
 
-		cpu.CSR[isa.CsrMepc].Store(epc)
-		cpu.CSR[isa.CsrMcause].Store(cause)
-		cpu.CSR[isa.CsrMtval].Store(tval)
+		cpu.csr[isa.CsrMepc].Store(epc)
+		cpu.csr[isa.CsrMcause].Store(cause)
+		cpu.csr[isa.CsrMtval].Store(tval)
 
-		tvec = cpu.CSR[isa.CsrMtvec].Load()
+		tvec = cpu.csr[isa.CsrMtvec].Load()
 		cpu.SetMode(isa.ModeM)
 	} else {
 		// Delegated to S-mode.
@@ -81,11 +82,11 @@ func (cpu *CPU) HandleTrap(epc, cause, tval uint64) error {
 		cpu.mstatus.SetSPIE(cpu.mstatus.SIE())
 		cpu.mstatus.SetSIE(false)
 
-		cpu.CSR[isa.CsrSepc].Store(epc)
-		cpu.CSR[isa.CsrScause].Store(cause)
-		cpu.CSR[isa.CsrStval].Store(tval)
+		cpu.csr[isa.CsrSepc].Store(epc)
+		cpu.csr[isa.CsrScause].Store(cause)
+		cpu.csr[isa.CsrStval].Store(tval)
 
-		tvec = cpu.CSR[isa.CsrStvec].Load()
+		tvec = cpu.csr[isa.CsrStvec].Load()
 		cpu.SetMode(isa.ModeS)
 	}
 
@@ -129,11 +130,11 @@ func (cpu *CPU) Interrupt(target isa.PrivilegeMode, cause uint64) {
 		cpu.mstatus.SetMPIE(cpu.mstatus.MIE())
 		cpu.mstatus.SetMIE(false)
 
-		cpu.CSR[isa.CsrMepc].Store(epc)
-		cpu.CSR[isa.CsrMcause].Store(cause)
-		cpu.CSR[isa.CsrMtval].Store(0)
+		cpu.csr[isa.CsrMepc].Store(epc)
+		cpu.csr[isa.CsrMcause].Store(cause)
+		cpu.csr[isa.CsrMtval].Store(0)
 
-		tvec = cpu.CSR[isa.CsrMtvec].Load()
+		tvec = cpu.csr[isa.CsrMtvec].Load()
 		cpu.SetMode(isa.ModeM)
 
 	case isa.ModeS:
@@ -141,11 +142,11 @@ func (cpu *CPU) Interrupt(target isa.PrivilegeMode, cause uint64) {
 		cpu.mstatus.SetSPIE(cpu.mstatus.SIE())
 		cpu.mstatus.SetSIE(false)
 
-		cpu.CSR[isa.CsrSepc].Store(epc)
-		cpu.CSR[isa.CsrScause].Store(cause)
-		cpu.CSR[isa.CsrStval].Store(0)
+		cpu.csr[isa.CsrSepc].Store(epc)
+		cpu.csr[isa.CsrScause].Store(cause)
+		cpu.csr[isa.CsrStval].Store(0)
 
-		tvec = cpu.CSR[isa.CsrStvec].Load()
+		tvec = cpu.csr[isa.CsrStvec].Load()
 		cpu.SetMode(isa.ModeS)
 
 	default:

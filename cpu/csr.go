@@ -25,8 +25,10 @@ const (
 	debugCSR = false
 )
 
-func (cpu *CPU) CSRLoad(csr isa.CSR, raw uint32, instr isa.Instr) (
-	uint64, error) {
+// CSR loads the value of the control and status register csr. The
+// arguments raw and instr specify the instruction that was calling
+// the function.
+func (cpu *CPU) CSR(csr isa.CSR, raw uint32, instr isa.Instr) (uint64, error) {
 
 	if cpu.Mode() < csr.Privilege() {
 		return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
@@ -43,7 +45,7 @@ func (cpu *CPU) CSRLoad(csr isa.CSR, raw uint32, instr isa.Instr) (
 			return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 				fmt.Errorf("read fcsr when FS is off"))
 		}
-		v = cpu.CSR[csr].Load()
+		v = cpu.csr[csr].Load()
 		switch csr {
 		case isa.CsrFflags:
 			v &= 0b11111
@@ -55,7 +57,7 @@ func (cpu *CPU) CSRLoad(csr isa.CSR, raw uint32, instr isa.Instr) (
 		v = uint64(cpu.mstatus)
 
 	case isa.CsrMisa:
-		v = cpu.CSR[csr].Load()
+		v = cpu.csr[csr].Load()
 		v |= isa.MisaMXL |
 			isa.MisaA | // A (Atomic)
 			isa.MisaC | // C (Compressed)
@@ -96,18 +98,18 @@ func (cpu *CPU) CSRLoad(csr isa.CSR, raw uint32, instr isa.Instr) (
 
 	case isa.CsrSie:
 		mask := uint64(isa.IntSSIP | isa.IntSTIP | isa.IntSEIP)
-		v = cpu.CSR[isa.CsrMie].Load() & mask
+		v = cpu.csr[isa.CsrMie].Load() & mask
 
 	case isa.CsrSip:
 		mask := uint64(isa.IntSSIP | isa.IntSTIP | isa.IntSEIP)
-		v = cpu.CSR[isa.CsrMip].Load() & mask
+		v = cpu.csr[isa.CsrMip].Load() & mask
 
 	case isa.CsrSatp:
 		if cpu.mstatus.TVM() {
 			return 0, cpu.Trap(isa.CauseIllegalInstr, uint64(raw),
 				fmt.Errorf("get satp with TVM set"))
 		}
-		v = cpu.CSR[csr].Load()
+		v = cpu.csr[csr].Load()
 
 		// Vector extension.
 
@@ -154,7 +156,7 @@ func (cpu *CPU) CSRLoad(csr isa.CSR, raw uint32, instr isa.Instr) (
 		if csr >= 0xb03 && csr <= 0xb1f {
 			// Mhpmcounters
 		} else {
-			v = cpu.CSR[csr].Load()
+			v = cpu.csr[csr].Load()
 		}
 	}
 
@@ -165,11 +167,10 @@ func (cpu *CPU) CSRLoad(csr isa.CSR, raw uint32, instr isa.Instr) (
 	return v, nil
 }
 
-func (cpu *CPU) SetCSR(csr isa.CSR, v uint64) error {
-	return cpu.SetCSRX(csr, v, 0, isa.Instr{})
-}
-
-func (cpu *CPU) SetCSRX(csr isa.CSR, v uint64, raw uint32,
+// SetCSR sets the value of the control and status register csr to
+// v. The arguments raw and instr specify the instruction that was
+// calling the function.
+func (cpu *CPU) SetCSR(csr isa.CSR, v uint64, raw uint32,
 	instr isa.Instr) error {
 
 	if debugCSR {
@@ -195,19 +196,19 @@ func (cpu *CPU) SetCSRX(csr isa.CSR, v uint64, raw uint32,
 		}
 		switch csr {
 		case isa.CsrFflags:
-			n := cpu.CSR[csr].Load()
+			n := cpu.csr[csr].Load()
 			n &= ^uint64(0b11111)
 			n |= v & 0b11111
-			cpu.CSR[csr].Store(n)
+			cpu.csr[csr].Store(n)
 
 		case isa.CsrFrm:
-			n := cpu.CSR[csr].Load()
+			n := cpu.csr[csr].Load()
 			n &= ^uint64(0b11100000)
 			n |= (v & 0b111) << 5
-			cpu.CSR[csr].Store(n)
+			cpu.csr[csr].Store(n)
 
 		default:
-			cpu.CSR[csr].Store(v)
+			cpu.csr[csr].Store(v)
 		}
 
 	case isa.CsrMstatus:
@@ -216,10 +217,10 @@ func (cpu *CPU) SetCSRX(csr isa.CSR, v uint64, raw uint32,
 		cpu.updateMstatusSD()
 
 	case isa.CsrMisa:
-		cpu.CSR[csr].Store(v)
+		cpu.csr[csr].Store(v)
 
 	case isa.CsrMie, isa.CsrMip:
-		cpu.CSR[csr].Store(v)
+		cpu.csr[csr].Store(v)
 
 	case isa.CsrSstatus:
 		cpu.mstatus = (cpu.mstatus & ^isa.SstatusMask) |
@@ -227,23 +228,23 @@ func (cpu *CPU) SetCSRX(csr isa.CSR, v uint64, raw uint32,
 		cpu.updateMstatusSD()
 
 	case isa.CsrStimecmp:
-		cpu.CSR[csr].Store(v)
+		cpu.csr[csr].Store(v)
 		if cpu.syncTime() < v {
 			// Next timer interrupt in the future, clear interrupts.
-			cpu.CSR[isa.CsrMip].And(^uint64(isa.IntSTIP))
+			cpu.csr[isa.CsrMip].And(^uint64(isa.IntSTIP))
 		}
 
 	case isa.CsrSie:
 		// sie is a masked view of mie — only S-mode bits
 		mask := uint64(isa.IntSSIP | isa.IntSTIP | isa.IntSEIP)
-		mie := cpu.CSR[isa.CsrMie].Load()
-		cpu.CSR[isa.CsrMie].Store((mie & ^mask) | (v & mask))
+		mie := cpu.csr[isa.CsrMie].Load()
+		cpu.csr[isa.CsrMie].Store((mie & ^mask) | (v & mask))
 
 	case isa.CsrSip:
 		// sip is a masked view of mip — only S-mode bits.
 		mask := uint64(isa.IntSSIP | isa.IntSTIP | isa.IntSEIP)
-		mip := cpu.CSR[isa.CsrMip].Load()
-		cpu.CSR[isa.CsrMip].Store((mip & ^mask) | (v & mask))
+		mip := cpu.csr[isa.CsrMip].Load()
+		cpu.csr[isa.CsrMip].Store((mip & ^mask) | (v & mask))
 
 	case isa.CsrSatp:
 		if cpu.mstatus.TVM() {
@@ -258,7 +259,7 @@ func (cpu *CPU) SetCSRX(csr isa.CSR, v uint64, raw uint32,
 			cpu.codePage = nil
 
 			// Save Satp to CSR so that it can be queried.
-			cpu.CSR[csr].Store(v)
+			cpu.csr[csr].Store(v)
 
 			if cpu.Trace {
 				cpu.traceFunc(cpu.PC)
@@ -290,7 +291,7 @@ func (cpu *CPU) SetCSRX(csr isa.CSR, v uint64, raw uint32,
 		cpu.DebugInstrTrace = v&0b1 != 0
 		cpu.DebugTrapTrace = v&0b10 != 0
 		cpu.DebugLossage = v&0b100 != 0
-		cpu.CSR[csr].Store(v)
+		cpu.csr[csr].Store(v)
 
 	case isa.CsrGoemuCPUProfile:
 		if v == 0 {
@@ -317,7 +318,7 @@ func (cpu *CPU) SetCSRX(csr isa.CSR, v uint64, raw uint32,
 		}
 
 	default:
-		cpu.CSR[csr].Store(v)
+		cpu.csr[csr].Store(v)
 	}
 
 	return nil
@@ -331,10 +332,13 @@ func (cpu *CPU) updateMstatusSD() {
 	}
 }
 
+// Mstatus implements isa.Hart.Mstatus.
 func (cpu *CPU) Mstatus() isa.Mstatus {
 	return cpu.mstatus
 }
 
+// SetMstatus sets machine status register value. This function
+// overwrites the current value so you must know what you are doing.
 func (cpu *CPU) SetMstatus(mstatus isa.Mstatus) {
 	cpu.mstatus = mstatus
 }
