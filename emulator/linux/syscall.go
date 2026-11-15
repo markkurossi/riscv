@@ -745,6 +745,7 @@ func linuxSyscall(proc *kernel.Process, id, a0, a1, a2, a3, a4, a5 uint64) (
 			MMU:         proc.CPU.MMU,
 			TrapHandler: proc.CPU.TrapHandler,
 		}
+		child.CPU.SetMstatus(proc.CPU.Mstatus())
 
 		// Copy registers.
 		copy(child.CPU.X[:], proc.CPU.X[:])

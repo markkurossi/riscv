@@ -99,6 +99,10 @@ func New(params riscv.Params) (*Emulator, error) {
 	hart.SetMode(isa.ModeU)
 	hart.MMU.SetSatp(satp)
 
+	mstatus := hart.Mstatus()
+	mstatus.SetFS(isa.RegInitial)
+	hart.SetMstatus(mstatus)
+
 	hart.X[isa.Sp] = stackTop
 
 	emu := &Emulator{
@@ -573,8 +577,23 @@ func (emu *Emulator) TrapHandler(acpu *cpu.CPU, trap *isa.Trap) (bool, error) {
 
 		return false, nil
 
-	case isa.CauseIllegalInstr, isa.CauseStoreAddrMisaligned,
-		isa.CauseLoadAddrMisaligned, isa.CauseInstAddrMisaligned:
+	case isa.CauseIllegalInstr:
+		raw := uint32(trap.Tval)
+		var instr isa.Instr
+		var err error
+		if raw&0b11 == 0b11 {
+			instr, err = isa.Decode(raw)
+		} else {
+			instr, err = isa.DecodeC(uint16(raw))
+		}
+		if err != nil {
+			return false, err
+		}
+		fmt.Printf("trap: %v, instr=%v", trap, instr)
+		return false, nil
+
+	case isa.CauseStoreAddrMisaligned, isa.CauseLoadAddrMisaligned,
+		isa.CauseInstAddrMisaligned:
 		fmt.Printf("trap: %v\n", trap)
 		return false, nil
 
