@@ -108,8 +108,6 @@ device integration.
     - [ ] clean detach and shutdown
   - [ ] Implement memory mapped framebuffer for `virtio_gpu.c` and `gpu.go`
 - [ ] Dropping privileges
-- [ ] [riscv-arch-test](https://github.com/riscv/riscv-arch-test)
-- [ ] [Haiku boot](docs/haiku.md)
 - [ ] [Xv6](docs/xv6.md)
 
 ### MPC RISC-V
