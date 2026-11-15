@@ -12,6 +12,7 @@ package isa
 
 import (
 	"fmt"
+	"strings"
 )
 
 // Processor extension flags.
@@ -77,33 +78,39 @@ type Mstatus uint64
 
 // WPRI = Reserved Writes Preserve, Reads Ignore
 const (
-	MsSIE   = 1
-	MsMIE   = 3
-	MsSPIE  = 5
-	MsUBE   = 6
-	MsMPIE  = 7
-	MsSPP   = 8
-	MsVS    = 9
-	MsMPP   = 11
-	MsFS    = 13
-	MsXS    = 15
-	MsMPRV  = 17
-	MsSUM   = 18
-	MsMXR   = 19
-	MsTVM   = 20
-	MsTW    = 21
-	MsTSR   = 22
-	MsSPELP = 23
-	MsSDT   = 24
-	MsUXL   = 32
-	MsSXL   = 34
-	MsSBE   = 36
-	MsMBE   = 37
-	MsGVA   = 38
-	MsMPV   = 39
-	MsMPELP = 41
-	MsMDT   = 42
-	MsSD    = 63
+	MsWPRI_0     = 0
+	MsSIE        = 1
+	MsWPRI_2     = 2
+	MsMIE        = 3
+	MsWPRI_4     = 4
+	MsSPIE       = 5
+	MsUBE        = 6
+	MsMPIE       = 7
+	MsSPP        = 8
+	MsVS         = 9
+	MsMPP        = 11
+	MsFS         = 13
+	MsXS         = 15
+	MsMPRV       = 17
+	MsSUM        = 18
+	MsMXR        = 19
+	MsTVM        = 20
+	MsTW         = 21
+	MsTSR        = 22
+	MsSPELP      = 23
+	MsSDT        = 24
+	MsWPRI_25_31 = 25
+	MsUXL        = 32
+	MsSXL        = 34
+	MsSBE        = 36
+	MsMBE        = 37
+	MsGVA        = 38
+	MsMPV        = 39
+	MsWPRI_40    = 40
+	MsMPELP      = 41
+	MsMDT        = 42
+	MsWPRI_43_62 = 43
+	MsSD         = 63
 )
 
 const (
@@ -263,6 +270,11 @@ func (m *Mstatus) SetFS(s RegStatus) {
 	*m |= Mstatus(s&0b11) << MsFS
 }
 
+// MPRV returns the Modify PRiVilege flag.
+func (m Mstatus) MPRV() bool {
+	return m&(1<<MsMPRV) != 0
+}
+
 // SUM returns the permit Supervisor User Memory access flag.
 func (m Mstatus) SUM() bool {
 	return m&(1<<MsSUM) != 0
@@ -317,6 +329,116 @@ func (m *Mstatus) SetSD(v bool) {
 	} else {
 		*m &^= 1 << MsSD
 	}
+}
+
+func (m Mstatus) String() string {
+	var parts = []string{
+		fmt.Sprintf("SD=%v", m.SD()),
+		fmt.Sprintf("MDT=%b", (m>>MsMDT)&0b1),
+		fmt.Sprintf("MPELP=%b", (m>>MsMPELP)&0b1),
+		fmt.Sprintf("MPV=%b", (m>>MsMPV)&0b1),
+		fmt.Sprintf("GVA=%b", (m>>MsGVA)&0b1),
+		fmt.Sprintf("MBE=%b", (m>>MsMBE)&0b1),
+		fmt.Sprintf("SBE=%b", (m>>MsSBE)&0b1),
+		fmt.Sprintf("SXL=%02b", (m>>MsSXL)&0b11),
+		fmt.Sprintf("UXL=%02b", (m>>MsUXL)&0b11),
+		fmt.Sprintf("SDT=%b", (m>>MsSDT)&0b1),
+		fmt.Sprintf("SPELP=%b", (m>>MsSPELP)&0b1),
+		fmt.Sprintf("TSR=%v", m.TSR()),
+		fmt.Sprintf("TW=%b", (m>>MsTW)&0b1),
+		fmt.Sprintf("TVM=%v", m.TVM()),
+		fmt.Sprintf("MXR=%v", m.MXR()),
+		fmt.Sprintf("SUM=%v", m.SUM()),
+		fmt.Sprintf("MPRV=%b", (m>>MsMPRV)&0b1),
+		fmt.Sprintf("XS=%02b", (m>>MsXS)&0b11),
+		fmt.Sprintf("FS=%v", m.FS()),
+		fmt.Sprintf("MPP=%v", m.MPP()),
+		fmt.Sprintf("VS=%v", m.VS()),
+		fmt.Sprintf("SPP=%v", m.SPP()),
+		fmt.Sprintf("MPIE=%v", m.MPIE()),
+		fmt.Sprintf("UBE=%b", (m>>MsUBE)&0b1),
+		fmt.Sprintf("SPIE=%v", m.SPIE()),
+		fmt.Sprintf("MIE=%v", m.MIE()),
+		fmt.Sprintf("SIE=%v", m.SIE()),
+	}
+
+	return strings.Join(parts, ",")
+}
+
+var mstatusFields = []struct {
+	name string
+	bit  int
+	size int
+	t    byte
+}{
+	{"WPRI_0", MsWPRI_0, 1, 'b'},
+	{"SIE", MsSIE, 1, 'b'},
+	{"WPRI_2", MsWPRI_2, 1, 'b'},
+	{"MIE", MsMIE, 1, 'b'},
+	{"WPRI_4", MsWPRI_4, 1, 'b'},
+	{"SPIE", MsSPIE, 1, 'b'},
+	{"UBE", MsUBE, 1, 'b'},
+	{"MPIE", MsMPIE, 1, 'b'},
+	{"SPP", MsSPP, 1, 'b'},
+	{"VS", MsVS, 2, 'r'},
+	{"MPP", MsMPP, 2, 'b'},
+	{"FS", MsFS, 2, 'b'},
+	{"XS", MsXS, 2, 'b'},
+	{"MPRV", MsMPRV, 1, 'b'},
+	{"SUM", MsSUM, 1, 'b'},
+	{"MXR", MsMXR, 1, 'b'},
+	{"TVM", MsTVM, 1, 'b'},
+	{"TW", MsTW, 1, 'b'},
+	{"TSR", MsTSR, 1, 'b'},
+	{"SPELP", MsSPELP, 1, 'b'},
+	{"SDT", MsSDT, 1, 'b'},
+	{"WPRI_25_31", MsWPRI_25_31, 7, 'b'},
+	{"UXL", MsUXL, 2, 'b'},
+	{"SXL", MsSXL, 2, 'b'},
+	{"SBE", MsSBE, 1, 'b'},
+	{"MBE", MsMBE, 1, 'b'},
+	{"GVA", MsGVA, 1, 'b'},
+	{"MPV", MsMPV, 1, 'b'},
+	{"WPRI_40", MsWPRI_40, 1, 'b'},
+	{"MPELP", MsMPELP, 1, 'b'},
+	{"MDT", MsMDT, 1, 'b'},
+	{"WPRI_43_62", MsWPRI_43_62, 20, 'b'},
+	{"SD", MsSD, 1, 'b'},
+}
+
+// MaskedString prints the mstatus fields which have been changed
+// according to mask. If the mstatus is changed from old to new,
+// MaskedString(old^new) prints the values of those changed fields.
+func (m Mstatus) MaskedString(mask uint64) string {
+	var parts []string
+
+	for _, s := range mstatusFields {
+		var ones uint64 = 0xffffffffffffffff
+
+		ones >>= (64 - s.size)
+		ones <<= s.bit
+
+		v := (mask & ones) >> s.bit
+
+		if v == 0 {
+			continue
+		}
+
+		var vs string
+		switch s.t {
+		case 'b':
+			vs = fmt.Sprintf("%x", v)
+
+		case 'r':
+			vs = RegStatus(v).String()
+
+		default:
+			panic(fmt.Sprintf("unknown type %v", s.t))
+		}
+		parts = append([]string{fmt.Sprintf("%s=%s", s.name, vs)}, parts...)
+	}
+
+	return strings.Join(parts, ",")
 }
 
 // VType implements the vector type register.
