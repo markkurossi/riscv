@@ -19,13 +19,4 @@ GoEMU.app/Contents/Resources/AppIcon.icns: docs/goemu.png
 	-rm -rf ./MyIcon.iconset
 
 wc:
-	@/bin/echo -n "RISC-V Spec       : "
-	@wc -l isa/*.go | tail -1 | awk '{printf("%s\n", $$1)}'
-	@/bin/echo -n "Memory and MMU    : "
-	@wc -l memory/*.go mmu/*.go | tail -1 | awk '{printf("%s\n", $$1)}'
-	@/bin/echo -n "CPU               : "
-	@wc -l cpu/*.go | tail -1 | awk '{printf("%s\n", $$1)}'
-	@/bin/echo -n "Devices and VirtIO: "
-	@wc -l dev/*.go virtio/*.go | tail -1 | awk '{printf("%s\n", $$1)}'
-	@/bin/echo -n "Orchestration     : "
-	@wc -l cmd/goemu/main.go cmd/goemu/system_*.go | tail -1 | awk '{printf("%s\n", $$1)}'
+	@./wc.sh
