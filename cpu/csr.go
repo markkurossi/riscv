@@ -137,7 +137,7 @@ func (cpu *CPU) CSR(csr isa.CSR, raw uint32, instr isa.Instr) (uint64, error) {
 		v = uint64(cpu.vpu.VType)
 
 	case isa.CsrVlenb:
-		v = uint64(VLEN / 8)
+		v = uint64(VLENB)
 
 	case isa.CsrSeed:
 		var buf [2]byte
