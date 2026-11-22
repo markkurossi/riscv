@@ -432,6 +432,7 @@ const (
 	VfirstM
 	VslideupVi
 	VslidedownVi
+	VmsbfM
 	ViotaM
 	VidV
 	VzextVf8
@@ -1318,6 +1319,9 @@ var VpuOperands = map[VpuOp]OpInfo{
 	},
 	VslidedownVi: OpInfo{
 		Name: "vslidedown.vi",
+	},
+	VmsbfM: OpInfo{
+		Name: "vmsbf.m",
 	},
 	ViotaM: OpInfo{
 		Name: "viota.m",

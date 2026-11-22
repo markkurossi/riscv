@@ -2017,6 +2017,24 @@ func (vpu *VPU) execute(instr isa.Instr, raw uint32) error {
 			}
 		}
 
+	case isa.VmsbfM:
+		var hasOne bool
+
+		for i := vpu.VStart; i < vpu.VL; i++ {
+			vs2Lsb := vpu.maskElt(uint64(instr.Rs2), i)
+			doMask := vpu.maskElt(0, i)
+
+			if vm == 1 || (vm == 0 && doMask) {
+				var res bool
+				if !hasOne && !vs2Lsb {
+					res = true
+				} else if !hasOne && vs2Lsb {
+					hasOne = true
+				}
+				vpu.setMaskElt(uint64(instr.Rd), i, res)
+			}
+		}
+
 	case isa.ViotaM:
 		sew := vpu.VType.VSEW()
 		var cnt uint64
