@@ -10,12 +10,13 @@ cpu_base=`expr $cpu - $vpu`
 
 total=`expr $isa + $mem + $dev + $orc + $cpu`
 
-echo "ISA                :  $isa"
-echo "Memory and MMU     :  $mem"
-echo "CPU                :  $cpu"
-echo " - Base            :  $cpu_base"
-echo " - VPU             :  $vpu"
-echo "Devices and VirtIO :  $dev"
-echo "Orchestration      :  $orc"
-echo "=========================="
-echo "Total              : $total"
+echo "| Module                 | Lines     |"
+echo "|------------------------|----------:|"
+echo "| RISC-V spec & decoding |      $isa |"
+echo "| Memory and MMU         |      $mem |"
+echo "| CPU                    |      $cpu |"
+echo "|  _- Base_              |    _${cpu_base}_ |"
+echo "|  _- VPU_               |    _${vpu}_ |"
+echo "| Devices and VirtIO     |      $dev |"
+echo "| Orchestration          |      $orc |"
+echo "| **Total**              | **$total** |"

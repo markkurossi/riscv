@@ -137,6 +137,7 @@ The project is divided into two tracks:
   - [ ] virtio-net
     - [ ] HTTP proxy
     - [ ] NTP server
+    - [ ] TFTP server and network boot
   - [ ] virtio-console
 - [ ] SMP support
 - [ ] Parse Linux kernel PE32+ header: load address, symbols
