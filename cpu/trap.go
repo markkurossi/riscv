@@ -168,7 +168,7 @@ func (cpu *CPU) Interrupt(target isa.PrivilegeMode, cause uint64) {
 // Dump the CPU state into standard output.
 func (cpu *CPU) Dump(epc uint64) {
 	log.Printf("CPU: 0 Mode: %v IC: %v Mstatus: %x",
-		cpu.mode, cpu.Instret, cpu.mstatus)
+		cpu.mode, cpu.Instret, uint64(cpu.mstatus))
 
 	if cpu.Symtab != nil {
 		entry, mapped := cpu.FuncName(epc)
