@@ -109,6 +109,7 @@ device integration.
   - [ ] Implement memory mapped framebuffer for `virtio_gpu.c` and `gpu.go`
 - [ ] Dropping privileges
 - [ ] [Xv6](docs/xv6.md)
+- [ ] virtio-console
 
 ### MPC RISC-V
 
