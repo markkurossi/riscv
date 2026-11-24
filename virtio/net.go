@@ -552,7 +552,7 @@ func (vio *Net) respondIPv4(packet []byte) bool {
 	if len(packet) < 20 {
 		return false
 	}
-	ihl := packet[0] & 0b111
+	ihl := packet[0] & 0x0f
 	hdrLen := int(ihl) * 4
 
 	proto := packet[9]
