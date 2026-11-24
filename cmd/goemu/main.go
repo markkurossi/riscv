@@ -7,8 +7,10 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"runtime/pprof"
@@ -50,14 +52,26 @@ func (arg *devices) Set(value string) error {
 	return nil
 }
 
+type crlfWriter struct {
+	w io.Writer
+}
+
+func (c crlfWriter) Write(p []byte) (int, error) {
+	// Replace trailing \n with \r\n (avoiding double \r\r\n if
+	// already present).
+	if len(p) > 0 && p[len(p)-1] == '\n' {
+		if len(p) == 1 || p[len(p)-2] != '\r' {
+			p = append(bytes.Clone(p[:len(p)-1]), '\r', '\n')
+		}
+	}
+	return c.w.Write(p)
+}
+
 var (
 	argCfg     *SystemConfig = new(SystemConfig)
 	argDrives  drives
 	argDevices devices
 )
-
-func init() {
-}
 
 func main() {
 	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to `file`")
@@ -96,6 +110,10 @@ func main() {
 		}
 		log.SetOutput(lc)
 		fmt.Println("Remote logger enabled")
+	} else {
+		// If in raw mode (!cooked), need to add \r\n to keep output
+		// clean.
+		log.SetOutput(crlfWriter{os.Stderr})
 	}
 
 	params := riscv.Params{
