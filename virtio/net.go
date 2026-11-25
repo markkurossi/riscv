@@ -277,7 +277,21 @@ func (vio *Net) Ready() {
 
 // Reset implements Handler.Reset.
 func (vio *Net) Reset() error {
-	return nil
+	for {
+		select {
+		case <-vio.recvDescCh:
+		default:
+			goto drainedRecv
+		}
+	}
+drainedRecv:
+	for {
+		select {
+		case <-vio.sendDescCh:
+		default:
+			return nil
+		}
+	}
 }
 
 // DeviceStats implements Handler.DeviceStats
@@ -310,20 +324,24 @@ func (vio *Net) ExecuteDescriptorChain(vq *Queue, idx uint16) (uint32, error) {
 func (vio *Net) receiver(vq *Queue) {
 	vio.Debugf("receiver started for vq%v", vq.Index)
 	for {
+		packet := <-vio.recvCh
+		vio.Debugf("received packet of %v bytes", len(packet))
+
 		// Get our receive descriptor.
 		desc := <-vio.recvDescCh
 		vio.Debugf("receiving to descriptor %v", desc)
 
-		packet := <-vio.recvCh
-		vio.Debugf("received packet of %v bytes", len(packet))
-
+		vio.M.Lock()
+		if !vio.DriverOK() {
+			vio.M.Unlock()
+			continue
+		}
 		tx, err := vio.storePacket(vq, desc, packet)
 		if err != nil {
 			// Log error but complete the descriptor to avoid
 			// descriptor leaks.
 			vio.Errorf("store packet failed: %v", err)
 		}
-		vio.M.Lock()
 		vio.CompleteDescriptor(vq, desc, tx)
 		vio.M.Unlock()
 	}
@@ -356,7 +374,7 @@ func (vio *Net) storePacket(vq *Queue, idx uint16, packet []byte) (
 		packet = packet[n:]
 
 		// Check next chunk
-		for desc.Flags&VIRTQ_DESC_F_NEXT == 0 {
+		if desc.Flags&VIRTQ_DESC_F_NEXT == 0 {
 			break
 		}
 		idx = desc.Next
@@ -366,7 +384,7 @@ func (vio *Net) storePacket(vq *Queue, idx uint16, packet []byte) (
 
 	if received > uint32(vio.hdrLen+14) {
 		// Count only IP bytes.
-		vio.stRcvd += uint64(received - uint32(vio.hdrLen-14))
+		vio.stRcvd += uint64(received - uint32(vio.hdrLen+14))
 	}
 
 	return received, nil
@@ -579,8 +597,15 @@ func (vio *Net) respondIPv4(packet []byte) bool {
 				vio.Errorf("DHCP response: %v", err)
 				return false
 			}
-			if resp == nil {
-				vio.Infof("ignoring DHCP request %v", req.MsgType)
+			if resp.MsgType == 0 {
+				switch req.MsgType {
+				case dhcp.DHCPRELEASE:
+					vio.Infof("%v of %v from %v (%v) via %v",
+						req.MsgType, resp.YIAddr, resp.CHAddr[:resp.HLen],
+						req.Hostname, vio.tun.Name)
+				default:
+					vio.Infof("ignoring DHCP request %v", req.MsgType)
+				}
 				return true
 			}
 			var dstMAC network.MAC
@@ -592,9 +617,7 @@ func (vio *Net) respondIPv4(packet []byte) bool {
 				vio.Infof("%v on %v to %v (%v) via %v",
 					resp.MsgType, resp.YIAddr, resp.CHAddr[:resp.HLen],
 					req.Hostname, vio.tun.Name)
-				dstMAC = network.MAC([]byte{
-					0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-				})
+				dstMAC = network.EthernetBroadcast
 
 			case dhcp.DHCPREQUEST:
 				vio.Infof("%v for %v (%v) from %v (%v) via %v",
@@ -604,7 +627,12 @@ func (vio *Net) respondIPv4(packet []byte) bool {
 				vio.Infof("%v on %v to %v (%v) via %v",
 					resp.MsgType, resp.YIAddr, resp.CHAddr[:resp.HLen],
 					req.Hostname, vio.tun.Name)
-				dstMAC = vio.GuestMAC
+
+				if req.Flags&dhcp.FlagBroadcast != 0 {
+					dstMAC = network.EthernetBroadcast
+				} else {
+					dstMAC = vio.GuestMAC
+				}
 			}
 
 			vio.Debugf("DHCP response: %v", resp)

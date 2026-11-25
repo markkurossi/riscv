@@ -387,6 +387,7 @@ func (vio *MMIO) Store32(paddr uint64, v uint32) error {
 			vio.driverFeatures[0] = 0
 			vio.driverFeatures[1] = 0
 			vio.status = 0
+			vio.interruptStatus = 0
 			vio.queueSel = 0
 
 			for idx := range vio.queues {

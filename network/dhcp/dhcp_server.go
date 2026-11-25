@@ -90,7 +90,7 @@ func (server *Server) Request(req *DHCP) (*DHCP, error) {
 		resp.MsgType = DHCPACK
 
 	default:
-		return nil, nil
+		return resp, nil
 	}
 
 	// Add mandatory server options.

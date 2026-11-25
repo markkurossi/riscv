@@ -12,6 +12,12 @@ const (
 	EthernetIPv6 uint16 = 0x86dd
 )
 
+var (
+	EthernetBroadcast = MAC([]byte{
+		0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	})
+)
+
 // MakeEthernet creates Ethernet packet with the argument data.
 func MakeEthernet(buf []byte, dst, src MAC, frameType uint16) {
 	copy(buf[0:16], dst[:])

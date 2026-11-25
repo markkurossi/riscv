@@ -22,6 +22,8 @@ const (
 	BOOTREPLY     uint8  = 2
 	HdrLen               = 7*4 + 16 + 64 + 128 + 4
 	OptionsCookie uint32 = 0x63825363
+
+	FlagBroadcast uint16 = 1 << 15
 )
 
 type DHCP struct {
