@@ -67,7 +67,8 @@ func (cpu *CPU) CSR(csr isa.CSR, raw uint32, instr isa.Instr) (uint64, error) {
 			isa.MisaI | // I (Integer)
 			isa.MisaM | // M (Multiply)
 			isa.MisaS | // S (Supervisor)
-			isa.MisaU // U (User mode)
+			isa.MisaU | // U (User mode)
+			isa.MisaV // V (Vector)
 
 		// Debug triggers.
 	case 0x7a0, 0x7a1, 0x7a2, 0x7a3, 0x7a4:
