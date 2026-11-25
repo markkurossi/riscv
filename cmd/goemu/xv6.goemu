@@ -1,0 +1,16 @@
+{
+  "kernel":  "xv6/kernel",
+  "drives": [
+    {
+      "id":     "hd0",
+      "format": "raw",
+      "file":   "xv6/fs.img"
+    }
+  ],
+  "devices": [
+    {
+      "type":  "virtio-blk-device",
+      "drive": "hd0"
+    }
+  ]
+}

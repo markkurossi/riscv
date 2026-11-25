@@ -35,6 +35,8 @@ drwxr-xr-x 4 root root     128 Jun 19 08:49 payloads
 
 ## Das U-Boot
 
+[source](https://git.u-boot-project.org/u-boot/u-boot/-/releases)
+
 ``` shell
 $ apt-get update && apt-get install -y libssl-dev
 $ apt-get update && apt-get install -y libgnutls28-dev uuid-dev
@@ -61,4 +63,18 @@ $ make qemu-riscv64_smode_defconfig
 # configuration written to .config
 #
 $ make -j$(nproc)
+```
+
+Binaries are at:
+
+```shell
+root@c6f070db0078:/workspace/u-boot-v2026.10# ls -l u-boot*
+-rwxr-xr-x 1 root root 9045664 Nov 25 19:32 u-boot
+-rwxr-xr-x 1 root root 1191192 Nov 25 19:32 u-boot-nodtb.bin
+-rwxr-xr-x 1 root root 1191192 Nov 25 19:32 u-boot.bin
+-rw-r--r-- 1 root root   15506 Nov 25 19:29 u-boot.cfg
+-rw-r--r-- 1 root root    1134 Nov 25 19:29 u-boot.lds
+-rw-r--r-- 1 root root 1383237 Nov 25 19:32 u-boot.map
+-rwxr-xr-x 1 root root 3573644 Nov 25 19:32 u-boot.srec
+-rw-r--r-- 1 root root  375113 Nov 25 19:32 u-boot.sym
 ```

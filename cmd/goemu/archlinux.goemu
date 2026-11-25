@@ -1,0 +1,68 @@
+{
+  "bios":    "opensbi/fw_jump.bin",
+  "kernel":  "u-boot-v2026.10/u-boot.bin",
+  "append":  "earlycon=sbi console=ttyS0,115200",
+  "memory":  "2G",
+  "drives": [
+    {
+      "id":     "iso",
+      "format": "raw",
+      "file":   "archlinux/archlinux-2026.08.27-riscv64.iso"
+    },
+    {
+      "id":     "hd0",
+      "format": "raw",
+      "file":   "archlinux/archlinux-riscv64.img"
+    }
+  ],
+  "netdevs": [
+    {
+      "id":         "eth0",
+      "ip":         "192.168.42.6",
+      "gw":         "192.168.42.254",
+      "hostname":   "archlinux",
+      "domainname": "goemu.ephemelier.com"
+    }
+  ],
+  "gpus": [
+    {
+      "id":     "gpu",
+      "title":  "Archlinux 2026.08.27",
+      "width":  1024,
+      "height": 768,
+      "pointer": "touchpad"
+    }
+  ],
+  "_devices": [
+    {
+      "type":  "virtio-blk-device",
+      "drive": "iso"
+    },
+    {
+      "type":  "virtio-blk-device",
+      "drive": "hd0"
+    },
+    {
+      "type":   "virtio-net-device",
+      "netdev": "eth0"
+    },
+    {
+      "type": "virtio-gpu-device",
+      "gpu":  "gpu"
+    }
+  ],
+  "devices": [
+    {
+      "type":  "virtio-blk-device",
+      "drive": "hd0"
+    },
+    {
+      "type":   "virtio-net-device",
+      "netdev": "eth0"
+    },
+    {
+      "type": "virtio-gpu-device",
+      "gpu":  "gpu"
+    }
+  ]
+}

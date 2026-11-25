@@ -1,6 +1,6 @@
 {
   "bios":    "opensbi/fw_jump.bin",
-  "kernel":  "u-boot-2026.04/u-boot.bin",
+  "kernel":  "u-boot-v2026.10/u-boot.bin",
   "_kernel":  "netbsd/netbsd",
   "_append":  "console=com0 root=sd0a",
   "append":  "root=dk1",

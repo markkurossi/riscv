@@ -1,11 +1,11 @@
 {
   "bios":    "opensbi/fw_jump.bin",
-  "kernel":  "u-boot-2026.04/u-boot.bin",
+  "kernel":  "u-boot-v2026.10/u-boot.bin",
   "drives": [
     {
       "id":     "hd0",
       "format": "raw",
-      "file":   "haiku/haiku-master-hrev60411-riscv64-mmc.image"
+      "file":   "haiku/haiku-master-hrev60478-riscv64-mmc.image"
     }
   ],
   "gpus": [
