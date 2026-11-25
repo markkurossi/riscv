@@ -22,15 +22,16 @@ RISC-V processor.
 
 goemu has successfully booted and executed:
 
-| Operating system | Status                                  |
-| ---              | ---                                     |
-| Buildroot Linux  | Boot, userspace, and networking         |
-| Ubuntu 24.04 LTS | Full system and package upgrade         |
-| Ubuntu 26.04     | RVA23U64 userspace and RVV workloads    |
-| Debian 13.6      | Full system installation                |
-| FreeBSD 15.1     | Long-running system and ports workloads |
-| NetBSD 11.x      | Boot, userspace, compilation            |
-| OpenBSD 7.9      | Boot and native kernel compilation      |
+| Operating system      | Status                                  |
+| ---                   | ---                                     |
+| Buildroot Linux       | Boot, userspace, and networking         |
+| Ubuntu 24.04 LTS      | Full system and package upgrade         |
+| Ubuntu 26.04          | RVA23U64 userspace and RVV workloads    |
+| Debian 13.6           | Full system installation                |
+| Arch Linux 2026.08.27 | Full system installation                |
+| FreeBSD 15.1          | Long-running system and ports workloads |
+| NetBSD 11.x           | Boot, userspace, compilation            |
+| OpenBSD 7.9           | Boot and native kernel compilation      |
 
 ## Features
 
