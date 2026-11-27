@@ -61,6 +61,7 @@ device		virtio_blk		# VirtIO Block device
 device          virtio_gpu              # VirtIO GPU device
 device		virtio_mmio		# VirtIO MMIO bus
 device          virtio_input            # VirtIO Input device
+device          virtio_random           # VirtIO Entropy device
 
 # Serial (COM) ports
 device		uart		# Generic UART driver
