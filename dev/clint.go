@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	ClintOfsMsip     = 0
-	ClintOfsMtimecmp = 0x4000
-	ClintOfsMtime    = 0xbff8
+	CLINTOfsMsip     = 0x00000
+	CLINTOfsMtimecmp = 0x04000
+	CLINTOfsMtime    = 0x0bff8
+	CLINTSize        = 0x10000
 
 	clintDebug = false
 )
@@ -63,13 +64,13 @@ func (clint *CLINT) load(paddr, size uint64) (uint64, error) {
 	var v uint64
 
 	switch ofs {
-	case ClintOfsMsip:
+	case CLINTOfsMsip:
 		v = clint.Msip
 
-	case ClintOfsMtimecmp:
+	case CLINTOfsMtimecmp:
 		v = clint.Mtimecmp
 
-	case ClintOfsMtime:
+	case CLINTOfsMtime:
 		// Dynamic sync before read ensures OpenSBI gets the exact current time
 		clint.Mtime = clint.Hart.Now()
 		v = clint.Mtime
@@ -77,12 +78,12 @@ func (clint *CLINT) load(paddr, size uint64) (uint64, error) {
 	default:
 		// Support split 32-bit register window accesses commonly used
 		// by kernels
-		if ofs >= ClintOfsMtimecmp && ofs < ClintOfsMtimecmp+8 {
+		if ofs >= CLINTOfsMtimecmp && ofs < CLINTOfsMtimecmp+8 {
 			v = clint.Mtimecmp
 			if ofs&4 != 0 {
 				v >>= 32
 			}
-		} else if ofs >= ClintOfsMtime && ofs < ClintOfsMtime+8 {
+		} else if ofs >= CLINTOfsMtime && ofs < CLINTOfsMtime+8 {
 			clint.Mtime = clint.Hart.Now()
 			v = clint.Mtime
 			if ofs&4 != 0 {
@@ -111,7 +112,7 @@ func (clint *CLINT) store(paddr, size, v uint64) error {
 	}
 
 	switch ofs {
-	case ClintOfsMsip:
+	case CLINTOfsMsip:
 		clint.Msip = v
 		if clint.Msip&1 != 0 {
 			// Machine Software Interrupt (Bit 3)
@@ -120,20 +121,20 @@ func (clint *CLINT) store(paddr, size, v uint64) error {
 			clint.Hart.ClearInterrupt(isa.IntMSIP)
 		}
 
-	case ClintOfsMtimecmp:
+	case CLINTOfsMtimecmp:
 		clint.Mtimecmp = v
 		clint.Tick(clint.Hart.Now())
 
-	case ClintOfsMtime:
+	case CLINTOfsMtime:
 		clint.Mtime = v
 		clint.Tick(clint.Mtime)
 
 	default:
 		// Handle partial 32-bit lower/upper sub-word register writes
-		if ofs >= ClintOfsMtimecmp && ofs < ClintOfsMtimecmp+8 {
+		if ofs >= CLINTOfsMtimecmp && ofs < CLINTOfsMtimecmp+8 {
 			clint.Mtimecmp = updateRegisterHalf(clint.Mtimecmp, ofs, v)
 			clint.Tick(clint.Hart.Now())
-		} else if ofs >= ClintOfsMtime && ofs < ClintOfsMtime+8 {
+		} else if ofs >= CLINTOfsMtime && ofs < CLINTOfsMtime+8 {
 			clint.Mtime = updateRegisterHalf(clint.Mtime, ofs, v)
 			clint.Tick(clint.Mtime)
 		} else {

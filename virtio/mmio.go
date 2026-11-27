@@ -127,6 +127,15 @@ type MMIO struct {
 	Mem      *memory.Memory
 	Handler  Handler
 
+	// CompatMode accepts non-compliant drivers:
+	//  - MMIO version 2 not negotiating VIRTIO_F_VERSION_1 (Xv6)
+	CompatMode bool
+
+	// VendorID provides an override for the MMIO vendor ID. This
+	// value is used if it is non-zero. Otherwise the global VendorID
+	// value is used.
+	VendorID uint32
+
 	shmSel uint32
 	SHM    map[uint32]*mmu.SHM
 
@@ -213,8 +222,13 @@ func (vio *MMIO) Load32(paddr uint64) (uint32, error) {
 		return Version, nil
 	case 0x008:
 		return vio.DeviceID, nil
+
 	case 0x00c:
+		if vio.VendorID != 0 {
+			return vio.VendorID, nil
+		}
 		return VendorID, nil
+
 	case 0x010: // DeviceFeatures
 		switch vio.deviceFeaturesSel {
 		case 0:
@@ -407,11 +421,17 @@ func (vio *MMIO) Store32(paddr uint64, v uint32) error {
 
 		if v&FEATURES_OK != 0 {
 			// Validate that the driver acknowledged
-			// VIRTIO_F_VERSION_1 (bit 32 -> page 1, bit 0)
+			// VIRTIO_F_VERSION_1 (bit 32 -> page 1, bit 0).
 			if (vio.driverFeatures[1] & 1) == 0 {
-				// If driver rejected version 1, clear the FEATURES_OK
-				// bit to signal failure
-				vio.status &= ^FEATURES_OK
+				if vio.CompatMode {
+					// Version 2 driver did not negotiate
+					// VIRTIO_F_VERSION_1. Report an error but accept
+					// features; this allows us to run Xv6.
+					vio.Errorf("VIRTIO_F_VERSION_1 not negotiated; " +
+						"allowing for compat mode")
+				} else {
+					vio.status &= ^FEATURES_OK
+				}
 			}
 		}
 		if v&DRIVER_OK != 0 {

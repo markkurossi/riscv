@@ -11,6 +11,7 @@ import (
 	"debug/elf"
 	"fmt"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -28,29 +29,25 @@ import (
 const (
 	OfsBIOS   = 0x8000_0000
 	OfsKernel = 0x8020_0000
-	OfsDTB    = 0x8220_0000
+	OfsDTB    = 0x8400_0000
 	OfsInitrd = 0x8800_0000
 
-	PLICBase = 0x0c00_0000
-
-	CLINTBase = 0x200_0000
-	CLINTSize = 0x10000
+	CLINTBase = 0x0200_0000
+	PLICBase  = 0x0c00_0000
 
 	UARTBase = 0x1000_0000
 	UARTIRQ  = 10
 
-	SysconBase = 0x1000_0100
-	SysconSize = 256
-
-	NMEABase = 0x1000_0200
+	NMEABase = 0x1000_0100
 	NMEAIRQ  = 11
 
-	VirtioRAMBase = 0x1000_8000
-	VirtioIRQBase = 1
+	SysconBase = 0x1000_0200
 
-	RTCBase = 0x1010_0000
-	RTCSize = 0x1000
+	RTCBase = 0x1000_0300
 	RTCIRQ  = 12
+
+	VirtioRAMBase = 0x1000_1000
+	VirtioIRQBase = 1
 
 	SHMBase = 0x4000_0000
 )
@@ -90,16 +87,16 @@ func systemEmulation(htif bool, gdbStub string, params riscv.Params,
 			plic,
 			uart,
 			nmea,
-			dev.NewSyscon(hart, SysconBase, SysconSize),
+			dev.NewSyscon(hart, SysconBase),
 			&dev.GoldfishRTC{
 				Hart:  hart,
 				Start: RTCBase,
-				End:   RTCBase + RTCSize,
+				End:   RTCBase + dev.RTCSize,
 			},
 			&dev.CLINT{
 				Hart:  hart,
 				Start: CLINTBase,
-				End:   CLINTBase + CLINTSize,
+				End:   CLINTBase + dev.CLINTSize,
 			},
 		},
 	}
@@ -111,14 +108,6 @@ func systemEmulation(htif bool, gdbStub string, params riscv.Params,
 	var virtioIRQ uint32 = VirtioIRQBase
 
 	var shmBase uint64 = SHMBase
-
-	// Entropy Source / RNG.
-	rng := virtio.NewRng(hart, virtioRAM, plic, virtioIRQ, mem)
-	mmio.Segments = append(mmio.Segments, rng)
-	virtioRAM = rng.End
-	virtioIRQ++
-	virtioDevices = append(virtioDevices, rng.Device())
-
 	var gpu *virtio.GPU
 
 	// Devices from the configuration.
@@ -143,6 +132,14 @@ func systemEmulation(htif bool, gdbStub string, params riscv.Params,
 			}
 
 			blk := virtio.NewBlk(hart, virtioRAM, plic, virtioIRQ, mem, fs)
+			blk.MMIO.CompatMode = drive.CompatMode
+			if len(drive.VendorID) != 0 {
+				id, err := strconv.ParseUint(drive.VendorID, 0, 32)
+				if err != nil {
+					return fmt.Errorf("invalid vendor_id: %w", err)
+				}
+				blk.MMIO.VendorID = uint32(id)
+			}
 			mmio.Segments = append(mmio.Segments, blk)
 
 			deviceID := dev.ID
@@ -192,6 +189,11 @@ func systemEmulation(htif bool, gdbStub string, params riscv.Params,
 
 			mmio.Segments = append(mmio.Segments, gpu)
 			vio = gpu.Device()
+
+		case "virtio-rng-device":
+			rng := virtio.NewRng(hart, virtioRAM, plic, virtioIRQ, mem)
+			mmio.Segments = append(mmio.Segments, rng)
+			vio = rng.Device()
 
 		default:
 			return fmt.Errorf("invalid device type: %v", dev.Type)
@@ -558,8 +560,8 @@ func makeDTB(initrdSize uint64, mem *memory.Memory, plic *dev.PLIC,
 		uint32(CLINTBase >> 32),
 		uint32(CLINTBase),
 
-		uint32(CLINTSize >> 32),
-		uint32(CLINTSize),
+		uint32(dev.CLINTSize >> 32),
+		uint32(dev.CLINTSize),
 	}
 
 	fdt.PropTabU32("reg", &tab[0], 4)
@@ -662,8 +664,11 @@ func makeDTB(initrdSize uint64, mem *memory.Memory, plic *dev.PLIC,
 	// multi-function register array
 	fdt.PropTabStr("compatible", "syscon", "simple-mfd")
 	regData = [4]uint32{
-		uint32(SysconBase >> 32), uint32(SysconBase),
-		uint32(SysconSize >> 32), uint32(SysconSize),
+		uint32(SysconBase >> 32),
+		uint32(SysconBase),
+
+		uint32(dev.SysconSize >> 32),
+		uint32(dev.SysconSize),
 	}
 	fdt.PropTabU32("reg", &regData[0], 4)
 	fdt.PropU32("phandle", 3) // Assign a unique phandle to reference this block
@@ -696,8 +701,11 @@ func makeDTB(initrdSize uint64, mem *memory.Memory, plic *dev.PLIC,
 
 	// Map to physical address 0x10100000 with a size of 0x1000 (4KB page)
 	regData = [4]uint32{
-		uint32(RTCBase >> 32), uint32(RTCBase),
-		uint32(RTCSize >> 32), uint32(RTCSize),
+		uint32(RTCBase >> 32),
+		uint32(RTCBase),
+
+		uint32(dev.RTCSize >> 32),
+		uint32(dev.RTCSize),
 	}
 	fdt.PropTabU32("reg", &regData[0], 4)
 

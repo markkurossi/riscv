@@ -2,9 +2,11 @@
   "kernel":  "xv6/kernel",
   "drives": [
     {
-      "id":     "hd0",
-      "format": "raw",
-      "file":   "xv6/fs.img"
+      "id":          "hd0",
+      "format":      "raw",
+      "compat_mode": true,
+      "vendor_id":   "0x554d4551",
+      "file":        "xv6/fs.img"
     }
   ],
   "devices": [

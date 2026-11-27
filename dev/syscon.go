@@ -16,6 +16,8 @@ const (
 	PoweroffMagic = 0x706f6666 // poff
 	RebootMagic   = 0x72656274 // rebt
 	SuspendMagic  = 0x736c6570 // slep
+
+	SysconSize = 256
 )
 
 // Syscon implements the System Controller device. The device
@@ -33,7 +35,7 @@ type Syscon struct {
 }
 
 // NewSyscon creates a new syscon device.
-func NewSyscon(hart isa.Hart, start, size uint64) *Syscon {
+func NewSyscon(hart isa.Hart, start uint64) *Syscon {
 	return &Syscon{
 		Log: logger.Log{
 			Name:  "Syscon",
@@ -41,7 +43,7 @@ func NewSyscon(hart isa.Hart, start, size uint64) *Syscon {
 		},
 		Hart:  hart,
 		Start: start,
-		End:   start + size,
+		End:   start + SysconSize,
 	}
 }
 

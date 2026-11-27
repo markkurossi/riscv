@@ -12,6 +12,10 @@ import (
 	"github.com/markkurossi/riscv/isa"
 )
 
+const (
+	RTCSize = 0x100
+)
+
 // GoldfishRTC implements real-time clock device.
 type GoldfishRTC struct {
 	Hart  isa.Hart

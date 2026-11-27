@@ -42,6 +42,9 @@
     {
       "type": "virtio-gpu-device",
       "gpu":  "gpu"
+    },
+    {
+      "type": "virtio-rng-device"
     }
   ]
 }

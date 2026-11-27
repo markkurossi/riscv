@@ -22,16 +22,17 @@ RISC-V processor.
 
 goemu has successfully booted and executed:
 
-| Operating system | Status                                  |
-| ---              | ---                                     |
-| Buildroot Linux  | Boot, userspace, and networking         |
-| Ubuntu 24.04 LTS | Full system and package upgrade         |
-| Ubuntu 26.04 LTS | RVA23U64 userspace and RVV workloads    |
-| Debian 13.6      | Full system installation                |
-| Arch Linux 7.3.5 | Full system installation                |
-| FreeBSD 15.1     | Long-running system and ports workloads |
-| NetBSD 11.x      | Boot, userspace, compilation            |
-| OpenBSD 7.9      | Boot and native kernel compilation      |
+| Operating system   | Status                                            |
+| ---                | ---                                               |
+| Buildroot Linux    | Boot, userspace, networking                       |
+| Ubuntu 24.04 LTS   | Full system, networking, complete package upgrade |
+| Ubuntu 26.04 LTS   | RVA23U64 userspace, RVV workloads                 |
+| Debian 13.6        | Full system installation, multi-user environment  |
+| Arch Linux 7.3.5   | Full system installation, multi-user environment  |
+| FreeBSD 15.1       | Long-running system, ports workloads              |
+| NetBSD 11.x        | Boot, userspace, native C compilation             |
+| OpenBSD 7.9        | Boot, native kernel compilation                   |
+| [Xv6](docs/xv6.md) | Boot, all tests pass                              |
 
 ## Features
 
@@ -109,7 +110,7 @@ device integration.
     - [ ] clean detach and shutdown
   - [ ] Implement memory mapped framebuffer for `virtio_gpu.c` and `gpu.go`
 - [ ] Dropping privileges
-- [ ] [Xv6](docs/xv6.md)
+- [x] [Xv6](docs/xv6.md)
 - [ ] virtio-console
 
 ### MPC RISC-V
@@ -362,17 +363,17 @@ cpu: Intel(R) Core(TM) i5-8257U CPU @ 1.40GHz
 ~                                ~
 | 0x8800_0000    initrd          |
 +--------------------------------+
-|                                |
+|                DTB             |
 ~                                ~
 | 0x8400_0000    hw.dtb          |
 +--------------------------------+
-|                                |
+|                U-Boot / Kernel |
 ~                                ~
-| 0x8020_0000    Image           |
+| 0x8020_0000    u-boot.bin      |
 +--------------------------------+
-|                                |
+|                OpenSBI         |
 ~                                ~
-| 0x8000_0000    fw_boot.bin     |
+| 0x8000_0000    fw_jump.bin     |
 +--------------------------------+
 
 ```

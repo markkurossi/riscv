@@ -34,10 +34,12 @@ type SystemConfig struct {
 }
 
 type Drive struct {
-	ID       string `json:"id"`
-	File     string `json:"file"`
-	Format   string `json:"format,omitempty"`
-	Readonly bool   `json:"readonly,omitempty"`
+	ID         string `json:"id"`
+	File       string `json:"file"`
+	Format     string `json:"format,omitempty"`
+	CompatMode bool   `json:"compat_mode,omitempty"`
+	VendorID   string `json:"vendor_id,omitempty"`
+	Readonly   bool   `json:"readonly,omitempty"`
 }
 
 type Netdev struct {

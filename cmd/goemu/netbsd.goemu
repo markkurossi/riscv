@@ -28,6 +28,9 @@
     {
       "type":   "virtio-net-device",
       "netdev": "eth0"
+    },
+    {
+      "type": "virtio-rng-device"
     }
   ],
   "_devices": [
