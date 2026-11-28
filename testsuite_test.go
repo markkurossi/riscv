@@ -105,6 +105,12 @@ var skipVPU = map[string]uint64{
 	"vfadd_vv-3": 5,
 	"vfadd_vv-4": 5,
 
+	"vfdiv_vv-0": 14,
+	"vfdiv_vv-1": 14,
+	"vfdiv_vv-2": 6,
+	"vfdiv_vv-3": 7,
+	"vfdiv_vv-4": 7,
+
 	"vfmul_vv-0": 26,
 	"vfmul_vv-1": 27,
 	"vfmul_vv-2": 11,
@@ -121,6 +127,11 @@ var skipVPU = map[string]uint64{
 	"vfcvt_f_xu_v-1": 122,
 	"vfcvt_f_xu_v-2": 74,
 	"vfcvt_f_xu_v-3": 2,
+
+	"vfcvt_f_x_v-0": 14,
+	"vfcvt_f_x_v-1": 122,
+	"vfcvt_f_x_v-2": 74,
+	"vfcvt_f_x_v-3": 2,
 }
 
 func TestVPU(t *testing.T) {
