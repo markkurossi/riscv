@@ -8,7 +8,12 @@ require (
 	github.com/markkurossi/gofdt v0.0.0-20260510205141-e016428818d8
 	github.com/markkurossi/text v0.0.0-20250315092940-9a5813bf8efa
 	github.com/markkurossi/trace v0.0.0-20260527035255-7e9398ae133c
-	golang.org/x/term v0.47.0
+	golang.org/x/term v0.48.0
 )
 
-require golang.org/x/sys v0.49.0
+require (
+	github.com/markkurossi/tabulate v0.0.0-20251126123558-a08056f6160f
+	golang.org/x/sys v0.50.0
+)
+
+require golang.org/x/text v0.44.0 // indirect

@@ -35,6 +35,7 @@ cmd/riscv-objdump/riscv-objdump
 cmd/riscv-objdump/elf
 cmd/goemu/goemu
 cmd/rtime/rtime
+cmd/decoder/decoder
 
 ,*
 
