@@ -13,7 +13,7 @@ import (
 	"log"
 )
 
-// Level defines logging leve.
+// Level defines logging level.
 type Level int
 
 // Logging levels.
