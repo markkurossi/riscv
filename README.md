@@ -22,7 +22,7 @@ RISC-V processor.
 
 goemu has successfully booted and executed:
 
-| Operating system   | Status                                            |
+| Operating System   | Status                                            |
 | ---                | ---                                               |
 | Buildroot Linux    | Boot, userspace, networking                       |
 | Ubuntu 24.04 LTS   | Full system, networking, complete package upgrade |
