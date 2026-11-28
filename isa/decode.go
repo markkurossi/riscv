@@ -890,9 +890,8 @@ func Decode(raw uint32) (Instr, error) {
 			case 0b111:
 				instr.Op = Andn
 			default:
-				return instr,
-					fmt.Errorf("%v/%07b/%03b: raw=%08x",
-						group, funct7, funct3, raw)
+				return instr, fmt.Errorf("%v/%07b/%03b: raw=%08x",
+					group, funct7, funct3, raw)
 			}
 
 			// Zbs Extension for Single-bit instructions.
@@ -900,23 +899,31 @@ func Decode(raw uint32) (Instr, error) {
 			switch funct3 {
 			case 0b001:
 				instr.Op = Bclr
-
 			case 0b101:
 				instr.Op = Bext
-
 			default:
-				return instr,
-					fmt.Errorf("%v/%07b/%03b: raw=%08x",
-						group, funct7, funct3, raw)
+				return instr, fmt.Errorf("%v/%07b/%03b: raw=%08x",
+					group, funct7, funct3, raw)
 			}
+			// Zbb Basic Bit Manipulation.
+		case 0b0110000:
+			switch funct3 {
+			case 0b001:
+				instr.Op = Rol
+			case 0b101:
+				instr.Op = Ror
+			default:
+				return instr, fmt.Errorf("%v/%07b/%03b: raw=%08x",
+					group, funct7, funct3, raw)
+			}
+
 		case 0b0110100:
 			switch funct3 {
 			case 0b001:
 				instr.Op = Binv
 			default:
-				return instr,
-					fmt.Errorf("%v/%07b/%03b: raw=%08x",
-						group, funct7, funct3, raw)
+				return instr, fmt.Errorf("%v/%07b/%03b: raw=%08x",
+					group, funct7, funct3, raw)
 			}
 
 			// Zba (Address Generation Instructions) extension.

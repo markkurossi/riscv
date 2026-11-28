@@ -365,6 +365,8 @@ const (
 	Minu
 	Max
 	Maxu
+	Rol
+	Ror
 	Rori
 	Roriw
 	Rev8
@@ -1149,6 +1151,12 @@ var Operands = map[Op]OpInfo{
 	},
 	Maxu: OpInfo{
 		Name: "maxu",
+	},
+	Rol: OpInfo{
+		Name: "rol",
+	},
+	Ror: OpInfo{
+		Name: "ror",
 	},
 	Rori: OpInfo{
 		Name: "rori",

@@ -1409,6 +1409,16 @@ dispatch:
 			shmat := uint32(instr.Imm)
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] >> shmat & 1
 
+		case isa.Rol:
+			shmat := cpu.X[instr.Rs2] & 63
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1]<<shmat |
+				cpu.X[instr.Rs1]>>(64-shmat)
+
+		case isa.Ror:
+			shmat := cpu.X[instr.Rs2] & 63
+			cpu.X[instr.Rd] = cpu.X[instr.Rs1]>>shmat |
+				cpu.X[instr.Rs1]<<(64-shmat)
+
 		case isa.Binv:
 			index := cpu.X[instr.Rs2] & 63
 			cpu.X[instr.Rd] = cpu.X[instr.Rs1] ^ uint64(1)<<index
